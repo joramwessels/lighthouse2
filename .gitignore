@@ -1,0 +1,11 @@
+.vs/
+lib/
+apps/app_matui/
+apps/imguiapp/
+apps/tinyapp/
+*.exe
+*.ilk
+*.pdb
+*.bin
+*.vcxproj
+!apps/ai_demo/ai_demo.vcxproj
