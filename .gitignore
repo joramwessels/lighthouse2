@@ -1,8 +1,8 @@
 .vs/
 lib/
-apps/app_matui/
-apps/imguiapp/
-apps/tinyapp/
+apps/app_matui/*
+apps/imguiapp/*
+apps/tinyapp/*
 *.exe
 *.ilk
 *.pdb
