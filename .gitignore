@@ -7,5 +7,8 @@ apps/tinyapp/*
 *.ilk
 *.pdb
 *.bin
+*.log
+*.tlog
+*.idb
 *.vcxproj
 !apps/ai_demo/ai_demo.vcxproj

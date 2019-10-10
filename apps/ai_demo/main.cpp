@@ -16,6 +16,8 @@
 #include "platform.h"
 #include "system.h"
 #include "rendersystem.h"
+#include "recastnavigation.h"
+#include "gui.h"
 
 static RenderAPI* renderer = 0;
 static GLTexture* renderTarget = 0;
@@ -25,9 +27,131 @@ static bool running = true, hasFocus = true;
 static bool leftButtonDown = false, leftClicked = false;
 static bool sceneChanges = false;
 static string materialFile;
+static NavMeshBuilder navmesh("data\\ai");
+static AI_DEMO_GUI* ai_demo_gui = 0;
 
 #include "main_ui.h"
 #include "main_tools.h"
+#include "DetourNode.h"
+
+static char navmesh_t[128] = "data//system//navmesh.png";
+static GLTexture* navmeshtexture = 0;
+
+int navmeshMeshID;
+int navmeshInstanceID;
+
+//  +-----------------------------------------------------------------------------+
+//  |  PrepareGUI                                                                 |
+//  |  Initialize the GUI.                                                  LH2'19|
+//  +-----------------------------------------------------------------------------+
+void PrepareGUI()
+{
+	//ai_demo_gui = new AI_DEMO_GUI(renderer, 0);
+}
+
+//mat4 GetCameraMatrix()
+//{
+//	ViewPyramid view = renderer->GetCamera()->GetView();
+//	mat4 translation = mat4::Translate(-view.pos);
+//
+//}
+
+void DrawNode(float4 pos, float scale)
+{
+	mat4 T = mat4::Scale(make_float3(scale, scale, 1));
+	shader->SetInputTexture(0, "color", navmeshtexture);
+	T.cell[12] = pos.x, T.cell[13] = pos.y;
+	shader->SetInputMatrix("view", T);
+	DrawQuad();
+}
+
+void DrawNavMesh()
+{
+	return; // DEBUG
+	navmeshtexture = new GLTexture(navmesh_t, GL_LINEAR);
+	float scale = .01f;
+	float x = 0.0f, y = 0.0f;
+
+	mat4 view, projection;
+	float4 world_pos;
+	glGetFloatv(GL_MODELVIEW_MATRIX, view.cell);
+	glGetFloatv(GL_PROJECTION_MATRIX, projection.cell);
+
+	Camera* camera = renderer->GetCamera();
+
+	//y = make_float3(0, 1, 0);
+	//z = direction; // assumed to be normalized at all times
+	//x = normalize(cross(z, y));
+	//y = cross(x, z);
+
+	shader->Bind();
+
+	//const dtNodePool* pool = navmesh.GetQuery()->getNodePool();
+	//if (pool)
+	//{
+	//	const float off = 0.5f;
+	//	for (int i = 0; i < pool->getHashSize(); ++i)
+	//		for (dtNodeIndex j = pool->getFirst(i); j != DT_NULL_IDX; j = pool->getNext(j))
+	//		{
+	//			const dtNode* node = pool->getNodeAtIdx(j + 1);
+	//			if (!node) continue;
+	//			world_pos = make_float4(node->pos[0], node->pos[1] + off, node->pos[2], 1.0f);
+	//			DrawNode(world_pos * (view * projection), scale);
+	//		}
+	//
+	//	for (int i = 0; i < pool->getHashSize(); ++i)
+	//		for (dtNodeIndex j = pool->getFirst(i); j != DT_NULL_IDX; j = pool->getNext(j))
+	//		{
+	//			const dtNode* node = pool->getNodeAtIdx(j + 1);
+	//			if (!node) continue;
+	//			if (!node->pidx) continue;
+	//			const dtNode* parent = pool->getNodeAtIdx(node->pidx);
+	//			if (!parent) continue;
+	//			world_pos = make_float4(node->pos[0], node->pos[1] + off, node->pos[2], 1.0f);
+	//			DrawNode(world_pos * (view * projection), scale);
+	//			world_pos = make_float4(parent->pos[0], parent->pos[1] + off, parent->pos[2], 1.0f);
+	//			DrawNode(world_pos * (view * projection), scale);
+	//		}
+	//}
+
+	const dtNavMesh* mesh = navmesh.GetMesh();
+	for (int i = 0; i < mesh->getMaxTiles(); ++i)
+	{
+		const dtMeshTile* tile = mesh->getTile(i);
+		if (!tile->header) continue;
+		for (int j = 0; j < tile->header->vertCount; ++j)
+		{
+			const float* v = &tile->verts[j * 3];
+			world_pos = make_float4(v[0], v[1], v[2], 1.0f);
+			DrawNode(world_pos * (view * projection), scale);
+		}
+	}
+
+	shader->Unbind();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  PrepareNavmesh                                                             |
+//  |  Initialize the navmesh.                                              LH2'19|
+//  +-----------------------------------------------------------------------------+
+void PrepareNavmesh()
+{
+	navmesh.GetConfig()->SetCellSize(.2f, .2f);
+	navmesh.GetConfig()->SetPolySettings(100, 1.0f, 10.0f, 20.0f, 6);
+	navmesh.GetConfig()->SetAgentInfo(40.0f, 100, 10, 1);
+	navmesh.SetID("tritest");
+	//navmesh.Deserialize();
+	//navmesh.SetID("testload");
+	navmesh.Build(renderer->GetHostScene());
+	navmesh.Serialize();
+	navmesh.SaveAsMesh();
+	navmesh.DumpLog();
+
+	//ai_demo_gui->AddNodesToScene(&navmesh);
+
+	navmeshMeshID = renderer->AddMesh("tritest.obj", "data\\ai\\", 1.0f);
+	navmeshInstanceID = renderer->AddInstance(navmeshMeshID, mat4::Identity());// mat4::Translate(0.0f, -10.0f, 0.0f));
+}
 
 //  +-----------------------------------------------------------------------------+
 //  |  PrepareScene                                                               |
@@ -35,8 +159,11 @@ static string materialFile;
 //  +-----------------------------------------------------------------------------+
 void PrepareScene()
 {
+	int meshID = renderer->AddMesh("nav_test.obj", "data\\", 1.0f);
+	int instID = renderer->AddInstance(meshID, mat4::Identity());
+
 	// initialize scene
-	renderer->AddScene("scene.gltf", "data\\pica\\", mat4::Translate(0, -10.2f, 0));
+	//renderer->AddScene("scene.gltf", "data\\pica\\", mat4::Translate(0, -10.2f, 0));
 	// renderer->AddScene( "CesiumMan.glb", "data\\", mat4::Translate( 0, -2, -9 ) );
 	// renderer->AddScene( "InterpolationTest.glb", "data\\", mat4::Translate( 0, 2, -5 ) );
 	// renderer->AddScene( "AnimatedMorphCube.glb", "data\\", mat4::Translate( 0, 2, 9 ) );
@@ -44,7 +171,10 @@ void PrepareScene()
 	renderer->SetNodeTransform(rootNode, mat4::RotateX(-PI / 2));
 	int lightMat = renderer->AddMaterial(make_float3(100, 100, 80));
 	int lightQuad = renderer->AddQuad(make_float3(0, -1, 0), make_float3(0, 26.0f, 0), 6.9f, 6.9f, lightMat);
-	renderer->AddInstance(lightQuad);
+	//renderer->AddInstance(lightQuad);
+
+	renderer->AddDirectionalLight(make_float3(.5, .5, .5), make_float3(255.0f));
+	renderer->AddPointLight(make_float3(0, 26.0f, 0), make_float3(255.0f));
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -125,8 +255,12 @@ int main()
 	// initialize ui
 	InitAntTweakBar();
 	InitFPSPrinter();
+	// Initialize GUI
+	PrepareGUI();
 	// initialize scene
 	PrepareScene();
+	// Create navmesh
+	PrepareNavmesh();
 	// set initial window size
 	ReshapeWindowCallback( 0, SCRWIDTH, SCRHEIGHT );
 	// enter main loop
@@ -158,6 +292,8 @@ int main()
 		shader->SetInputMatrix( "view", mat4::Identity() );
 		DrawQuad();
 		shader->Unbind();
+		// draw navmesh
+		DrawNavMesh();
 		// draw ui
 		TwDraw();
 		PrintFPS( deltaTime );
