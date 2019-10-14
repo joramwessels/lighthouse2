@@ -1,5 +1,4 @@
 .vs/
-lib/
 apps/ai_demo/x64/*
 apps/app_matui/*
 apps/imguiapp/*
@@ -11,5 +10,5 @@ apps/tinyapp/*
 *.log
 *.tlog
 *.idb
-*.vcxproj
-!apps/ai_demo/ai_demo.vcxproj
+*.ptx
+x64/
