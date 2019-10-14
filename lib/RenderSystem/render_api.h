@@ -51,6 +51,7 @@ public:
 	int GetTriangleMaterialID( const int triId, const int instId );
 	HostMaterial* GetTriangleMaterial( const int triId, const int instId );
 	HostMaterial* GetMaterial( const int matId );
+	HostScene* GetScene();
 	int FindNode( const char* name );
 	int FindMaterialID( const char* name );
 	int AddMaterial( const float3 color );

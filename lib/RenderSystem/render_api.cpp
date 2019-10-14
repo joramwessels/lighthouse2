@@ -132,6 +132,11 @@ HostMaterial* RenderAPI::GetMaterial( const int matId )
 	return renderer->scene->materials[matId];
 }
 
+HostScene* RenderAPI::GetScene()
+{
+	return renderer->scene;
+}
+
 int RenderAPI::FindMaterialID( const char* name )
 {
 	return renderer->scene->FindMaterialID( name );
