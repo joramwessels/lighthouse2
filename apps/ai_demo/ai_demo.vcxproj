@@ -19,9 +19,11 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="gui.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="gui.h" />
     <ClInclude Include="main_tools.h" />
     <ClInclude Include="main_ui.h" />
   </ItemGroup>
@@ -87,11 +89,11 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);../../lib/RenderCore;../../lib/imgui;../../lib/zlib;../../lib/glfw/include;../../lib/glad/include;../../lib/half2.1.0;../../lib/RenderSystem;../../lib/platform;../../lib/AntTweakBar/include;../../lib/freeimage/inc</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../../lib/tinyxml2;../../lib/PathFinding/recastnavigation/Recast/Include;../../lib/PathFinding/recastnavigation/DetourTileCache/Include;../../lib/PathFinding/recastnavigation/DetourCrowd/Include;../../lib/PathFinding/recastnavigation/Detour/Include;../../lib/PathFinding/recastnavigation/DebugUtils/Include;../../lib/PathFinding/;%(AdditionalIncludeDirectories);../../lib/RenderCore;../../lib/imgui;../../lib/zlib;../../lib/glfw/include;../../lib/glad/include;../../lib/half2.1.0;../../lib/RenderSystem;../../lib/platform;../../lib/AntTweakBar/include;../../lib/freeimage/inc</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>../../lib/AntTweakBar/lib;../../lib/zlib;../../lib/platform/lib/$(Configuration)/;../../lib/RenderSystem/lib/$(Configuration)/</AdditionalLibraryDirectories>
-      <AdditionalDependencies>rendersystem.lib;platform.lib;libz-static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;opengl32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>../../lib/PathFinding/lib/$(Configuration)/;../../lib/AntTweakBar/lib;../../lib/zlib;../../lib/platform/lib/$(Configuration)/;../../lib/RenderSystem/lib/$(Configuration)/</AdditionalLibraryDirectories>
+      <AdditionalDependencies>PathFinding.lib;rendersystem.lib;platform.lib;libz-static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;opengl32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
@@ -123,13 +125,13 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);../../lib/RenderCore;../../lib/imgui;../../lib/zlib;../../lib/glfw/include;../../lib/glad/include;../../lib/half2.1.0;../../lib/RenderSystem;../../lib/platform;../../lib/AntTweakBar/include;../../lib/freeimage/inc</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../../lib/tinyxml2;../../lib/PathFinding/recastnavigation/Recast/Include;../../lib/PathFinding/recastnavigation/DetourTileCache/Include;../../lib/PathFinding/recastnavigation/DetourCrowd/Include;../../lib/PathFinding/recastnavigation/Detour/Include;../../lib/PathFinding/recastnavigation/DebugUtils/Include;../../lib/PathFinding/;%(AdditionalIncludeDirectories);../../lib/RenderCore;../../lib/imgui;../../lib/zlib;../../lib/glfw/include;../../lib/glad/include;../../lib/half2.1.0;../../lib/RenderSystem;../../lib/platform;../../lib/AntTweakBar/include;../../lib/freeimage/inc</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>../../lib/AntTweakBar/lib;../../lib/zlib;../../lib/platform/lib/$(Configuration)/;../../lib/RenderSystem/lib/$(Configuration)/</AdditionalLibraryDirectories>
-      <AdditionalDependencies>rendersystem.lib;platform.lib;libz-static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;opengl32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>../../lib/PathFinding/lib/$(Configuration)/;../../lib/AntTweakBar/lib;../../lib/zlib;../../lib/platform/lib/$(Configuration)/;../../lib/RenderSystem/lib/$(Configuration)/</AdditionalLibraryDirectories>
+      <AdditionalDependencies>PathFinding.lib;rendersystem.lib;platform.lib;libz-static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;opengl32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>

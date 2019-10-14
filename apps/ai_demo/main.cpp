@@ -16,7 +16,7 @@
 #include "platform.h"
 #include "system.h"
 #include "rendersystem.h"
-#include "recastnavigation.h"
+#include "pathfinding.h"
 #include "gui.h"
 
 static RenderAPI* renderer = 0;
@@ -46,7 +46,7 @@ int navmeshInstanceID;
 //  +-----------------------------------------------------------------------------+
 void PrepareGUI()
 {
-	//ai_demo_gui = new AI_DEMO_GUI(renderer, 0);
+	ai_demo_gui = new AI_DEMO_GUI(renderer, 0);
 }
 
 //mat4 GetCameraMatrix()
@@ -56,6 +56,7 @@ void PrepareGUI()
 //
 //}
 
+// GL 2D screen coords node drawing (requires projection matrix)
 void DrawNode(float4 pos, float scale)
 {
 	mat4 T = mat4::Scale(make_float3(scale, scale, 1));
@@ -65,9 +66,9 @@ void DrawNode(float4 pos, float scale)
 	DrawQuad();
 }
 
+// GL 2D world coords navmesh nodes drawing
 void DrawNavMesh()
 {
-	return; // DEBUG
 	navmeshtexture = new GLTexture(navmesh_t, GL_LINEAR);
 	float scale = .01f;
 	float x = 0.0f, y = 0.0f;
@@ -136,21 +137,22 @@ void DrawNavMesh()
 //  +-----------------------------------------------------------------------------+
 void PrepareNavmesh()
 {
-	navmesh.GetConfig()->SetCellSize(.2f, .2f);
-	navmesh.GetConfig()->SetPolySettings(100, 1.0f, 10.0f, 20.0f, 6);
-	navmesh.GetConfig()->SetAgentInfo(40.0f, 100, 10, 1);
-	navmesh.SetID("tritest");
+	navmesh.GetConfig()->SetCellSize(.3f, .2f);
+	navmesh.GetConfig()->SetAgentInfo(10.0f, 10, 2, 2);
+	navmesh.GetConfig()->SetPolySettings(12, 1.3f, 8.0f, 20.0f, 6);
+	navmesh.GetConfig()->SetDetailPolySettings(6.0f, 1.0f);
+	navmesh.SetID("dmesh_test");
 	//navmesh.Deserialize();
 	//navmesh.SetID("testload");
-	navmesh.Build(renderer->GetHostScene());
-	navmesh.Serialize();
+	navmesh.Build(renderer->GetScene());
+	//navmesh.Serialize();
 	navmesh.SaveAsMesh();
 	navmesh.DumpLog();
 
-	//ai_demo_gui->AddNodesToScene(&navmesh);
+	ai_demo_gui->AddNodesToScene(&navmesh);
 
-	navmeshMeshID = renderer->AddMesh("tritest.obj", "data\\ai\\", 1.0f);
-	navmeshInstanceID = renderer->AddInstance(navmeshMeshID, mat4::Identity());// mat4::Translate(0.0f, -10.0f, 0.0f));
+	navmeshMeshID = renderer->AddMesh("dmesh_test.obj", "data\\ai\\", 1.0f);
+	navmeshInstanceID = renderer->AddInstance(navmeshMeshID, mat4::Identity());// mat4::Translate(0.0f, -10.0f, 0.0f)); TODO
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -163,7 +165,7 @@ void PrepareScene()
 	int instID = renderer->AddInstance(meshID, mat4::Identity());
 
 	// initialize scene
-	//renderer->AddScene("scene.gltf", "data\\pica\\", mat4::Translate(0, -10.2f, 0));
+	renderer->AddScene("scene.gltf", "data\\pica\\", mat4::Translate(0, -10.2f, 0));
 	// renderer->AddScene( "CesiumMan.glb", "data\\", mat4::Translate( 0, -2, -9 ) );
 	// renderer->AddScene( "InterpolationTest.glb", "data\\", mat4::Translate( 0, 2, -5 ) );
 	// renderer->AddScene( "AnimatedMorphCube.glb", "data\\", mat4::Translate( 0, 2, 9 ) );
@@ -212,6 +214,11 @@ bool HandleInput( float frameTime )
 		camera->focalDistance = coreStats.probedDist;
 		changed = true;
 		leftClicked = false;
+
+		// Triangle info
+		//HostScene* scene = renderer->GetHostScene();
+		//int meshID = scene->instances[coreStats.probedInstid];
+		//if (meshID < scene->meshes.size()) probedMesh = scene->meshes[meshID];
 	}
 	// let the main loop know if the camera should update
 	return changed;
@@ -293,7 +300,7 @@ int main()
 		DrawQuad();
 		shader->Unbind();
 		// draw navmesh
-		DrawNavMesh();
+		//DrawNavMesh(); // DEBUG
 		// draw ui
 		TwDraw();
 		PrintFPS( deltaTime );
