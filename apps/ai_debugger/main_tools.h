@@ -13,11 +13,6 @@
    limitations under the License.
 */
 
-// Dear ImGui
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-
 GLFWwindow* window = 0;
 
 //  +-----------------------------------------------------------------------------+
@@ -32,19 +27,34 @@ void ReshapeWindowCallback( GLFWwindow* window, int w, int h )
 	delete renderTarget;
 	renderTarget = new GLTexture( scrwidth, scrheight, GLTexture::FLOAT );
 	glViewport( 0, 0, scrwidth, scrheight );
-	renderer->SetTarget( renderTarget, scrspp );
+	renderer->SetTarget( renderTarget, 1 );
+	// forward to AntTweakBar
+	TwWindowSize( scrwidth, scrheight );
 }
 void KeyEventCallback( GLFWwindow* window, int key, int scancode, int action, int mods )
 {
 	if (key == GLFW_KEY_ESCAPE) running = false;
+	TwEventKeyGLFW( key, action );
 }
-void CharEventCallback( GLFWwindow* window, uint code ) { /* nothing here yet */ }
+void CharEventCallback( GLFWwindow* window, uint code ) { TwEventCharGLFW( code, 1 ); }
 void WindowFocusCallback( GLFWwindow* window, int focused ) { hasFocus = (focused == GL_TRUE); }
-void MouseButtonCallback( GLFWwindow* window, int button, int action, int mods ) { /* nothing here yet */ }
+void MouseButtonCallback( GLFWwindow* window, int button, int action, int mods )
+{
+	TwEventMouseButtonGLFW( button, action );
+	if (button == 0 && action == 1 && !leftButtonDown) leftClicked = leftButtonDown = true;
+	else if (button == 0 && action == 0) leftButtonDown = false;
+}
 void MousePosCallback( GLFWwindow* window, double x, double y )
 {
+	TwMouseMotion( (int)x, (int)y );
 	// set pixel probe pos for triangle picking
-	if (renderer) renderer->SetProbePos( make_int2( (int)x, (int)y ) );
+	renderer->SetProbePos( make_int2( (int)x, (int)y ) );
+}
+void MouseWheelCallback( GLFWwindow* window, double x, double y )
+{
+	static double wheelPos = 0; // GLFW is relative, AntTweakBar expects absolute
+	wheelPos += y;
+	TwMouseWheel( (int)wheelPos );
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -69,6 +79,7 @@ void InitGLFW()
 	glfwSetMouseButtonCallback( window, MouseButtonCallback );
 	glfwSetCursorPosCallback( window, MousePosCallback );
 	glfwSetCharCallback( window, CharEventCallback );
+	glfwSetScrollCallback( window, MouseWheelCallback );
 	// initialize GLAD
 	if (!gladLoadGLLoader( (GLADloadproc)glfwGetProcAddress )) exit( EXIT_FAILURE );
 	// prepare OpenGL state
@@ -107,22 +118,6 @@ void OpenConsole()
 	freopen_s( &file, "CON", "w", stderr );
 	SetWindowPos( GetConsoleWindow(), HWND_TOP, 0, 0, 1280, 800, 0 );
 	glfwShowWindow( window );
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  InitImGui                                                                  |
-//  |  Initializes ImGui.                                                   LH2'19|
-//  +-----------------------------------------------------------------------------+
-void InitImGui()
-{
-	// Setup Dear ImGui context
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-	ImGui::StyleColorsDark(); // or ImGui::StyleColorsClassic();
-	ImGui_ImplGlfw_InitForOpenGL( window, true );
-	ImGui_ImplOpenGL3_Init( "#version 130" );
 }
 
 // EOF

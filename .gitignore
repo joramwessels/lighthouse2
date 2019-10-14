@@ -12,3 +12,7 @@ apps/tinyapp/*
 *.idb
 *.ptx
 x64/
+lib/PathFinding/lib
+lib/RenderSystem/lib
+lib/platform/lib
+coredlls/

@@ -81,7 +81,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>../tinyxml2;../GLFW/Include;../half2.1.0;../platform;../RenderSystem;recastnavigation/Recast/Include;recastnavigation/DetourTileCache/Include;recastnavigation/DetourCrowd/Include;recastnavigation/Detour/Include;recastnavigation/DebugUtils/Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../tinyxml2;../GLFW/Include;../half2.1.0;../platform;recastnavigation/Recast/Include;../RenderSystem;recastnavigation/DetourTileCache/Include;recastnavigation/DetourCrowd/Include;recastnavigation/Detour/Include;recastnavigation/DebugUtils/Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Lib>
       <AdditionalDependencies>rendersystem.lib; platform.lib</AdditionalDependencies>
@@ -117,7 +117,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>../tinyxml2;../GLFW/Include;../half2.1.0;../platform;../RenderSystem;recastnavigation/Recast/Include;recastnavigation/DetourTileCache/Include;recastnavigation/DetourCrowd/Include;recastnavigation/Detour/Include;recastnavigation/DebugUtils/Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../tinyxml2;../GLFW/Include;../half2.1.0;../platform;recastnavigation/Recast/Include;../RenderSystem;recastnavigation/DetourTileCache/Include;recastnavigation/DetourCrowd/Include;recastnavigation/Detour/Include;recastnavigation/DebugUtils/Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>

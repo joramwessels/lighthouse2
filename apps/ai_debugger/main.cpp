@@ -23,7 +23,10 @@ static GLTexture* renderTarget = 0;
 static Shader* shader = 0;
 static uint scrwidth = 0, scrheight = 0, scrspp = 1;
 static bool camMoved = false, hasFocus = true, running = true;
+static bool leftButtonDown = false, leftClicked = false;
+static string materialFile;
 
+#include "main_ui.h"
 #include "main_tools.h"
 
 //  +-----------------------------------------------------------------------------+
@@ -60,6 +63,7 @@ void PrepareScene()
 	navmesh.SaveAsMesh();
 	navmesh.DumpLog();
 
+	ui_nm_config = *navmesh.GetConfig();
 	//ai_demo_gui->AddNodesToScene(&navmesh);
 
 	int navmeshMeshID = renderer->AddMesh("dmesh_test.obj", "data\\ai\\", 1.0f);
@@ -72,21 +76,36 @@ void PrepareScene()
 //  +-----------------------------------------------------------------------------+
 bool HandleInput( float frameTime )
 {
+	if (!hasFocus) return false;
 	// handle keyboard input
-	float translateSpeed = (GetAsyncKeyState( VK_SHIFT ) ? 15.0f : 5.0f) * frameTime, rotateSpeed = 2.5f * frameTime;
+	float translateSpeed = (GetAsyncKeyState(VK_SHIFT) ? 15.0f : 5.0f) * frameTime, rotateSpeed = 2.5f * frameTime;
 	bool changed = false;
 	Camera* camera = renderer->GetCamera();
-	if (GetAsyncKeyState( 'A' )) { changed = true; camera->TranslateRelative( make_float3( -translateSpeed, 0, 0 ) ); }
-	if (GetAsyncKeyState( 'D' )) { changed = true; camera->TranslateRelative( make_float3( translateSpeed, 0, 0 ) ); }
-	if (GetAsyncKeyState( 'W' )) { changed = true; camera->TranslateRelative( make_float3( 0, 0, translateSpeed ) ); }
-	if (GetAsyncKeyState( 'S' )) { changed = true; camera->TranslateRelative( make_float3( 0, 0, -translateSpeed ) ); }
-	if (GetAsyncKeyState( 'R' )) { changed = true; camera->TranslateRelative( make_float3( 0, translateSpeed, 0 ) ); }
-	if (GetAsyncKeyState( 'F' )) { changed = true; camera->TranslateRelative( make_float3( 0, -translateSpeed, 0 ) ); }
-	if (GetAsyncKeyState( 'B' )) changed = true; // force restart
-	if (GetAsyncKeyState( VK_UP )) { changed = true; camera->TranslateTarget( make_float3( 0, -rotateSpeed, 0 ) ); }
-	if (GetAsyncKeyState( VK_DOWN )) { changed = true; camera->TranslateTarget( make_float3( 0, rotateSpeed, 0 ) ); }
-	if (GetAsyncKeyState( VK_LEFT )) { changed = true; camera->TranslateTarget( make_float3( -rotateSpeed, 0, 0 ) ); }
-	if (GetAsyncKeyState( VK_RIGHT )) { changed = true; camera->TranslateTarget( make_float3( rotateSpeed, 0, 0 ) ); }
+	if (GetAsyncKeyState('A')) { changed = true; camera->TranslateRelative(make_float3(-translateSpeed, 0, 0)); }
+	if (GetAsyncKeyState('D')) { changed = true; camera->TranslateRelative(make_float3(translateSpeed, 0, 0)); }
+	if (GetAsyncKeyState('W')) { changed = true; camera->TranslateRelative(make_float3(0, 0, translateSpeed)); }
+	if (GetAsyncKeyState('S')) { changed = true; camera->TranslateRelative(make_float3(0, 0, -translateSpeed)); }
+	if (GetAsyncKeyState('R')) { changed = true; camera->TranslateRelative(make_float3(0, translateSpeed, 0)); }
+	if (GetAsyncKeyState('F')) { changed = true; camera->TranslateRelative(make_float3(0, -translateSpeed, 0)); }
+	if (GetAsyncKeyState('B')) changed = true; // force restart
+	if (GetAsyncKeyState(VK_UP)) { changed = true; camera->TranslateTarget(make_float3(0, -rotateSpeed, 0)); }
+	if (GetAsyncKeyState(VK_DOWN)) { changed = true; camera->TranslateTarget(make_float3(0, rotateSpeed, 0)); }
+	if (GetAsyncKeyState(VK_LEFT)) { changed = true; camera->TranslateTarget(make_float3(-rotateSpeed, 0, 0)); }
+	if (GetAsyncKeyState(VK_RIGHT)) { changed = true; camera->TranslateTarget(make_float3(rotateSpeed, 0, 0)); }
+	// process left button click
+	if (leftClicked && GetAsyncKeyState(VK_LSHIFT))
+	{
+		int selectedMaterialID = renderer->GetTriangleMaterialID(coreStats.probedInstid, coreStats.probedTriid);
+		if (selectedMaterialID != -1)
+		{
+			currentMaterial = *renderer->GetMaterial(selectedMaterialID);
+			currentMaterialID = selectedMaterialID;
+			currentMaterial.Changed(); // update checksum so we can track changes
+		}
+		camera->focalDistance = coreStats.probedDist;
+		changed = true;
+		leftClicked = false;
+	}
 	// let the main loop know if the camera should update
 	return changed;
 }
@@ -99,7 +118,6 @@ int main()
 {
 	// initialize OpenGL and ImGui
 	InitGLFW();
-	InitImGui();
 
 	// initialize renderer: pick one
 	// renderer = RenderAPI::CreateRenderAPI( "rendercore_optix7.dll" );			// OPTIX7 core, best for RTX devices
@@ -109,6 +127,9 @@ int main()
 	// renderer = RenderAPI::CreateRenderAPI( "rendercore_softrasterizer.dll" );	// RASTERIZER, your only option if not on NVidia
 
 	renderer->DeserializeCamera( "camera.xml" );
+	// initialize ui
+	InitAntTweakBar();
+	InitFPSPrinter();
 	// initialize scene
 	PrepareScene();
 	// set initial window size
@@ -136,6 +157,9 @@ int main()
 		deltaTime = timer.elapsed();
 		timer.reset();
 		renderer->Render( c );
+		coreStats = renderer->GetCoreStats();
+		mraysincl = coreStats.totalRays / (coreStats.renderTime * 1000);
+		mraysexcl = coreStats.totalRays / (coreStats.traceTime0 * 1000);
 		if (HandleInput( deltaTime )) camMoved = true;
 		// postprocess
 		shader->Bind();
@@ -143,25 +167,9 @@ int main()
 		shader->SetInputMatrix( "view", mat4::Identity() );
 		DrawQuad();
 		shader->Unbind();
-		// gui
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
-		ImGui::Begin( "Render statistics", 0 );
-		CoreStats coreStats = renderer->GetCoreStats();
-		ImGui::Text( "Frame time:   %6.2fms", coreStats.renderTime * 1000 );
-		ImGui::Text( "Primary rays: %6.2fms", coreStats.traceTime0 * 1000 );
-		ImGui::Text( "Secondary:    %6.2fms", coreStats.traceTime1 * 1000 );
-		ImGui::Text( "Deep rays:    %6.2fms", coreStats.traceTimeX * 1000 );
-		ImGui::Text( "Shadow rays:  %6.2fms", coreStats.shadowTraceTime * 1000 );
-		ImGui::Text( "Shading time: %6.2fms", coreStats.shadeTime * 1000 );
-		ImGui::Text( "# primary:    %6ik (%6.1fM/s)", coreStats.primaryRayCount / 1000, coreStats.primaryRayCount / (max( 1.0f, coreStats.traceTime0 * 1000000 )) );
-		ImGui::Text( "# secondary:  %6ik (%6.1fM/s)", coreStats.bounce1RayCount / 1000, coreStats.bounce1RayCount / (max( 1.0f, coreStats.traceTime1 * 1000000 )) );
-		ImGui::Text( "# deep rays:  %6ik (%6.1fM/s)", coreStats.deepRayCount / 1000, coreStats.deepRayCount / (max( 1.0f, coreStats.traceTimeX * 1000000 )) );
-		ImGui::Text( "# shadw rays: %6ik (%6.1fM/s)", coreStats.totalShadowRays / 1000, coreStats.totalShadowRays / (max( 1.0f, coreStats.shadowTraceTime * 1000000 )) );
-		ImGui::End();
-		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData( ImGui::GetDrawData() );
+		// draw ui
+		TwDraw();
+		PrintFPS(deltaTime);
 		// finalize
 		glfwSwapBuffers( window );
 		// terminate
@@ -170,9 +178,6 @@ int main()
 	// clean up
 	renderer->SerializeCamera( "camera.xml" );
 	renderer->Shutdown();
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
 	glfwDestroyWindow( window );
 	glfwTerminate();
 	return 0;

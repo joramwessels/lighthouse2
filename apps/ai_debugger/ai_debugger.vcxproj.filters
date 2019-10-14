@@ -20,6 +20,7 @@
     <ClCompile Include="..\..\lib\imgui\imgui_impl_opengl3.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
+    <ClCompile Include="gui.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main_tools.h" />
@@ -47,6 +48,8 @@
     <ClInclude Include="..\..\lib\imgui\imgui_impl_opengl3.h">
       <Filter>imgui</Filter>
     </ClInclude>
+    <ClInclude Include="gui.h" />
+    <ClInclude Include="main_ui.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="shaders">
