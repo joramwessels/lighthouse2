@@ -15,8 +15,8 @@
 
 #include "pathfinding.h"
 
-#define RECAST_ERROR(...) return m_ctx->log(RC_LOG_ERROR, __VA_ARGS__)
-#define RECAST_LOG(...) m_ctx->log(RC_LOG_PROGRESS, __VA_ARGS__)
+#define RECAST_ERROR(X, ...) return Error(RC_LOG_ERROR, X, __VA_ARGS__)
+#define RECAST_LOG(...) Error(RC_LOG_PROGRESS, NMSUCCESS, __VA_ARGS__)
 
 #define DETOUR_MAX_NAVMESH_NODES 2048
 
@@ -252,7 +252,7 @@ void NavMeshConfig::Load(const char* filename)
 void NavMeshBuilder::Build(HostScene* scene)
 {
 	if (!scene || !&scene->meshes)
-		RECAST_ERROR("buildNavigation: Input mesh is not specified.");
+		RECAST_ERROR(NMRECAST & NMINPUT, "buildNavigation: Input mesh is not specified.");
 
 	printf("generating navmesh... ");
 	if (m_config.m_printBuildStats)
@@ -340,18 +340,18 @@ void NavMeshBuilder::RasterizePolygonSoup(const int vert_count, const float* ver
 	// Allocate voxel heightfield where we rasterize our input data to.
 	m_heightField = rcAllocHeightfield();
 	if (!m_heightField)
-		RECAST_ERROR("buildNavigation: Out of memory 'solid'.");
+		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'solid'.");
 
 	if (!rcCreateHeightfield(m_ctx, *m_heightField, m_config.m_width, m_config.m_height,
 		(const float*)&m_config.m_bmin, (const float*)&m_config.m_bmax, m_config.m_cs, m_config.m_ch))
-		RECAST_ERROR("buildNavigation: Could not create solid heightfield.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not create solid heightfield.");
 
 	// Allocate array that can hold triangle area types.
 	// If you have multiple meshes you need to process, allocate
 	// and array which can hold the max number of triangles you need to process.
 	m_triareas = new unsigned char[tri_count];
 	if (!m_triareas)
-		RECAST_ERROR("buildNavigation: Out of memory 'm_triareas' (%d).", tri_count);
+		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'm_triareas' (%d).", tri_count);
 
 	// Find triangles which are walkable based on their slope and rasterize them.
 	// If your input data is multiple meshes, you can transform them here, calculate
@@ -360,7 +360,7 @@ void NavMeshBuilder::RasterizePolygonSoup(const int vert_count, const float* ver
 	rcMarkWalkableTriangles(m_ctx, m_config.m_walkableSlopeAngle, verts, vert_count, tris, tri_count, m_triareas);
 	if (!rcRasterizeTriangles(m_ctx, verts, vert_count, tris,
 		m_triareas, tri_count, *m_heightField, m_config.m_walkableClimb))
-		RECAST_ERROR("buildNavigation: Could not rasterize triangles.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not rasterize triangles.");
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -393,14 +393,14 @@ void NavMeshBuilder::PartitionWalkableSurface()
 	// between walkable cells will be calculated.
 	m_chf = rcAllocCompactHeightfield();
 	if (!m_chf)
-		RECAST_ERROR("buildNavigation: Out of memory 'chf'.");
+		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'chf'.");
 
 	if (!rcBuildCompactHeightfield(m_ctx, m_config.m_walkableHeight, m_config.m_walkableClimb, *m_heightField, *m_chf))
-		RECAST_ERROR("buildNavigation: Could not build compact data.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not build compact data.");
 
 	// Erode the walkable area by agent radius.
 	if (!rcErodeWalkableArea(m_ctx, m_config.m_walkableRadius, *m_chf))
-		RECAST_ERROR("buildNavigation: Could not erode.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not erode.");
 
 	//// (Optional) Mark areas.
 	//const ConvexVolume* vols = m_geom->getConvexVolumes();
@@ -408,28 +408,28 @@ void NavMeshBuilder::PartitionWalkableSurface()
 	//	rcMarkConvexPolyArea(m_ctx, vols[i].verts, vols[i].nverts, vols[i].hmin, vols[i].hmax, (unsigned char)vols[i].area, *m_chf);
 
 	// Partition the heightfield so that we can use simple algorithm later to triangulate the walkable areas.
-	if (m_config.m_partitionType == SAMPLE_PARTITION_WATERSHED)
+	if (m_config.m_partitionType == NavMeshConfig::SAMPLE_PARTITION_WATERSHED)
 	{
 		// Prepare for region partitioning, by calculating distance field along the walkable surface.
 		if (!rcBuildDistanceField(m_ctx, *m_chf))
-			RECAST_ERROR("buildNavigation: Could not build distance field.");
+			RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not build distance field.");
 
 		// Partition the walkable surface into simple regions without holes.
 		if (!rcBuildRegions(m_ctx, *m_chf, 0, m_config.m_minRegionArea, m_config.m_mergeRegionArea))
-			RECAST_ERROR("buildNavigation: Could not build watershed regions.");
+			RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not build watershed regions.");
 	}
-	else if (m_config.m_partitionType == SAMPLE_PARTITION_MONOTONE)
+	else if (m_config.m_partitionType == NavMeshConfig::SAMPLE_PARTITION_MONOTONE)
 	{
 		// Partition the walkable surface into simple regions without holes.
 		// Monotone partitioning does not need distancefield.
 		if (!rcBuildRegionsMonotone(m_ctx, *m_chf, 0, m_config.m_minRegionArea, m_config.m_mergeRegionArea))
-			RECAST_ERROR("buildNavigation: Could not build monotone regions.");
+			RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not build monotone regions.");
 	}
 	else // SAMPLE_PARTITION_LAYERS
 	{
 		// Partition the walkable surface into simple regions without holes.
 		if (!rcBuildLayerRegions(m_ctx, *m_chf, 0, m_config.m_minRegionArea))
-			RECAST_ERROR("buildNavigation: Could not build layer regions.");
+			RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not build layer regions.");
 	}
 }
 
@@ -441,10 +441,10 @@ void NavMeshBuilder::ExtractContours()
 {
 	m_cset = rcAllocContourSet();
 	if (!m_cset)
-		RECAST_ERROR("buildNavigation: Out of memory 'cset'.");
+		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'cset'.");
 
 	if (!rcBuildContours(m_ctx, *m_chf, m_config.m_maxSimplificationError, m_config.m_maxEdgeLen, *m_cset))
-		RECAST_ERROR("buildNavigation: Could not create contours.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not create contours.");
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -455,10 +455,10 @@ void NavMeshBuilder::BuildPolygonMesh()
 {
 	m_pmesh = rcAllocPolyMesh();
 	if (!m_pmesh)
-		RECAST_ERROR("buildNavigation: Out of memory 'pmesh'.");
+		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'pmesh'.");
 
 	if (!rcBuildPolyMesh(m_ctx, *m_cset, m_config.m_maxVertsPerPoly, *m_pmesh))
-		RECAST_ERROR("buildNavigation: Could not triangulate contours.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not triangulate contours.");
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -469,10 +469,10 @@ void NavMeshBuilder::CreateDetailMesh()
 {
 	m_dmesh = rcAllocPolyMeshDetail();
 	if (!m_dmesh)
-		RECAST_ERROR("buildNavigation: Out of memory 'pmdtl'.");
+		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'pmdtl'.");
 
 	if (!rcBuildPolyMeshDetail(m_ctx, *m_pmesh, *m_chf, m_config.m_detailSampleDist, m_config.m_detailSampleMaxError, *m_dmesh))
-		RECAST_ERROR("buildNavigation: Could not build detail mesh.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not build detail mesh.");
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -542,13 +542,13 @@ void NavMeshBuilder::CreateDetourData()
 		params.buildBvTree = true;
 
 		if (!dtCreateNavMeshData(&params, &navData, &navDataSize))
-			RECAST_ERROR("Could not build Detour navmesh.");
+			RECAST_ERROR(NMDETOUR & NMCREATION, "Could not build Detour navmesh.");
 
 		m_navMesh = dtAllocNavMesh();
 		if (!m_navMesh)
 		{
 			dtFree(navData);
-			RECAST_ERROR("Could not create Detour navmesh");
+			RECAST_ERROR(NMDETOUR & NMALLOCATION, "Could not allocate Detour navmesh");
 		}
 
 		dtStatus status;
@@ -557,13 +557,13 @@ void NavMeshBuilder::CreateDetourData()
 		if (dtStatusFailed(status))
 		{
 			dtFree(navData);
-			RECAST_ERROR("Could not init Detour navmesh");
+			RECAST_ERROR(NMDETOUR & NMCREATION, "Could not init Detour navmesh");
 		}
 
 		m_navQuery = dtAllocNavMeshQuery();
 		status = m_navQuery->init(m_navMesh, DETOUR_MAX_NAVMESH_NODES);
 		if (dtStatusFailed(status))
-			RECAST_ERROR("Could not init Detour navmesh query");
+			RECAST_ERROR(NMDETOUR & NMCREATION, "Could not init Detour navmesh query");
 	}
 }
 
@@ -571,7 +571,7 @@ void NavMeshBuilder::CreateDetourData()
 //  |  NavMesh::Save                                                              |
 //  |  Writes the navmesh to storage for future use.                        LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshBuilder::Serialize(const char* dir, const char* ID) const
+void NavMeshBuilder::Serialize(const char* dir, const char* ID)
 {
 	// Saving config file
 	char configfile[128];
@@ -582,10 +582,10 @@ void NavMeshBuilder::Serialize(const char* dir, const char* ID) const
 	char filename[128];
 	sprintf_s(filename, "%s\\%s.navmesh", dir, ID);
 	const dtNavMesh* navMesh = m_navMesh;
-	if (!navMesh) RECAST_ERROR("Can't serialize '%s', dtNavMesh is nullpointer", ID);
+	if (!navMesh) RECAST_ERROR(NMDETOUR & NMINPUT, "Can't serialize '%s', dtNavMesh is nullpointer", ID);
 	FILE* fp;
 	fopen_s(&fp, filename, "wb");
-	if (!fp) RECAST_ERROR("Filename '%s' can't be opened", filename);
+	if (!fp) RECAST_ERROR(NMIO, "Filename '%s' can't be opened", filename);
 	
 	// Store header.
 	NavMeshSetHeader header;
@@ -636,11 +636,11 @@ void NavMeshBuilder::Deserialize(const char* dir, const char* ID)
 	char filename[128];
 	sprintf_s(filename, "%s\\%s.navmesh", dir, ID);
 	if (!FileExists(filename))
-		RECAST_ERROR("NavMesh file '%s' does not exist", filename);
+		RECAST_ERROR(NMIO, "NavMesh file '%s' does not exist", filename);
 	FILE* fp;
 	fopen_s(&fp, filename, "rb");
 	if (!fp)
-		RECAST_ERROR("NavMesh file '%s' could not be opened", filename);
+		RECAST_ERROR(NMIO, "NavMesh file '%s' could not be opened", filename);
 	
 	// Reading header
 	NavMeshSetHeader header;
@@ -648,17 +648,17 @@ void NavMeshBuilder::Deserialize(const char* dir, const char* ID)
 	if (readLen != 1)
 	{
 		fclose(fp);
-		RECAST_ERROR("NavMesh file '%s' is corrupted", filename);
+		RECAST_ERROR(NMIO, "NavMesh file '%s' is corrupted", filename);
 	}
 	if (header.magic != NAVMESHSET_MAGIC)
 	{
 		fclose(fp);
-		RECAST_ERROR("NavMesh file '%s' is corrupted", filename);
+		RECAST_ERROR(NMIO, "NavMesh file '%s' is corrupted", filename);
 	}
 	if (header.version != NAVMESHSET_VERSION)
 	{
 		fclose(fp);
-		RECAST_ERROR("NavMesh file '%s' has the wrong navmesh set version", filename);
+		RECAST_ERROR(NMIO, "NavMesh file '%s' has the wrong navmesh set version", filename);
 	}
 	
 	// Initializing navmesh with header info
@@ -666,13 +666,13 @@ void NavMeshBuilder::Deserialize(const char* dir, const char* ID)
 	if (!m_navMesh)
 	{
 		fclose(fp);
-		RECAST_ERROR("NavMesh for '%s' could not allocated", ID);
+		RECAST_ERROR(NMDETOUR & NMALLOCATION, "NavMesh for '%s' could not be allocated", ID);
 	}
 	dtStatus status = m_navMesh->init(&header.params);
 	if (dtStatusFailed(status))
 	{
 		fclose(fp);
-		RECAST_ERROR("NavMesh for '%s' failed to initialize", ID);
+		RECAST_ERROR(NMDETOUR & NMCREATION, "NavMesh for '%s' failed to initialize", ID);
 	}
 	
 	// Reading tiles
@@ -684,7 +684,7 @@ void NavMeshBuilder::Deserialize(const char* dir, const char* ID)
 		if (readLen != 1)
 		{
 			fclose(fp);
-			RECAST_ERROR("NavMesh file '%s' is corrupted", filename);
+			RECAST_ERROR(NMIO, "NavMesh file '%s' is corrupted", filename);
 		}
 		if (!tileHeader.tileRef || !tileHeader.dataSize) break;
 		
@@ -697,7 +697,7 @@ void NavMeshBuilder::Deserialize(const char* dir, const char* ID)
 		{
 			dtFree(data);
 			fclose(fp);
-			RECAST_ERROR("NavMesh file '%s' is corrupted", filename);
+			RECAST_ERROR(NMIO, "NavMesh file '%s' is corrupted", filename);
 		}
 		m_navMesh->addTile(data, tileHeader.dataSize, DT_TILE_FREE_DATA, tileHeader.tileRef, 0);
 	}
@@ -705,11 +705,16 @@ void NavMeshBuilder::Deserialize(const char* dir, const char* ID)
 
 	// Creating navMeshQuery
 	m_navQuery = dtAllocNavMeshQuery();
+	if (!m_navQuery)
+	{
+		dtFreeNavMesh(m_navMesh);
+		RECAST_ERROR(NMDETOUR & NMALLOCATION, "NavMesh Query for '%s' could not be allocated", ID);
+	}
 	status = m_navQuery->init(m_navMesh, DETOUR_MAX_NAVMESH_NODES);
 	if (dtStatusFailed(status))
 	{
 		dtFreeNavMesh(m_navMesh);
-		RECAST_ERROR("Could not init Detour navmesh query for navMesh '%s'", ID);
+		RECAST_ERROR(NMDETOUR & NMCREATION, "Could not init Detour navmesh query for navMesh '%s'", ID);
 	}
 	RECAST_LOG("NavMesh '%s' loaded", ID);
 }
@@ -720,32 +725,36 @@ void NavMeshBuilder::Deserialize(const char* dir, const char* ID)
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::Cleanup()
 {
-	delete[] m_triareas;
+	if (m_triareas) delete[] m_triareas;
 	m_triareas = 0;
-	rcFreeHeightField(m_heightField);
+	if (m_heightField) rcFreeHeightField(m_heightField);
 	m_heightField = 0;
-	rcFreeCompactHeightfield(m_chf);
+	if (m_chf) rcFreeCompactHeightfield(m_chf);
 	m_chf = 0;
-	rcFreeContourSet(m_cset);
+	if (m_cset) rcFreeContourSet(m_cset);
 	m_cset = 0;
-	rcFreePolyMesh(m_pmesh);
+	if (m_pmesh) rcFreePolyMesh(m_pmesh);
 	m_pmesh = 0;
-	rcFreePolyMeshDetail(m_dmesh);
+	if (m_dmesh) rcFreePolyMeshDetail(m_dmesh);
 	m_dmesh = 0;
-	dtFreeNavMesh(m_navMesh);
+	if (m_navMesh) dtFreeNavMesh(m_navMesh);
 	m_navMesh = 0;
-	dtFreeNavMeshQuery(m_navQuery);
+	if (m_navQuery) dtFreeNavMeshQuery(m_navQuery);
 	m_navQuery = 0;
 }
 
-void NavMeshBuilder::WriteMaterialFile(const char* dir) const
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshBuilder::WriteMaterialFile                                          |
+//  |  Writes a default .mtl file for the mesh.                             LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshBuilder::WriteMaterialFile(const char* dir)
 {
 	// Opening file
 	char filename[128];
 	sprintf_s(filename, "%s\\%s.mtl", dir, m_matFile);
 	FILE* f;
 	fopen_s(&f, filename, "w");
-	if (!f) RECAST_ERROR("File '%s' could not be opened", filename);
+	if (!f) RECAST_ERROR(NMIO, "File '%s' could not be opened", filename);
 
 	// Writing contents
 	fprintf(f, "newmtl %s\n", m_matFile);
@@ -769,8 +778,11 @@ void NavMeshBuilder::WriteMaterialFile(const char* dir) const
 	RECAST_LOG("Navmesh material file saved as '%s'", filename);
 }
 
-
-void NavMeshBuilder::WriteTileToMesh(const dtMeshTile* tile, FILE* f) const
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshBuilder::WriteTileToMesh                                            |
+//  |  Writes the given navmesh tile to the given open file.                LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshBuilder::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 {
 	// Writing vertices
 	int vertCount = 0;
@@ -852,113 +864,29 @@ void NavMeshBuilder::WriteTileToMesh(const dtMeshTile* tile, FILE* f) const
 
 			// Write the face to the file
 			fprintf(f, "f");
-			for (int k = 0; k < 3; k++) fprintf(f, " %i//%i", v[k], faceCount);
-			fprintf(f, "\n");
-			faceCount++;
-		}
-	}
-	fprintf(f, "# %i faces\n\n", faceCount);
-}
-
-int3 experimentalWriter(FILE* f, const rcPolyMeshDetail* dmesh)
-{
-	int vertCount = 0;
-	for (int i = 0; i < dmesh->nmeshes; ++i)
-	{
-		const unsigned int* meshDef = &dmesh->meshes[i * 4];
-		const unsigned int baseVerts = meshDef[0];
-		const unsigned int baseTri = meshDef[2];
-		const int ntris = (int)meshDef[3];
-
-		const float* verts = &dmesh->verts[baseVerts * 3];
-		const unsigned char* tris = &dmesh->tris[baseTri * 4];
-		// Iterate the sub-mesh's triangles.
-		for (int j = 0; j < ntris; ++j)
-		{
-			const float* v1 = &verts[tris[j * 4 + 0] * 3];
-			const float* v2 = &verts[tris[j * 4 + 1] * 3];
-			const float* v3 = &verts[tris[j * 4 + 2] * 3];
-			// Do something with the vertex.
-			fprintf(f, "v %.5f %.5f %.5f\n", v1[0], v1[1], v1[2]);
-			fprintf(f, "v %.5f %.5f %.5f\n", v2[0], v2[1], v2[2]);
-			fprintf(f, "v %.5f %.5f %.5f\n", v3[0], v3[1], v3[2]);
-			vertCount += 3;
-		}
-	}
-	fprintf(f, "# %i vertices\n\n", vertCount);
-
-	int normCount = 0;
-	for (int i = 0; i < dmesh->nmeshes; ++i)
-	{
-		const unsigned int* meshDef = &dmesh->meshes[i * 4];
-		const unsigned int baseVerts = meshDef[0];
-		const unsigned int baseTri = meshDef[2];
-		const int ntris = (int)meshDef[3];
-
-		const float* verts = &dmesh->verts[baseVerts * 3];
-		const unsigned char* tris = &dmesh->tris[baseTri * 4];
-		// Iterate the sub-mesh's triangles.
-		for (int j = 0; j < ntris; ++j)
-		{
-			const float* v1p = &verts[tris[j * 4 + 0] * 3];
-			const float* v2p = &verts[tris[j * 4 + 1] * 3];
-			const float* v3p = &verts[tris[j * 4 + 2] * 3];
-			// Do something with the vertex.
-			float3 v0 = make_float3(v1p[0], v1p[1], v1p[2]);
-			float3 v1 = make_float3(v2p[0], v2p[1], v2p[2]);
-			float3 v2 = make_float3(v3p[0], v3p[1], v3p[2]);
-			float3 n = cross(v1 - v0, v2 - v0);
-			normalize(n);
-			if (n.y < 0) n = -n; // ensures all normals point up
-			fprintf(f, "vn %.5f %.5f %.5f\n", n.x, n.y, n.z);
-			normCount++;
-		}
-	}
-	fprintf(f, "# %i normals\n\n", normCount);
-
-	int faceCount = 0;
-	fprintf(f, "usemtl navmesh\n");
-	for (int i = 0; i < dmesh->nmeshes; ++i)
-	{
-		const unsigned int* meshDef = &dmesh->meshes[i * 4];
-		const unsigned int baseVerts = meshDef[0];
-		const unsigned int baseTri = meshDef[2];
-		const int ntris = (int)meshDef[3];
-
-		const float* verts = &dmesh->verts[baseVerts * 3];
-		const unsigned char* tris = &dmesh->tris[baseTri * 4];
-		// Iterate the sub-mesh's triangles.
-		for (int j = 0; j < ntris; ++j)
-		{
-			const float* x = &verts[tris[j * 4 + 0] * 3];
-			const float* y = &verts[tris[j * 4 + 1] * 3];
-			const float* z = &verts[tris[j * 4 + 2] * 3];
-			// Do something with the vertex.
-			fprintf(f, "f");
 			for (int k = 0; k < 3; k++)
-				fprintf(f, " %i//%i", faceCount * 3 + k +1, faceCount +1); // +1 because .obj vertices/normals start at 1
+				fprintf(f, " %i//%i", v[k]+1, faceCount+1); // +1 because .obj indices start at 1
 			fprintf(f, "\n");
 			faceCount++;
 		}
 	}
 	fprintf(f, "# %i faces\n\n", faceCount);
-	return make_int3(vertCount, normCount, faceCount);
 }
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMesh::SaveAsMesh                                                        |
 //  |  Saves the navmesh as an .obj file.                                   LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshBuilder::SaveAsMesh(const char* dir, const char* ID) const
+void NavMeshBuilder::SaveAsMesh(const char* dir, const char* ID)
 {
 	// Opening file
 	char filename[128];
 	sprintf_s(filename, "%s\\%s.obj", dir, ID);
 	FILE* f;
 	fopen_s(&f, filename, "w");
-	if (!f) RECAST_ERROR("File '%s' could not be opened", filename);
+	if (!f) RECAST_ERROR(NMIO, "File '%s' could not be opened", filename);
 	const dtNavMesh* mesh = m_navMesh;
-	if (!mesh) RECAST_ERROR("Navmesh '%s' can't be saved as mesh, m_navMesh is null", ID);
+	if (!mesh) RECAST_ERROR(NMDETOUR & NMINPUT, "Navmesh '%s' can't be saved as mesh, m_navMesh is null", ID);
 	if (!FileExists((std::string(dir) + "\\" + m_matFile + ".mtl").c_str())) WriteMaterialFile(m_dir);
 
 	// Writing header
@@ -967,76 +895,28 @@ void NavMeshBuilder::SaveAsMesh(const char* dir, const char* ID) const
 	fprintf(f, "# Automatically generated by 'recastnavigation.cpp'\n");
 	fprintf(f, "#\nmtllib %s.mtl\n\n", m_matFile);
 
-	//// Writing one group per tile
-	//for (int i = 0; i < mesh->getMaxTiles(); ++i) if (mesh->getTile(i)->header)
-	//{
-	//	fprintf(f, "g Tile%2i\n", i);
-	//	WriteTileToMesh(mesh->getTile(i), f);
-	//}
-
-	int3 writeCounts = experimentalWriter(f, m_dmesh);
-
-	//float off = 0.0f; // y-offset
-	//for (int i = 0; i < m_dmesh->nmeshes; i++)
-	//{
-	//	const unsigned int* m = &m_dmesh->meshes[i * 4];
-	//	const unsigned int bverts = m[0];
-	//	const unsigned int btris = m[2];
-	//	const int ntris = (int)m[3];
-	//	const float* verts = &m_dmesh->verts[bverts * 3];
-	//	const unsigned char* tris = &m_dmesh->tris[btris * 4];
-	//
-	//	for (int j = 0; j < ntris; ++j)
-	//	{
-	//		//dd->vertex(&verts[tris[j * 4 + 0] * 3], color);
-	//		//dd->vertex(&verts[tris[j * 4 + 1] * 3], color);
-	//		//dd->vertex(&verts[tris[j * 4 + 2] * 3], color);
-	//		fprintf(f, "v %.5f %.5f %.5f\n", verts[tris[j * 4 + 0] * 3], verts[tris[j * 4 + 1] * 3] + off, verts[tris[j * 4 + 2] * 3]);
-	//	}
-	//}
-	//for (int i = 0; i < m_dmesh->nmeshes; i++)
-	//{
-	//	const unsigned int* m = &m_dmesh->meshes[i * 4];
-	//	const unsigned int bverts = m[0];
-	//	const unsigned int btris = m[2];
-	//	const int ntris = (int)m[3];
-	//	const float* verts = &m_dmesh->verts[bverts * 3];
-	//	const unsigned char* tris = &m_dmesh->tris[btris * 4];
-	//
-	//	for (int j = 0; j < ntris; ++j)
-	//	{
-	//		float3 v0 = make_float3(verts[tris[j * 4 + 0] * 3], verts[tris[j * 4 + 0] * 3 + 1], verts[tris[j * 4 + 0] * 3 + 2]);
-	//		float3 v1 = make_float3(verts[tris[j * 4 + 1] * 3], verts[tris[j * 4 + 1] * 3 + 1], verts[tris[j * 4 + 1] * 3 + 2]);
-	//		float3 v2 = make_float3(verts[tris[j * 4 + 2] * 3], verts[tris[j * 4 + 2] * 3 + 1], verts[tris[j * 4 + 2] * 3 + 2]);
-	//		float3 n = cross(v1 - v0, v2 - v0);
-	//		normalize(n);
-	//		if (n.y < 0) n = -n; // ensures all normals point up
-	//		fprintf(f, "vn %.5f %.5f %.5f\n", n.x, n.y, n.z);
-	//	}
-	//}
-	//fprintf(f, "usemtl %s\n", m_matFile);
-	//int tricount = 0;
-	//for (int i = 0; i < m_dmesh->nmeshes; i++)
-	//{
-	//	const unsigned int* m = &m_dmesh->meshes[i * 4];
-	//	const unsigned int bverts = m[0];
-	//	const unsigned int btris = m[2];
-	//	const int ntris = (int)m[3];
-	//	const float* verts = &m_dmesh->verts[bverts * 3];
-	//	const unsigned char* tris = &m_dmesh->tris[btris * 4];
-	//
-	//	for (int j = 0; j < ntris; ++j)
-	//	{
-	//		fprintf(f, "f");
-	//		for (int k = 0; k < 3; ++k)
-	//			fprintf(f, " %i//%i", tricount * 3 + k, tricount);
-	//		fprintf(f, "\n");
-	//		tricount++;
-	//	}
-	//}
+	// Writing one group per tile
+	for (int i = 0; i < mesh->getMaxTiles(); ++i) if (mesh->getTile(i)->header)
+	{
+		fprintf(f, "g Tile%2i\n", i);
+		WriteTileToMesh(mesh->getTile(i), f);
+	}
 
 	fclose(f);
 	RECAST_LOG("NavMesh mesh saved as '%s'", filename);
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMesh::Error                                                             |
+//  |  Handles errors, logging, and error code maintenance.                 LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshBuilder::Error(rcLogCategory level, int code, ...)
+{
+	if (code) m_errorCode = code;
+	va_list ap;
+	__crt_va_start(ap, level);
+	m_ctx->log(level, ap);
+	__crt_va_end(ap);
 }
 
 

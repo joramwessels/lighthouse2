@@ -30,47 +30,48 @@
 
 namespace lighthouse2 {
 
-//  +-------------------------------------------------------------------------------------------------------+
-//  |  SamplePartitionType                                                                                  |
-//  |  The heightfield is partitioned so that a simple algorithm can triangulate the walkable areas.	    |
-//  |  There are 3 martitioning methods, each with some pros and cons:										|
-//  |  1) Watershed partitioning																			|
-//  |    - the classic Recast partitioning																	|
-//  |    - creates the nicest tessellation																	|
-//  |    - usually slowest																					|
-//  |    - partitions the heightfield into nice regions without holes or overlaps							|
-//  |    - the are some corner cases where this method creates produces holes and overlaps					|
-//  |       - holes may appear when a small obstacle is close to large open area (triangulation won't fail) |
-//  |       - overlaps may occur on narrow spiral corridors (i.e stairs) and triangulation may fail         |
-//  |    * generally the best choice if you precompute the nacmesh, use this if you have large open areas	|
-//  |  2) Monotone partioning																				|
-//  |    - fastest																							|
-//  |    - partitions the heightfield into regions without holes and overlaps (guaranteed)					|
-//  |    - creates long thin polygons, which sometimes causes paths with detours							|
-//  |    * use this if you want fast navmesh generation														|
-//  |  3) Layer partitoining																				|
-//  |    - quite fast																						|
-//  |    - partitions the heighfield into non-overlapping regions											|
-//  |    - relies on the triangulation code to cope with holes (thus slower than monotone partitioning)		|
-//  |    - produces better triangles than monotone partitioning												|
-//  |    - does not have the corner cases of watershed partitioning											|
-//  |    - can be slow and create a bit ugly tessellation (still better than monotone)						|
-//  |      if you have large open areas with small obstacles (not a problem if you use tiles)				|
-//  |    * good choice to use for tiled navmesh with medium and small sized tiles					  LH2'19|
-//  +-------------------------------------------------------------------------------------------------------+
-enum SamplePartitionType
-{
-	SAMPLE_PARTITION_WATERSHED,
-	SAMPLE_PARTITION_MONOTONE,
-	SAMPLE_PARTITION_LAYERS,
-};
-
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshConfig                                                              |
 //  |  Contains all settings regarding the navmesh generation.              LH2'19|
 //  +-----------------------------------------------------------------------------+
 struct NavMeshConfig
 {
+
+	//  +-------------------------------------------------------------------------------------------------------+
+	//  |  SamplePartitionType                                                                                  |
+	//  |  The heightfield is partitioned so that a simple algorithm can triangulate the walkable areas.	    |
+	//  |  There are 3 martitioning methods, each with some pros and cons:										|
+	//  |  1) Watershed partitioning																			|
+	//  |    - the classic Recast partitioning																	|
+	//  |    - creates the nicest tessellation																	|
+	//  |    - usually slowest																					|
+	//  |    - partitions the heightfield into nice regions without holes or overlaps							|
+	//  |    - the are some corner cases where this method creates produces holes and overlaps					|
+	//  |       - holes may appear when a small obstacle is close to large open area (triangulation won't fail) |
+	//  |       - overlaps may occur on narrow spiral corridors (i.e stairs) and triangulation may fail         |
+	//  |    * generally the best choice if you precompute the nacmesh, use this if you have large open areas	|
+	//  |  2) Monotone partioning																				|
+	//  |    - fastest																							|
+	//  |    - partitions the heightfield into regions without holes and overlaps (guaranteed)					|
+	//  |    - creates long thin polygons, which sometimes causes paths with detours							|
+	//  |    * use this if you want fast navmesh generation														|
+	//  |  3) Layer partitoining																				|
+	//  |    - quite fast																						|
+	//  |    - partitions the heighfield into non-overlapping regions											|
+	//  |    - relies on the triangulation code to cope with holes (thus slower than monotone partitioning)		|
+	//  |    - produces better triangles than monotone partitioning												|
+	//  |    - does not have the corner cases of watershed partitioning											|
+	//  |    - can be slow and create a bit ugly tessellation (still better than monotone)						|
+	//  |      if you have large open areas with small obstacles (not a problem if you use tiles)				|
+	//  |    * good choice to use for tiled navmesh with medium and small sized tiles					  LH2'19|
+	//  +-------------------------------------------------------------------------------------------------------+
+	enum SamplePartitionType
+	{
+		SAMPLE_PARTITION_WATERSHED,
+		SAMPLE_PARTITION_MONOTONE,
+		SAMPLE_PARTITION_LAYERS,
+	};
+
 	int m_width, m_height, m_tileSize, m_borderSize;		 // Automatically computed
 	float m_cs, m_ch;										 // Voxel cell size and -height
 	float3 m_bmin, m_bmax;									 // AABB navmesh restraints
@@ -157,26 +158,54 @@ protected:
 class NavMeshBuilder
 {
 public:
+
+	//  +-----------------------------------------------------------------------------+
+	//  |  NavMeshErrorCode                                                           |
+	//  |  Encodes bitwise info about the last error.                                 |
+	//  |  Error codes can be interpreted by bitwise & operations.              LH2'19|
+	//  +-----------------------------------------------------------------------------+
+	enum NavMeshErrorCode
+	{
+		NMSUCCESS = 0x0,	// No issues
+		NMRECAST = 0x1,		// Caused by Recast
+		NMDETOUR = 0x2,		// Caused by Detour
+		NMINPUT = 0x4,		// Incorrect input
+		NMALLOCATION = 0x8, // Allocation failed, most likely out of memory
+		NMCREATION = 0x16,	// A R/D function failed to create a structure
+		NMIO = 0x32			// Issues with I/O
+	};
+
 	// constructor / destructor
 	NavMeshBuilder(const char* dir) : m_dir(dir)
 	{
 		m_ctx = new BuildContext();
+		m_triareas = 0;
+		m_heightField = 0;
+		m_chf = 0;
+		m_cset = 0;
+		m_pmesh = 0;
+		m_dmesh = 0;
+		m_navMesh = 0;
+		m_navQuery = 0;
+		m_errorCode = 0;
 	};
 	~NavMeshBuilder() { Cleanup(); };
 
 	void Build(HostScene* scene);
-	void Serialize() const { Serialize(m_dir, m_config.m_id); };
+	void Serialize() { Serialize(m_dir, m_config.m_id); };
 	void Deserialize() { Deserialize(m_dir, m_config.m_id); };
-	void SaveAsMesh() const { SaveAsMesh(m_dir, m_config.m_id); };
+	void SaveAsMesh() { SaveAsMesh(m_dir, m_config.m_id); };
 	void Cleanup();
 	void DumpLog() const { ((BuildContext*)m_ctx)->dumpLog(""); };
 
 	void SetConfig(NavMeshConfig config) { m_config = config; };
 	void SetID(const char* id) { m_config.m_id = id; };
 
+	const char* GetDir() const { return m_dir; };
 	NavMeshConfig* GetConfig() { return &m_config; };
-	dtNavMesh* GetMesh() { return m_navMesh; };
-	dtNavMeshQuery* GetQuery() { return m_navQuery; };
+	dtNavMesh* GetMesh() const { return m_navMesh; };
+	dtNavMeshQuery* GetQuery() const { return m_navQuery; };
+	int Error() const { return m_errorCode; };
 
 protected:
 
@@ -195,6 +224,7 @@ protected:
 	rcPolyMeshDetail* m_dmesh;		// The detailed polygon mesh
 	dtNavMesh* m_navMesh;			// The final navmesh as used by Detour
 	dtNavMeshQuery* m_navQuery;		// The navmesh query system
+	int m_errorCode;
 
 	// Build functions
 	void RasterizePolygonSoup(const int vert_count, const float* verts, const int tri_count, const int* tris);
@@ -205,11 +235,12 @@ protected:
 	void CreateDetailMesh();
 	void CreateDetourData();
 
-	void WriteMaterialFile(const char* dir) const;
-	void WriteTileToMesh(const dtMeshTile* tile, FILE* file) const;
-	void SaveAsMesh(const char* dir, const char* ID) const;
-	void Serialize(const char* dir, const char* ID) const;
+	void WriteMaterialFile(const char* dir);
+	void WriteTileToMesh(const dtMeshTile* tile, FILE* file);
+	void SaveAsMesh(const char* dir, const char* ID);
+	void Serialize(const char* dir, const char* ID);
 	void Deserialize(const char* dir, const char* ID);
+	void Error(rcLogCategory level, int code, ...);
 };
 
 // Area Types // TODO make accessible to app
