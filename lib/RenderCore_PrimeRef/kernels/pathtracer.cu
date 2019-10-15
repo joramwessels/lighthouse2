@@ -94,13 +94,12 @@ void shadeKernel( float4* accumulator, const uint stride,
 	const float3 I = RAY_O + HIT_T * D;
 	const float coneWidth = spreadAngle * HIT_T;
 	GetShadingData( D, HIT_U, HIT_V, coneWidth, instanceTriangles[PRIMIDX], INSTANCEIDX, shadingData, N, iN, fN, T );
-	iN = fN = N;
 
 	// stop on light
 	if (shadingData.IsEmissive() /* r, g or b exceeds 1 */)
 	{
 		const float DdotNL = -dot( D, N );
-		if (DdotNL > 0 /* lights are not double sided */) if (pathLength == 1 /* only primary hit is 'specular' */) 
+		if (DdotNL > 0) /* lights are not double sided */
 		{
 			float3 contribution = throughput * shadingData.color;
 			FIXNAN_FLOAT3( contribution );

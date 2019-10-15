@@ -64,16 +64,19 @@ For more information on Lighthouse 2 please visit: http://jacco.ompf2.com.
 
 Lighthouse 2 was developed at the Utrecht University, The Netherlands.
 
-Lighthouse 2 uses the following libraries: AntTweakBar http://anttweakbar.sourceforge.net/doc
-Autodesk FBX SDK https://www.autodesk.com/developer-network/platform-technologies/fbx-sdk-2019-0
-FreeImage http://freeimage.sourceforge.net
-Glad https://glad.dav1d.de
-GLFW https://www.glfw.org
-half 1.12 http://half.sourceforge.net
-tinygltf https://github.com/syoyo/tinygltf
-tinyobj https://github.com/syoyo/tinyobjloader
-tinyxml2 https://github.com/leethomason/tinyxml2
+Lighthouse 2 uses the following libraries:<br>
+AntTweakBar http://anttweakbar.sourceforge.net/doc<br>
+Autodesk FBX SDK https://www.autodesk.com/developer-network/platform-technologies/fbx-sdk-2019-0<br>
+FreeImage http://freeimage.sourceforge.net<br>
+Glad https://glad.dav1d.de<br>
+GLFW https://www.glfw.org<br>
+half 1.12 http://half.sourceforge.net<br>
+tinygltf https://github.com/syoyo/tinygltf<br>
+tinyobj https://github.com/syoyo/tinyobjloader<br>
+tinyxml2 https://github.com/leethomason/tinyxml2<br>
 zlib https://www.zlib.net
+
+The Lighthouse2 Vulkan core (and sharedBSDF) was developed by Mèir Noordermeer (https://github.com/MeirBon).
 
 Lighthouse 2 implements research by (very incomplete):
 

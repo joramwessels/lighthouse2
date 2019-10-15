@@ -66,9 +66,9 @@ void RenderAPI::AddScene( const char* file, const char* dir, const mat4& transfo
 	return renderer->scene->AddScene( file, dir, transform );
 }
 
-int RenderAPI::AddQuad( const float3 N, const float3 pos, const float width, const float height, const int material )
+int RenderAPI::AddQuad( const float3 N, const float3 pos, const float width, const float height, const int material, const int meshID )
 {
-	return renderer->scene->AddQuad( N, pos, width, height, material );
+	return renderer->scene->AddQuad( N, pos, width, height, material, meshID );
 }
 
 int RenderAPI::AddInstance( const int meshId, const mat4& transform )
@@ -180,6 +180,11 @@ void RenderAPI::SetProbePos( const int2 pos )
 CoreStats RenderAPI::GetCoreStats()
 {
 	return renderer->GetCoreStats();
+}
+
+SystemStats RenderAPI::GetSystemStats()
+{
+	return renderer->GetSystemStats();
 }
 
 // EOF
