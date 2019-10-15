@@ -12,7 +12,7 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{D754CC3F-4A2E-4942-A8D8-326E476833DF}</ProjectGuid>
-    <RootNamespace>ImGuiApp</RootNamespace>
+    <RootNamespace>AI_Debugger</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
     <ProjectName>ai_debugger</ProjectName>
   </PropertyGroup>
@@ -54,7 +54,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;WIN64;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>../../lib/pathfinding/recastnavigation/Detour/Include;../../lib/pathfinding/recastnavigation/DetourTileCache/Include;../../lib/pathfinding/recastnavigation/DetourCrowd/Include;../../lib/pathfinding/recastnavigation/DebugUtils/Include;../../lib/pathfinding/recastnavigation/Recast/Include;../../lib/tinyxml2;../../lib/pathfinding;%(AdditionalIncludeDirectories);../../lib/RenderCore;../../lib/imgui;../../lib/zlib;../../lib/glfw/include;../../lib/glad/include;../../lib/half2.1.0;../../lib/RenderSystem;../../lib/platform;../../lib/AntTweakBar/include;../../lib/freeimage/inc</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../../lib/pathfinding/recastnavigation/Detour/Include;../../lib/pathfinding/recastnavigation/DetourTileCache/Include;../../lib/pathfinding/recastnavigation/DetourCrowd/Include;../../lib/pathfinding/recastnavigation/DebugUtils/Include;../../lib/pathfinding/recastnavigation/Recast/Include;../../lib/tinyxml2;../../lib/pathfinding;%(AdditionalIncludeDirectories);../../lib/RenderCore;../../lib/zlib;../../lib/glfw/include;../../lib/glad/include;../../lib/half2.1.0;../../lib/RenderSystem;../../lib/platform;../../lib/AntTweakBar/include;../../lib/freeimage/inc</AdditionalIncludeDirectories>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions</EnableEnhancedInstructionSet>
       <FloatingPointModel>Fast</FloatingPointModel>
     </ClCompile>
@@ -73,7 +73,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;WIN64;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>../../lib/pathfinding/recastnavigation/Detour/Include;../../lib/pathfinding/recastnavigation/DetourTileCache/Include;../../lib/pathfinding/recastnavigation/DetourCrowd/Include;../../lib/pathfinding/recastnavigation/DebugUtils/Include;../../lib/pathfinding/recastnavigation/Recast/Include;../../lib/tinyxml2;../../lib/pathfinding;%(AdditionalIncludeDirectories);../../lib/RenderCore;../../lib/imgui;../../lib/zlib;../../lib/glfw/include;../../lib/glad/include;../../lib/half2.1.0;../../lib/RenderSystem;../../lib/platform;../../lib/AntTweakBar/include;../../lib/freeimage/inc</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../../lib/pathfinding/recastnavigation/Detour/Include;../../lib/pathfinding/recastnavigation/DetourTileCache/Include;../../lib/pathfinding/recastnavigation/DetourCrowd/Include;../../lib/pathfinding/recastnavigation/DebugUtils/Include;../../lib/pathfinding/recastnavigation/Recast/Include;../../lib/tinyxml2;../../lib/pathfinding;%(AdditionalIncludeDirectories);../../lib/RenderCore;../../lib/zlib;../../lib/glfw/include;../../lib/glad/include;../../lib/half2.1.0;../../lib/RenderSystem;../../lib/platform;../../lib/AntTweakBar/include;../../lib/freeimage/inc</AdditionalIncludeDirectories>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions</EnableEnhancedInstructionSet>
       <FloatingPointModel>Fast</FloatingPointModel>
       <DebugInformationFormat>None</DebugInformationFormat>
@@ -90,12 +90,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\lib\imgui\imgui.cpp" />
-    <ClCompile Include="..\..\lib\imgui\imgui_demo.cpp" />
-    <ClCompile Include="..\..\lib\imgui\imgui_draw.cpp" />
-    <ClCompile Include="..\..\lib\imgui\imgui_impl_glfw.cpp" />
-    <ClCompile Include="..\..\lib\imgui\imgui_impl_opengl3.cpp" />
-    <ClCompile Include="..\..\lib\imgui\imgui_widgets.cpp" />
     <ClCompile Include="gui.cpp" />
     <ClCompile Include="main.cpp">
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -105,14 +99,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\lib\imgui\imconfig.h" />
-    <ClInclude Include="..\..\lib\imgui\imgui.h" />
-    <ClInclude Include="..\..\lib\imgui\imgui_impl_glfw.h" />
-    <ClInclude Include="..\..\lib\imgui\imgui_impl_opengl3.h" />
-    <ClInclude Include="..\..\lib\imgui\imgui_internal.h" />
-    <ClInclude Include="..\..\lib\imgui\imstb_rectpack.h" />
-    <ClInclude Include="..\..\lib\imgui\imstb_textedit.h" />
-    <ClInclude Include="..\..\lib\imgui\imstb_truetype.h" />
     <ClInclude Include="gui.h" />
     <ClInclude Include="main_tools.h" />
     <ClInclude Include="main_ui.h" />

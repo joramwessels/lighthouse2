@@ -15,7 +15,7 @@
 
 #include "pathfinding.h"
 
-#define RECAST_ERROR(X, ...) return Error(RC_LOG_ERROR, X, __VA_ARGS__)
+#define RECAST_ERROR(X, Y, ...) return Error(RC_LOG_ERROR, X, (std::string("AI ERROR: ") + Y).c_str(), __VA_ARGS__)
 #define RECAST_LOG(...) Error(RC_LOG_PROGRESS, NMSUCCESS, __VA_ARGS__)
 
 #define DETOUR_MAX_NAVMESH_NODES 2048
@@ -76,6 +76,7 @@ NavMeshConfig::NavMeshConfig()
 	m_filterWalkableLowHeightSpans = true;
 	m_id = "default_ID";
 	m_printBuildStats = false;
+	m_printImmediately = false;
 };
 
 //  +-----------------------------------------------------------------------------+
@@ -255,8 +256,6 @@ void NavMeshBuilder::Build(HostScene* scene)
 		RECAST_ERROR(NMRECAST & NMINPUT, "buildNavigation: Input mesh is not specified.");
 
 	printf("generating navmesh... ");
-	if (m_config.m_printBuildStats)
-		RECAST_LOG("===   NavMesh build stats for   %s\n", m_config.m_id);
 	
 	// Extracting meshes
 	const std::vector<HostMesh*>* meshes = &scene->meshes;
@@ -294,9 +293,9 @@ void NavMeshBuilder::Build(HostScene* scene)
 	m_ctx->startTimer(RC_TIMER_TOTAL);
 	if (m_config.m_printBuildStats)
 	{
-		RECAST_LOG("Building navigation:");
-		RECAST_LOG(" - %d x %d cells", m_config.m_width, m_config.m_height);
-		RECAST_LOG(" - %.1fK verts, %.1fK tris",
+		RECAST_LOG("===   NavMesh build stats for   %s", m_config.m_id);
+		RECAST_LOG(" - Voxel grid: %d x %d cells", m_config.m_width, m_config.m_height);
+		RECAST_LOG(" - Input mesh: %.1fK verts, %.1fK tris",
 			vertices.size() / 1000.0f, triangles.size() / 1000.0f);
 	}
 
@@ -323,11 +322,14 @@ void NavMeshBuilder::Build(HostScene* scene)
 
 	// Log performance stats
 	m_ctx->stopTimer(RC_TIMER_TOTAL);
-	printf("%.3fms\n", m_ctx->getAccumulatedTime(RC_TIMER_TOTAL) / 1000.0f);
-	if (m_config.m_printBuildStats)
+	if (!m_errorCode) // short single-line duration log
+		printf("%.3fms", m_ctx->getAccumulatedTime(RC_TIMER_TOTAL) / 1000.0f);
+	if (m_config.m_printBuildStats && !m_errorCode) // calculating detailed multi-line duration log
 		duLogBuildTimes(*m_ctx, m_ctx->getAccumulatedTime(RC_TIMER_TOTAL));
-	RECAST_LOG("   '%s' polymesh: %d vertices  %d polygons",
+	if (!m_errorCode) // single-line mesh info
+		RECAST_LOG("   '%s' polymesh: %d vertices  %d polygons",
 		m_config.m_id, m_pmesh->nverts, m_pmesh->npolys);
+	if (m_errorCode) Cleanup();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -337,6 +339,8 @@ void NavMeshBuilder::Build(HostScene* scene)
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::RasterizePolygonSoup(const int vert_count, const float* verts, const int tri_count, const int* tris)
 {
+	if (m_errorCode) return;
+
 	// Allocate voxel heightfield where we rasterize our input data to.
 	m_heightField = rcAllocHeightfield();
 	if (!m_heightField)
@@ -369,6 +373,8 @@ void NavMeshBuilder::RasterizePolygonSoup(const int vert_count, const float* ver
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::FilterWalkableSurfaces()
 {
+	if (m_errorCode) return;
+
 	// Once all geoemtry is rasterized, we do initial pass of filtering to
 	// remove unwanted overhangs caused by the conservative rasterization
 	// as well as filter spans where the character cannot possibly stand.
@@ -388,6 +394,8 @@ void NavMeshBuilder::FilterWalkableSurfaces()
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::PartitionWalkableSurface()
 {
+	if (m_errorCode) return;
+
 	// Compact the heightfield so that it is faster to handle from now on.
 	// This will result more cache coherent data as well as the neighbours
 	// between walkable cells will be calculated.
@@ -439,6 +447,7 @@ void NavMeshBuilder::PartitionWalkableSurface()
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::ExtractContours()
 {
+	if (m_errorCode) return;
 	m_cset = rcAllocContourSet();
 	if (!m_cset)
 		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'cset'.");
@@ -453,6 +462,7 @@ void NavMeshBuilder::ExtractContours()
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::BuildPolygonMesh()
 {
+	if (m_errorCode) return;
 	m_pmesh = rcAllocPolyMesh();
 	if (!m_pmesh)
 		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'pmesh'.");
@@ -467,6 +477,7 @@ void NavMeshBuilder::BuildPolygonMesh()
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::CreateDetailMesh()
 {
+	if (m_errorCode) return;
 	m_dmesh = rcAllocPolyMeshDetail();
 	if (!m_dmesh)
 		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'pmdtl'.");
@@ -481,6 +492,8 @@ void NavMeshBuilder::CreateDetailMesh()
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::CreateDetourData()
 {
+	if (m_errorCode) return;
+
 	// The GUI may allow more max points per polygon than Detour can handle.
 	// Only build the detour navmesh if we do not exceed the limit.
 	if (m_config.m_maxVertsPerPoly <= DT_VERTS_PER_POLYGON)
@@ -573,6 +586,8 @@ void NavMeshBuilder::CreateDetourData()
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::Serialize(const char* dir, const char* ID)
 {
+	if (m_errorCode) return;
+
 	// Saving config file
 	char configfile[128];
 	sprintf_s(configfile, "%s\\%s.config", dir, ID);
@@ -625,12 +640,14 @@ void NavMeshBuilder::Serialize(const char* dir, const char* ID)
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::Deserialize(const char* dir, const char* ID)
 {
+	if (m_errorCode) return;
 	Cleanup();
 
 	// Loading config file
 	char configfile[128];
 	sprintf_s(configfile, "%s\\%s.config", dir, ID);
 	m_config.Load(configfile);
+	m_config.m_id = ID; // strings aren't loaded correctly
 	
 	// Opening file
 	char filename[128];
@@ -879,6 +896,8 @@ void NavMeshBuilder::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::SaveAsMesh(const char* dir, const char* ID)
 {
+	if (m_errorCode) return;
+
 	// Opening file
 	char filename[128];
 	sprintf_s(filename, "%s\\%s.obj", dir, ID);
@@ -910,13 +929,26 @@ void NavMeshBuilder::SaveAsMesh(const char* dir, const char* ID)
 //  |  NavMesh::Error                                                             |
 //  |  Handles errors, logging, and error code maintenance.                 LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshBuilder::Error(rcLogCategory level, int code, ...)
+void NavMeshBuilder::Error(rcLogCategory level, int code, const char* format, ...)
 {
 	if (code) m_errorCode = code;
-	va_list ap;
-	__crt_va_start(ap, level);
-	m_ctx->log(level, ap);
-	__crt_va_end(ap);
+
+	if (m_config.m_printImmediately)
+	{
+		printf("\n\t");
+		va_list ap;
+		__crt_va_start(ap, format);
+		vprintf(format, ap);
+		__crt_va_end(ap);
+		if (code) printf("\n"); // No more logs after an error
+	}
+	else
+	{
+		va_list ap;
+		__crt_va_start(ap, format);
+		m_ctx->log(level, format, ap);
+		__crt_va_end(ap);
+	}
 }
 
 
@@ -1005,6 +1037,8 @@ void BuildContext::dumpLog(const char* format, ...)
 		}
 		putchar('\n');
 	}
+
+	resetLog();
 }
 
 

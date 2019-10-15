@@ -25,6 +25,7 @@ static uint scrwidth = 0, scrheight = 0, scrspp = 1;
 static bool camMoved = false, hasFocus = true, running = true;
 static bool leftButtonDown = false, leftClicked = false;
 static string materialFile;
+static NavMeshBuilder* navmesh = 0;
 
 #include "main_ui.h"
 #include "main_tools.h"
@@ -49,25 +50,17 @@ void PrepareScene()
 	//renderer->AddInstance( lightQuad );
 	renderer->AddDirectionalLight(make_float3(-1), make_float3(255));
 
-	// Navmesh generation
-	NavMeshBuilder navmesh("data\\ai\\");
-	navmesh.GetConfig()->SetCellSize(.3f, .2f);
-	navmesh.GetConfig()->SetAgentInfo(10.0f, 10, 2, 2);
-	navmesh.GetConfig()->SetPolySettings(12, 1.3f, 8.0f, 20.0f, 6);
-	navmesh.GetConfig()->SetDetailPolySettings(6.0f, 1.0f);
-	navmesh.SetID("dmesh_test");
-	//navmesh.Deserialize();
-	//navmesh.SetID("testload");
-	navmesh.Build(renderer->GetScene());
-	//navmesh.Serialize();
-	navmesh.SaveAsMesh();
-	navmesh.DumpLog();
+	// Navmesh builder
+	navmesh = new NavMeshBuilder("data\\ai\\");
+	navmesh->GetConfig()->SetCellSize(.3f, .2f);
+	navmesh->GetConfig()->SetAgentInfo(10.0f, 10, 2, 2);
+	navmesh->GetConfig()->SetPolySettings(12, 1.3f, 8.0f, 20.0f, 6);
+	navmesh->GetConfig()->SetDetailPolySettings(6.0f, 1.0f);
+	navmesh->GetConfig()->m_printBuildStats = true;
+	navmesh->GetConfig()->m_printImmediately = true;
 
-	ui_nm_config = *navmesh.GetConfig();
-	//ai_demo_gui->AddNodesToScene(&navmesh);
-
-	int navmeshMeshID = renderer->AddMesh("dmesh_test.obj", "data\\ai\\", 1.0f);
-	renderer->AddInstance(navmeshMeshID, mat4::Identity());// mat4::Translate(0.0f, -10.0f, 0.0f)); TODO
+	ui_nm_config = *navmesh->GetConfig();
+	ui_nm_id = navmesh->GetConfig()->m_id;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -127,11 +120,11 @@ int main()
 	// renderer = RenderAPI::CreateRenderAPI( "rendercore_softrasterizer.dll" );	// RASTERIZER, your only option if not on NVidia
 
 	renderer->DeserializeCamera( "camera.xml" );
+	// initialize scene
+	PrepareScene();
 	// initialize ui
 	InitAntTweakBar();
 	InitFPSPrinter();
-	// initialize scene
-	PrepareScene();
 	// set initial window size
 	ReshapeWindowCallback( 0, SCRWIDTH, SCRHEIGHT );
 	// enter main loop

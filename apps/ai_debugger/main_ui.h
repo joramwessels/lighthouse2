@@ -15,6 +15,7 @@
 
 #include "anttweakbar.h"
 #include "PathFinding.h"
+#include "gui.h"
 
 // AntTweakBar data
 float mraysincl = 0, mraysexcl = 0;
@@ -25,8 +26,12 @@ int currentMaterialID = -1;
 static CoreStats coreStats;
 
 // Navmesh generation
+int navmeshMeshID = -1;
+int navmeshInstID = -1;
 static NavMeshConfig ui_nm_config;
-static bool ui_nm_save = false;
+static std::string ui_nm_id;
+static bool ui_nm_errorcode = false;
+static AI_DEMO_GUI* ai_debugger_gui = 0;
 
 //  +-----------------------------------------------------------------------------+
 //  |  InitAntTweakBar                                                            |
@@ -39,6 +44,87 @@ void InitAntTweakBar()
 	settings = TwNewBar( "settings" );
 	menu = TwNewBar( "NavMesh" );
 	RefreshUI();
+
+	ai_debugger_gui = new AI_DEMO_GUI(renderer, navmesh->GetDir());
+}
+
+// Button Callbacks
+void RemoveMesh(int meshID, int instanceID)
+{
+	// NOTE: Ideally instances and meshes can be deleted from the core
+	//		 to prevent a significant memory leaks, but by lack of a
+	//		 delete function, meshes are moved to a remote location
+	renderer->SetNodeTransform(instanceID, ai_debugger_gui->cleanupTranform);
+}
+void TW_CALL BuildNavMesh(void *data)
+{
+	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
+
+	// Set configurations
+	NavMeshConfig* config = navmesh->GetConfig();
+	*config = ui_nm_config;
+	config->m_id = ui_nm_id.c_str();
+
+	// Build new mesh
+	navmesh->Cleanup();
+	navmesh->Build(renderer->GetScene());
+	navmesh->SaveAsMesh();
+	navmesh->DumpLog();
+	ui_nm_errorcode = (bool)navmesh->GetError();
+	if (ui_nm_errorcode) return;
+	
+	// Load into renderer
+	RemoveMesh(navmeshMeshID, navmeshInstID);
+	ai_debugger_gui->Clean();
+	std::string meshfile = std::string(config->m_id) + ".obj";
+	navmeshMeshID = renderer->AddMesh(meshfile.c_str(), navmesh->GetDir(), 1.0f);
+	navmeshInstID = renderer->AddInstance(navmeshMeshID, mat4::Identity());
+
+	ai_debugger_gui->AddNodesToScene(navmesh);
+
+	ui_nm_config = *config;
+	ui_nm_id = config->m_id;
+}
+void TW_CALL SaveNavMesh(void *data)
+{
+	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
+
+	// Set configurations
+	NavMeshConfig* config = navmesh->GetConfig();
+	*config = ui_nm_config;
+	config->m_id = ui_nm_id.c_str();
+
+	navmesh->Serialize();
+	navmesh->DumpLog();
+	ui_nm_errorcode = (bool)navmesh->GetError();
+}
+void TW_CALL LoadNavMesh(void *data)
+{
+	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
+
+	// Set configurations
+	NavMeshConfig* config = navmesh->GetConfig();
+	*config = ui_nm_config;
+	config->m_id = ui_nm_id.c_str();
+
+	// Build new mesh
+	navmesh->Deserialize();
+	navmesh->SaveAsMesh();
+	navmesh->DumpLog();
+	ui_nm_errorcode = (bool)navmesh->GetError();
+	if (ui_nm_errorcode) return;
+
+	// Load into renderer
+	RemoveMesh(navmeshMeshID, navmeshInstID);
+	ai_debugger_gui->Clean();
+	std::string meshfile = std::string(config->m_id) + ".obj";
+	navmeshMeshID = renderer->AddMesh(meshfile.c_str(), navmesh->GetDir(), 1.0f);
+	navmeshInstID = renderer->AddInstance(navmeshMeshID, mat4::Identity());
+
+	ai_debugger_gui->AddNodesToScene(navmesh);
+
+	ui_nm_config = *config;
+	ui_nm_id = config->m_id;
 }
 
 // TW types
@@ -140,52 +226,58 @@ void RefreshMenu()
 
 	// create voxelgrid block
 	TwType float3Type = TwDefineStruct("AABB", float3Members, 3, sizeof(float3), NULL, NULL);
-	TwAddVarRO(menu, "AABB min", float3Type, &ui_nm_config.m_bmin, " group='voxelgrid'");
-	TwAddVarRO(menu, "AABB max", float3Type, &ui_nm_config.m_bmax, " group='voxelgrid'");
-	TwAddVarRO(menu, "cell size", TW_TYPE_FLOAT, &ui_nm_config.m_cs, " group='voxelgrid'");
-	TwAddVarRO(menu, "cell height", TW_TYPE_FLOAT, &ui_nm_config.m_ch, " group='voxelgrid'");
+	TwAddVarRW(menu, "AABB min", float3Type, &ui_nm_config.m_bmin, " group='voxelgrid'");
+	TwAddVarRW(menu, "AABB max", float3Type, &ui_nm_config.m_bmax, " group='voxelgrid'");
+	TwAddVarRW(menu, "cell size", TW_TYPE_FLOAT, &ui_nm_config.m_cs, " group='voxelgrid' min=0");
+	TwAddVarRW(menu, "cell height", TW_TYPE_FLOAT, &ui_nm_config.m_ch, " group='voxelgrid' min=0");
 	TwSetParam(menu, "voxelgrid", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create agent block
-	TwAddVarRO(menu, "max slope", TW_TYPE_FLOAT, &ui_nm_config.m_walkableSlopeAngle, " group='agent'");
-	TwAddVarRO(menu, "min height", TW_TYPE_INT32, &ui_nm_config.m_walkableHeight, " group='agent'");
-	TwAddVarRO(menu, "max climb", TW_TYPE_INT32, &ui_nm_config.m_walkableClimb, " group='agent'");
-	TwAddVarRO(menu, "min radius", TW_TYPE_INT32, &ui_nm_config.m_walkableRadius, " group='agent'");
+	TwAddVarRW(menu, "max slope", TW_TYPE_FLOAT, &ui_nm_config.m_walkableSlopeAngle, " group='agent' min=0 max=90");
+	TwAddVarRW(menu, "min height", TW_TYPE_INT32, &ui_nm_config.m_walkableHeight, " group='agent' min=1");
+	TwAddVarRW(menu, "max climb", TW_TYPE_INT32, &ui_nm_config.m_walkableClimb, " group='agent' min=0");
+	TwAddVarRW(menu, "min radius", TW_TYPE_INT32, &ui_nm_config.m_walkableRadius, " group='agent' min=1");
 	TwSetParam(menu, "agent", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create filtering block
-	TwAddVarRO(menu, "low hanging obstacles", TW_TYPE_BOOL8, &ui_nm_config.m_filterLowHangingObstacles, " group='filtering'");
-	TwAddVarRO(menu, "ledge spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterLedgeSpans, " group='filtering'");
-	TwAddVarRO(menu, "low height spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterWalkableLowHeightSpans, " group='filtering'");
+	TwAddVarRW(menu, "low hanging obstacles", TW_TYPE_BOOL8, &ui_nm_config.m_filterLowHangingObstacles, " group='filtering'");
+	TwAddVarRW(menu, "ledge spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterLedgeSpans, " group='filtering'");
+	TwAddVarRW(menu, "low height spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterWalkableLowHeightSpans, " group='filtering'");
 	TwSetParam(menu, "filtering", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create partitioning block
 	TwEnumVal partitionEV[] = {
-		{ SAMPLE_PARTITION_WATERSHED, "Watershed" },
-		{ SAMPLE_PARTITION_MONOTONE, "Monotone" },
-		{ SAMPLE_PARTITION_LAYERS, "Layers" }
+		{ NavMeshConfig::SAMPLE_PARTITION_WATERSHED, "Watershed" },
+		{ NavMeshConfig::SAMPLE_PARTITION_MONOTONE, "Monotone" },
+		{ NavMeshConfig::SAMPLE_PARTITION_LAYERS, "Layers" }
 	};
 	TwType PartitionType = TwDefineEnum("PartitionType", partitionEV, 3);
-	TwAddVarRO(menu, "partition type", PartitionType, &ui_nm_config.m_partitionType, " group='partitioning'");
-	TwAddVarRO(menu, "min region area", TW_TYPE_INT32, &ui_nm_config.m_minRegionArea, " group='partitioning'");
-	TwAddVarRO(menu, "min merged region", TW_TYPE_INT32, &ui_nm_config.m_mergeRegionArea, " group='partitioning'");
+	TwAddVarRW(menu, "partition type", PartitionType, &ui_nm_config.m_partitionType, " group='partitioning'");
+	TwAddVarRW(menu, "min region area", TW_TYPE_INT32, &ui_nm_config.m_minRegionArea, " group='partitioning' min=0");
+	TwAddVarRW(menu, "min merged region", TW_TYPE_INT32, &ui_nm_config.m_mergeRegionArea, " group='partitioning' min=0");
 	TwSetParam(menu, "partitioning", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create rasterization block
-	TwAddVarRO(menu, "max edge length", TW_TYPE_INT32, &ui_nm_config.m_maxEdgeLen, " group='poly mesh'");
-	TwAddVarRO(menu, "max simpl err", TW_TYPE_FLOAT, &ui_nm_config.m_maxSimplificationError, " group='poly mesh'");
-	TwAddVarRO(menu, "max verts per poly", TW_TYPE_INT32, &ui_nm_config.m_maxVertsPerPoly, " group='poly mesh'");
-	TwAddVarRO(menu, "detail sample dist", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleDist, " group='poly mesh'");
-	TwAddVarRO(menu, "detail max err", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleMaxError, " group='poly mesh'");
+	TwAddVarRW(menu, "max edge length", TW_TYPE_INT32, &ui_nm_config.m_maxEdgeLen, " group='poly mesh' min=0");
+	TwAddVarRW(menu, "max simpl err", TW_TYPE_FLOAT, &ui_nm_config.m_maxSimplificationError, " group='poly mesh' min=0");
+	TwAddVarRW(menu, "max verts per poly", TW_TYPE_INT32, &ui_nm_config.m_maxVertsPerPoly, " group='poly mesh' min=3 max=6");
+	TwAddVarRW(menu, "detail sample dist", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleDist, " group='poly mesh'");
+	TwAddVarRW(menu, "detail max err", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleMaxError, " group='poly mesh' min=0 help='een heleboelnie tinterresa nteinformatie'");
 	TwSetParam(menu, "poly mesh", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create output block
-	TwAddVarRO(menu, "NavMesh ID", TW_TYPE_STDSTRING, &ui_nm_config.m_id, " group='output'");
-	TwAddVarRO(menu, "Print build stats", TW_TYPE_BOOL8, &ui_nm_config.m_printBuildStats, " group='output'");
-	TwAddVarRO(menu, "Save navmesh", TW_TYPE_BOOL8, &ui_nm_save, " group='output'");
+	TwAddVarRW(menu, "NavMesh ID", TW_TYPE_STDSTRING, &ui_nm_id, " group='output'");
+	TwAddVarRW(menu, "Print build stats", TW_TYPE_BOOL8, &ui_nm_config.m_printBuildStats, " group='output'");
+	TwAddVarRW(menu, "Print immediately", TW_TYPE_BOOL8, &ui_nm_config.m_printImmediately, " group='output'");
+	TwAddSeparator(menu, "menuseparator0", "group='output'");
+	TwAddVarRO(menu, "error code", TW_TYPE_BOOL8, &ui_nm_errorcode, " group='output' true='ERROR' false=''");
+	TwAddSeparator(menu, "menuseparator1", "group='output'");
+	TwAddButton(menu, "Build", BuildNavMesh, NULL, " label='Build' ");
+	TwAddButton(menu, "Save", SaveNavMesh, NULL, " label='Save' ");
+	TwAddSeparator(menu, "menuseparator2", "group='output'");
+	TwAddButton(menu, "Load", LoadNavMesh, NULL, " label='Load' ");
+	TwAddSeparator(menu, "menuseparator3", "group='output'");
 	TwSetParam(menu, "output", "opened", TW_PARAM_INT32, 1, &opened);
-
-	TwAddButton(menu, "build", NULL, NULL, " label='Build' ");
 }
 
 //  +-----------------------------------------------------------------------------+

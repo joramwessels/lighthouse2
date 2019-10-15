@@ -83,11 +83,12 @@ struct NavMeshConfig
 	float m_detailSampleDist, m_detailSampleMaxError;
 
 	SamplePartitionType m_partitionType; // The partitioning method
-	bool m_keepInterResults;			 // Whether to keep intermediate results
-	bool m_filterLowHangingObstacles;	 // Whether to filter for low obstacles
-	bool m_filterLedgeSpans;			 // Whether to filter for ledges
-	bool m_filterWalkableLowHeightSpans; // Whether to filter for low ceilings
-	bool m_printBuildStats;				 // Whether to print detailed build statistics
+	bool m_keepInterResults;			 // Holding on to the intermediate data structures
+	bool m_filterLowHangingObstacles;	 // Filtering for low obstacles
+	bool m_filterLedgeSpans;			 // Filtering for ledges
+	bool m_filterWalkableLowHeightSpans; // Filtering for low ceilings
+	bool m_printBuildStats;				 // Printing detailed build time statistics
+	bool m_printImmediately;			 // Printing log entries immediately or at dumpLog
 	const char* m_id;					 // Name of the navmesh instance
 
 	NavMeshConfig();
@@ -196,7 +197,7 @@ public:
 	void Deserialize() { Deserialize(m_dir, m_config.m_id); };
 	void SaveAsMesh() { SaveAsMesh(m_dir, m_config.m_id); };
 	void Cleanup();
-	void DumpLog() const { ((BuildContext*)m_ctx)->dumpLog(""); };
+	void DumpLog() const { ((BuildContext*)m_ctx)->dumpLog("\n"); };
 
 	void SetConfig(NavMeshConfig config) { m_config = config; };
 	void SetID(const char* id) { m_config.m_id = id; };
@@ -205,7 +206,7 @@ public:
 	NavMeshConfig* GetConfig() { return &m_config; };
 	dtNavMesh* GetMesh() const { return m_navMesh; };
 	dtNavMeshQuery* GetQuery() const { return m_navQuery; };
-	int Error() const { return m_errorCode; };
+	int GetError() { int e = m_errorCode; m_errorCode = NMSUCCESS; return e; };
 
 protected:
 
@@ -240,7 +241,7 @@ protected:
 	void SaveAsMesh(const char* dir, const char* ID);
 	void Serialize(const char* dir, const char* ID);
 	void Deserialize(const char* dir, const char* ID);
-	void Error(rcLogCategory level, int code, ...);
+	void Error(rcLogCategory level, int code, const char* format, ...);
 };
 
 // Area Types // TODO make accessible to app
@@ -259,8 +260,8 @@ enum SamplePolyFlags
 	SAMPLE_POLYFLAGS_SWIM = 0x02,		// Ability to swim (water).
 	SAMPLE_POLYFLAGS_DOOR = 0x04,		// Ability to move through doors.
 	SAMPLE_POLYFLAGS_JUMP = 0x08,		// Ability to jump.
-	SAMPLE_POLYFLAGS_DISABLED = 0x10,		// Disabled polygon
-	SAMPLE_POLYFLAGS_ALL = 0xffff	// All abilities.
+	SAMPLE_POLYFLAGS_DISABLED = 0x10,	// Disabled polygon
+	SAMPLE_POLYFLAGS_ALL = 0xffff		// All abilities.
 };
 
 static const int NAVMESHSET_MAGIC = 'M' << 24 | 'S' << 16 | 'E' << 8 | 'T'; //'MSET';

@@ -75,7 +75,7 @@ void AI_DEMO_GUI::AddNode(float x, float y, float z)
 	if (nodeInstances.size() > nodeCount)
 	{
 		// Reusing allocated instances
-		int instanceID = edgeInstances[nodeCount];
+		int instanceID = nodeInstances[nodeCount];
 		renderer->SetNodeTransform(instanceID, translate);
 	}
 	else

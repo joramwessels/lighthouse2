@@ -21,10 +21,10 @@
 class AI_DEMO_GUI
 {
 public:
-	AI_DEMO_GUI(RenderAPI* renderer, int debug) : renderer(renderer)
+	AI_DEMO_GUI(RenderAPI* renderer, const char* dir) : renderer(renderer)
 	{
 		// Add meshes
-		nodeMeshID = renderer->AddMesh("node.obj", "data\\ai\\", .01f);
+		nodeMeshID = renderer->AddMesh("node.obj", dir, .01f);
 
 	};
 	~AI_DEMO_GUI() {};
