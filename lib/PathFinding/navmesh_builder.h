@@ -1,4 +1,4 @@
-/* pathfinding.h - Copyright 2019 Utrecht University
+/* navmesh_builder.h - Copyright 2019 Utrecht University
    
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -112,11 +112,14 @@ struct NavMeshConfig
 	void Load(const char* filename);
 };
 
-typedef float TimeVal;
+//  +-----------------------------------------------------------------------------+
+//  |  BuildContext                                                               |
+//  |  An implementation of the virtual native Recast logging class.        LH2'19|
+//  +-----------------------------------------------------------------------------+
 class BuildContext : public rcContext
 {
-	TimeVal m_startTime[RC_MAX_TIMERS];
-	TimeVal m_accTime[RC_MAX_TIMERS];
+	float m_startTime[RC_MAX_TIMERS];
+	float m_accTime[RC_MAX_TIMERS];
 
 	static const int MAX_MESSAGES = 1000;
 	const char* m_messages[MAX_MESSAGES];
@@ -153,7 +156,7 @@ protected:
 };
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMesh                                                                    |
+//  |  NavMeshBuilder                                                             |
 //  |  NavMesh class definition.                                            LH2'19|
 //  +-----------------------------------------------------------------------------+
 class NavMeshBuilder
@@ -195,7 +198,6 @@ public:
 	void Build(HostScene* scene);
 	void Serialize() { Serialize(m_dir, m_config.m_id); };
 	void Deserialize() { Deserialize(m_dir, m_config.m_id); };
-	void SaveAsMesh() { SaveAsMesh(m_dir, m_config.m_id); };
 	void Cleanup();
 	void DumpLog() const { ((BuildContext*)m_ctx)->dumpLog("\n"); };
 
@@ -214,7 +216,6 @@ protected:
 	const char* m_dir;
 	rcContext* m_ctx;				// Recast context for logging
 	NavMeshConfig m_config;			// NavMesh generation configurations
-	const char* m_matFile = "navmesh";
 
 	// Generated in Build()
 	unsigned char* m_triareas;
@@ -236,9 +237,6 @@ protected:
 	void CreateDetailMesh();
 	void CreateDetourData();
 
-	void WriteMaterialFile(const char* dir);
-	void WriteTileToMesh(const dtMeshTile* tile, FILE* file);
-	void SaveAsMesh(const char* dir, const char* ID);
 	void Serialize(const char* dir, const char* ID);
 	void Deserialize(const char* dir, const char* ID);
 	void Error(rcLogCategory level, int code, const char* format, ...);

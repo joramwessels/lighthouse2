@@ -16,7 +16,7 @@
 #include "platform.h"
 #include "system.h"
 #include "rendersystem.h"
-#include "pathfinding.h"
+#include "navmesh_builder.h"
 
 static RenderAPI* renderer = 0;
 static GLTexture* renderTarget = 0;

@@ -14,8 +14,8 @@
 */
 
 #include "anttweakbar.h"
-#include "PathFinding.h"
-#include "gui.h"
+#include "navmesh_builder.h"
+#include "navmesh_assets.h"
 
 namespace AI_UI {
 
@@ -38,8 +38,8 @@ int navmeshInstID = -1;
 static NavMeshConfig ui_nm_config;
 static std::string ui_nm_id;
 static bool ui_nm_errorcode = false;
-static AI_DEMO_GUI* ai_debugger_gui = 0;
 static std::string ui_nm_meshFile = "";
+static NavMeshAssets* navMeshAssets = 0;
 
 //  +-----------------------------------------------------------------------------+
 //  |  InitAntTweakBar                                                            |
@@ -53,22 +53,14 @@ void InitAntTweakBar()
 	menu = TwNewBar( "NavMesh" );
 	RefreshUI();
 
-	ai_debugger_gui = new AI_DEMO_GUI(renderer, navmesh->GetDir()); // TODO move somewhere else
+	navMeshAssets = new NavMeshAssets(renderer, navmesh->GetDir()); // TODO move somewhere else
 }
 
 // Button Callbacks
-void RemoveMesh(int meshID, int instanceID)
-{
-	// NOTE: Ideally instances and meshes can be deleted from the core
-	//		 to prevent a significant memory leaks, but by lack of a
-	//		 delete function, meshes are moved to a remote location
-	renderer->SetNodeTransform(instanceID, ai_debugger_gui->cleanupTranform);
-}
 void TW_CALL BuildNavMesh(void *data)
 {
-	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
-
 	// Set configurations
+	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
 	NavMeshConfig* config = navmesh->GetConfig();
 	*config = ui_nm_config;
 	config->m_id = ui_nm_id.c_str();
@@ -76,28 +68,18 @@ void TW_CALL BuildNavMesh(void *data)
 	// Build new mesh
 	navmesh->Cleanup();
 	navmesh->Build(renderer->GetScene());
-	navmesh->SaveAsMesh();
 	navmesh->DumpLog();
 	ui_nm_errorcode = (bool)navmesh->GetError();
 	if (ui_nm_errorcode) return;
-	
-	// Replace mesh in renderer
-	RemoveMesh(navmeshMeshID, navmeshInstID);
-	// TODO: Remove old mesh file
-	ai_debugger_gui->Clean();
-	ui_nm_meshFile = "." + std::string(config->m_id) + ".obj";
-	navmeshMeshID = renderer->AddMesh(ui_nm_meshFile.c_str(), navmesh->GetDir(), 1.0f);
-	navmeshInstID = renderer->AddInstance(navmeshMeshID, mat4::Identity());
-	ai_debugger_gui->AddNodesToScene(navmesh);
+	navMeshAssets->ReplaceMesh(navmesh);
 
 	ui_nm_config = *config;
 	ui_nm_id = config->m_id;
 }
 void TW_CALL SaveNavMesh(void *data)
 {
-	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
-
 	// Set configurations
+	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
 	NavMeshConfig* config = navmesh->GetConfig();
 	*config = ui_nm_config;
 	config->m_id = ui_nm_id.c_str();
@@ -108,28 +90,18 @@ void TW_CALL SaveNavMesh(void *data)
 }
 void TW_CALL LoadNavMesh(void *data)
 {
-	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
-
 	// Set configurations
+	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
 	NavMeshConfig* config = navmesh->GetConfig();
 	*config = ui_nm_config;
 	config->m_id = ui_nm_id.c_str();
 
-	// Build new mesh
+	// Load mesh
 	navmesh->Deserialize();
-	navmesh->SaveAsMesh();
 	navmesh->DumpLog();
 	ui_nm_errorcode = (bool)navmesh->GetError();
 	if (ui_nm_errorcode) return;
-
-	// Replace mesh in renderer
-	RemoveMesh(navmeshMeshID, navmeshInstID);
-	// TODO: Remove old mesh file
-	ai_debugger_gui->Clean();
-	ui_nm_meshFile = "." + std::string(config->m_id) + ".obj";
-	navmeshMeshID = renderer->AddMesh(ui_nm_meshFile.c_str(), navmesh->GetDir(), 1.0f);
-	navmeshInstID = renderer->AddInstance(navmeshMeshID, mat4::Identity());
-	ai_debugger_gui->AddNodesToScene(navmesh);
+	navMeshAssets->ReplaceMesh(navmesh);
 
 	ui_nm_config = *config;
 	ui_nm_id = config->m_id;
@@ -269,70 +241,6 @@ void RefreshUI()
 	RefreshMenu();
 }
 
-GLTexture* digit[10], *hud;
-Shader* plainShader = 0, *shadowShader = 0;
-float smoothed = 1.0f, smoothFactor = 0.1f;
-
-void InitFPSPrinter()
-{
-	// load digits
-	for (int i = 0; i < 10; i++)
-	{
-		char t[128] = "data//system//digit0.png";
-		t[strlen( t ) - 5] += i;
-		digit[i] = new GLTexture( t, GL_LINEAR );
-	}
-	// load HUD
-	hud = new GLTexture( "data//system//hud.png", GL_LINEAR );
-	// load shaders
-	plainShader = new Shader( "shaders/plain.vert", "shaders/plain.frag" );
-	shadowShader = new Shader( "shaders/plain.vert", "shaders/plain_shadow.frag" );
-}
-
-void DrawDigit( int d, float x, float y, float scale = 1.0f )
-{
-	plainShader->SetInputTexture( 0, "color", digit[d] );
-	mat4 T = mat4::Scale( make_float3( 0.06f * scale, 0.1f * scale, 1 ) );
-	T.cell[12] = x, T.cell[13] = y;
-	plainShader->SetInputMatrix( "view", T );
-	DrawQuad();
-}
-
-void DrawHUD( float x, float y )
-{
-	plainShader->SetInputTexture( 0, "color", hud );
-	float scale = 4.5f;
-	mat4 T = mat4::Scale( scale * make_float3( 0.06f, 0.1f, 1 ) );
-	T.cell[12] = x, T.cell[13] = y;
-	plainShader->SetInputMatrix( "view", T );
-	DrawQuad();
-}
-
-void PrintFPS( float deltaTime )
-{
-	float fps = (int)(1.0f / deltaTime);
-	smoothed = (1 - smoothFactor) * smoothed + smoothFactor * fps;
-	if (smoothFactor > 0.05f) smoothFactor -= 0.05f;
-	int ifps = smoothed * 10, d1 = (ifps / 1000) % 10, d2 = (ifps / 100) % 10, d3 = (ifps / 10) % 10, d4 = ifps % 10;
-	glEnable( GL_BLEND );
-	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-	shadowShader->Bind();
-	float xpos = -0.91f, ypos = -0.81f;
-	DrawDigit( d1, xpos, ypos ); xpos += 0.12f;
-	DrawDigit( d2, xpos, ypos ); xpos += 0.12f;
-	DrawDigit( d3, xpos, ypos ); xpos += 0.14f;
-	DrawDigit( d4, xpos, ypos - 0.03f, 0.7f );
-	shadowShader->Unbind();
-	plainShader->Bind();
-	xpos = -0.92f, ypos = -0.8f;
-	DrawDigit( d1, xpos, ypos ); xpos += 0.12f;
-	DrawDigit( d2, xpos, ypos ); xpos += 0.12f;
-	DrawDigit( d3, xpos, ypos ); xpos += 0.14f;
-	DrawDigit( d4, xpos, ypos - 0.03f, 0.7f );
-	plainShader->Unbind();
-	glDisable( GL_BLEND );
-}
-
 //  +-----------------------------------------------------------------------------+
 //  |  HandleInput                                                                |
 //  |  Process user input.                                                  LH2'19|
@@ -378,6 +286,74 @@ bool HandleInput(float frameTime)
 
 	// let the main loop know if the camera should update
 	return changed;
+}
+
+
+
+
+
+GLTexture* digit[10], *hud;
+Shader* plainShader = 0, *shadowShader = 0;
+float smoothed = 1.0f, smoothFactor = 0.1f;
+
+void InitFPSPrinter()
+{
+	// load digits
+	for (int i = 0; i < 10; i++)
+	{
+		char t[128] = "data//system//digit0.png";
+		t[strlen(t) - 5] += i;
+		digit[i] = new GLTexture(t, GL_LINEAR);
+	}
+	// load HUD
+	hud = new GLTexture("data//system//hud.png", GL_LINEAR);
+	// load shaders
+	plainShader = new Shader("shaders/plain.vert", "shaders/plain.frag");
+	shadowShader = new Shader("shaders/plain.vert", "shaders/plain_shadow.frag");
+}
+
+void DrawDigit(int d, float x, float y, float scale = 1.0f)
+{
+	plainShader->SetInputTexture(0, "color", digit[d]);
+	mat4 T = mat4::Scale(make_float3(0.06f * scale, 0.1f * scale, 1));
+	T.cell[12] = x, T.cell[13] = y;
+	plainShader->SetInputMatrix("view", T);
+	DrawQuad();
+}
+
+void DrawHUD(float x, float y)
+{
+	plainShader->SetInputTexture(0, "color", hud);
+	float scale = 4.5f;
+	mat4 T = mat4::Scale(scale * make_float3(0.06f, 0.1f, 1));
+	T.cell[12] = x, T.cell[13] = y;
+	plainShader->SetInputMatrix("view", T);
+	DrawQuad();
+}
+
+void PrintFPS(float deltaTime)
+{
+	float fps = (int)(1.0f / deltaTime);
+	smoothed = (1 - smoothFactor) * smoothed + smoothFactor * fps;
+	if (smoothFactor > 0.05f) smoothFactor -= 0.05f;
+	int ifps = smoothed * 10, d1 = (ifps / 1000) % 10, d2 = (ifps / 100) % 10, d3 = (ifps / 10) % 10, d4 = ifps % 10;
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	shadowShader->Bind();
+	float xpos = -0.91f, ypos = -0.81f;
+	DrawDigit(d1, xpos, ypos); xpos += 0.12f;
+	DrawDigit(d2, xpos, ypos); xpos += 0.12f;
+	DrawDigit(d3, xpos, ypos); xpos += 0.14f;
+	DrawDigit(d4, xpos, ypos - 0.03f, 0.7f);
+	shadowShader->Unbind();
+	plainShader->Bind();
+	xpos = -0.92f, ypos = -0.8f;
+	DrawDigit(d1, xpos, ypos); xpos += 0.12f;
+	DrawDigit(d2, xpos, ypos); xpos += 0.12f;
+	DrawDigit(d3, xpos, ypos); xpos += 0.14f;
+	DrawDigit(d4, xpos, ypos - 0.03f, 0.7f);
+	plainShader->Unbind();
+	glDisable(GL_BLEND);
 }
 
 } // namespace AI_UI

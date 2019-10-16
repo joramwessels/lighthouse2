@@ -1,4 +1,4 @@
-/* pathfinding.cpp - Copyright 2019 Utrecht University
+/* navmesh_builder.cpp - Copyright 2019 Utrecht University
    
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
    limitations under the License.
 */
 
-#include "pathfinding.h"
+#include "navmesh_builder.h"
 
 #define RECAST_ERROR(X, Y, ...) return Error(RC_LOG_ERROR, X, (std::string("AI ERROR: ") + Y).c_str(), __VA_ARGS__)
 #define RECAST_LOG(...) Error(RC_LOG_PROGRESS, NMSUCCESS, __VA_ARGS__)
@@ -247,7 +247,7 @@ void NavMeshConfig::Load(const char* filename)
 
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMesh::Build                                                             |
+//  |  NavMeshBuilder::Build                                                      |
 //  |  Builds a navmesh for the given scene.                                LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::Build(HostScene* scene)
@@ -333,7 +333,7 @@ void NavMeshBuilder::Build(HostScene* scene)
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMesh::RasterizePolygonSoup                                              |
+//  |  NavMeshBuilder::RasterizePolygonSoup                                       |
 //  |  Takes a triangle soup and rasterizes all walkable triangles based          |
 //  |  on their slope. Results in a height map (aka voxel mold).            LH2'19|
 //  +-----------------------------------------------------------------------------+
@@ -368,7 +368,7 @@ void NavMeshBuilder::RasterizePolygonSoup(const int vert_count, const float* ver
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMesh::FilterWalkableSurfaces                                            |
+//  |  NavMeshBuilder::FilterWalkableSurfaces                                     |
 //  |  Filters the correctly angled surfaces for height restrictions.       LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::FilterWalkableSurfaces()
@@ -387,7 +387,7 @@ void NavMeshBuilder::FilterWalkableSurfaces()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMesh::PartitionWalkableSurface                                          |
+//  |  NavMeshBuilder::PartitionWalkableSurface                                   |
 //  |  Transforms the heightfield into a compact height field, connects           |
 //  |  neightboring walkable surfaces, erodes all surfaces by the agent           |
 //  |  radius and partitions them into regions.                             LH2'19|
@@ -442,7 +442,7 @@ void NavMeshBuilder::PartitionWalkableSurface()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMesh::ExtractContours                                                   |
+//  |  NavMeshBuilder::ExtractContours                                            |
 //  |  Extracts contours from the compact height field.                     LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::ExtractContours()
@@ -457,7 +457,7 @@ void NavMeshBuilder::ExtractContours()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMesh::BuildPolygonMesh                                                  |
+//  |  NavMeshBuilder::BuildPolygonMesh                                           |
 //  |  Transforms the contours into a polygon mesh.                         LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::BuildPolygonMesh()
@@ -472,7 +472,7 @@ void NavMeshBuilder::BuildPolygonMesh()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMesh::CreateDetailMesh                                                  |
+//  |  NavMeshBuilder::CreateDetailMesh                                           |
 //  |  Creates the detailed polygon mesh.                                   LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::CreateDetailMesh()
@@ -487,7 +487,7 @@ void NavMeshBuilder::CreateDetailMesh()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMesh::CreateDetourData                                                  |
+//  |  NavMeshBuilder::CreateDetourData                                           |
 //  |  Creates Detour navmesh from the two poly meshes.                     LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::CreateDetourData()
@@ -581,7 +581,7 @@ void NavMeshBuilder::CreateDetourData()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMesh::Save                                                              |
+//  |  NavMeshBuilder::Save                                                       |
 //  |  Writes the navmesh to storage for future use.                        LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::Serialize(const char* dir, const char* ID)
@@ -590,12 +590,12 @@ void NavMeshBuilder::Serialize(const char* dir, const char* ID)
 
 	// Saving config file
 	char configfile[128];
-	sprintf_s(configfile, "%s\\%s.config", dir, ID);
+	sprintf_s(configfile, "%s%s.config", dir, ID);
 	m_config.Save(configfile);
 
 	// Opening navmesh file for writing
 	char filename[128];
-	sprintf_s(filename, "%s\\%s.navmesh", dir, ID);
+	sprintf_s(filename, "%s%s.navmesh", dir, ID);
 	const dtNavMesh* navMesh = m_navMesh;
 	if (!navMesh) RECAST_ERROR(NMDETOUR & NMINPUT, "Can't serialize '%s', dtNavMesh is nullpointer", ID);
 	FILE* fp;
@@ -635,7 +635,7 @@ void NavMeshBuilder::Serialize(const char* dir, const char* ID)
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMesh::Load                                                              |
+//  |  NavMeshBuilder::Load                                                       |
 //  |  Reads a previously stored navmesh from storage.                      LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::Deserialize(const char* dir, const char* ID)
@@ -645,13 +645,13 @@ void NavMeshBuilder::Deserialize(const char* dir, const char* ID)
 
 	// Loading config file
 	char configfile[128];
-	sprintf_s(configfile, "%s\\%s.config", dir, ID);
+	sprintf_s(configfile, "%s%s.config", dir, ID);
 	m_config.Load(configfile);
 	m_config.m_id = ID; // strings aren't loaded correctly
 	
 	// Opening file
 	char filename[128];
-	sprintf_s(filename, "%s\\%s.navmesh", dir, ID);
+	sprintf_s(filename, "%s%s.navmesh", dir, ID);
 	if (!FileExists(filename))
 		RECAST_ERROR(NMIO, "NavMesh file '%s' does not exist", filename);
 	FILE* fp;
@@ -737,7 +737,7 @@ void NavMeshBuilder::Deserialize(const char* dir, const char* ID)
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMesh::Cleanup                                                           |
+//  |  NavMeshBuilder::Cleanup                                                    |
 //  |  Ensures all navmesh memory allocations are deleted.                  LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::Cleanup()
@@ -761,181 +761,7 @@ void NavMeshBuilder::Cleanup()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshBuilder::WriteMaterialFile                                          |
-//  |  Writes a default .mtl file for the mesh.                             LH2'19|
-//  +-----------------------------------------------------------------------------+
-void NavMeshBuilder::WriteMaterialFile(const char* dir)
-{
-	// Opening file
-	char filename[128];
-	sprintf_s(filename, "%s\\%s.mtl", dir, m_matFile);
-	FILE* f;
-	fopen_s(&f, filename, "w");
-	if (!f) RECAST_ERROR(NMIO, "File '%s' could not be opened", filename);
-
-	// Writing contents
-	fprintf(f, "newmtl %s\n", "navmesh");
-	fprintf(f, "Ka    %.2f %.2f %.2f\n", 0.0f, 1.0f, 1.0f);
-	fprintf(f, "Kd    %.2f %.2f %.2f\n", 0.0f, 1.0f, 1.0f);
-	fprintf(f, "Ks    %.2f %.2f %.2f\n", 0.0f, 0.0f, 0.0f);
-	fprintf(f, "d     %.2f\n", 0.2f);
-	fprintf(f, "Tr    %.2f\n", 0.8f);
-	fprintf(f, "illum 1");
-
-	fprintf(f, "\n\n");
-	fprintf(f, "newmtl %s\n", "node");
-	fprintf(f, "Ka    %.2f %.2f %.2f\n", 1.0f, 0.0f, 1.0f);
-	fprintf(f, "Kd    %.2f %.2f %.2f\n", 1.0f, 0.0f, 1.0f);
-	fprintf(f, "Ks    %.2f %.2f %.2f\n", 0.0f, 0.0f, 0.0f);
-	fprintf(f, "d     %.2f\n", 0.2f);
-	fprintf(f, "Tr    %.2f\n", 0.8f);
-	fprintf(f, "illum 1");
-
-	fprintf(f, "\n\n");
-	fprintf(f, "newmtl %s\n", "agent");
-	fprintf(f, "Ka    %.2f %.2f %.2f\n", 1.0f, 1.0f, 0.0f);
-	fprintf(f, "Kd    %.2f %.2f %.2f\n", 1.0f, 1.0f, 0.0f);
-	fprintf(f, "Ks    %.2f %.2f %.2f\n", 0.0f, 0.0f, 0.0f);
-	fprintf(f, "d     %.2f\n", 0.6f);
-	fprintf(f, "Tr    %.2f\n", 0.4f);
-	fprintf(f, "illum 1");
-
-	fclose(f);
-	RECAST_LOG("Navmesh material file saved as '%s'", filename);
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  NavMeshBuilder::WriteTileToMesh                                            |
-//  |  Writes the given navmesh tile to the given open file.                LH2'19|
-//  +-----------------------------------------------------------------------------+
-void NavMeshBuilder::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
-{
-	// Writing vertices
-	int vertCount = 0;
-	for (int i = 0; i < tile->header->vertCount; ++i)
-	{
-		const float* v = &tile->verts[i * 3];
-		fprintf(f, "v %.5f %.5f %.5f\n", v[0], v[1], v[2]);
-		vertCount++;
-	}
-	for (int i = 0; i < tile->header->detailVertCount; ++i)
-	{
-		const float* v = &tile->detailVerts[i * 3];
-		fprintf(f, "v %.5f %.5f %.5f\n", v[0], v[1], v[2]);
-		vertCount++;
-	}
-	fprintf(f, "# %i vertices\n\n", vertCount);
-
-	// Writing normals
-	int normCount = 0;
-	for (int i = 0; i < tile->header->polyCount; ++i)
-	{
-		const dtPoly poly = tile->polys[i];
-		if (poly.getType() == DT_POLYTYPE_OFFMESH_CONNECTION)
-			continue;
-		const dtPolyDetail pd = tile->detailMeshes[i];
-
-		// For each triangle in the polygon
-		for (int j = 0; j < pd.triCount; ++j)
-		{
-			const unsigned char* tri = &tile->detailTris[(pd.triBase + j) * 4];
-
-			// Find the three vertex pointers
-			const float* v[3];
-			for (int k = 0; k < 3; ++k)
-			{
-				if (tri[k] < poly.vertCount)
-					v[k] = &tile->verts[poly.verts[tri[k]] * 3];
-				else
-					v[k] = &tile->detailVerts[(pd.vertBase + tri[k] - poly.vertCount) * 3];
-			}
-
-			// Calculate the normal
-			float3 v0 = make_float3(v[0][0], v[0][1], v[0][2]);
-			float3 v1 = make_float3(v[1][0], v[1][1], v[1][2]);
-			float3 v2 = make_float3(v[2][0], v[2][1], v[2][2]);
-			float3 n = cross(v1 - v0, v2 - v0);
-			normalize(n);
-			if (n.y < 0) n = -n; // ensures all normals point up
-
-			// Write the normal to the file
-			fprintf(f, "vn %.5f %.5f %.5f\n", n.x, n.y, n.z);
-			normCount++;
-		}
-	}
-	fprintf(f, "# %i normals\n\n", normCount);
-
-	// Writing faces
-	int faceCount = 0;
-	fprintf(f, "usemtl navmesh\n");
-	for (int i = 0; i < tile->header->polyCount; ++i)
-	{
-		const dtPoly poly = tile->polys[i];
-		if (poly.getType() == DT_POLYTYPE_OFFMESH_CONNECTION)
-			continue;
-		const dtPolyDetail pd = tile->detailMeshes[i];
-
-		// For each triangle in the polygon
-		for (int j = 0; j < pd.triCount; ++j)
-		{
-			const unsigned char* tri = &tile->detailTris[(pd.triBase + j) * 4];
-
-			// Find the three vertex indices
-			int v[3];
-			for (int k = 0; k < 3; ++k)
-			{
-				if (tri[k] < poly.vertCount) v[k] = poly.verts[tri[k]];
-				else v[k] = pd.vertBase + tri[k];
-			}
-
-			// Write the face to the file
-			fprintf(f, "f");
-			for (int k = 0; k < 3; k++)
-				fprintf(f, " %i//%i", v[k]+1, faceCount+1); // +1 because .obj indices start at 1
-			fprintf(f, "\n");
-			faceCount++;
-		}
-	}
-	fprintf(f, "# %i faces\n\n", faceCount);
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  NavMesh::SaveAsMesh                                                        |
-//  |  Saves the navmesh as an .obj file.                                   LH2'19|
-//  +-----------------------------------------------------------------------------+
-void NavMeshBuilder::SaveAsMesh(const char* dir, const char* ID)
-{
-	if (m_errorCode) return;
-
-	// Opening file
-	char filename[128];
-	sprintf_s(filename, "%s\\.%s.obj", dir, ID);
-	FILE* f;
-	fopen_s(&f, filename, "w");
-	if (!f) RECAST_ERROR(NMIO, "File '%s' could not be opened", filename);
-	const dtNavMesh* mesh = m_navMesh;
-	if (!mesh) RECAST_ERROR(NMDETOUR & NMINPUT, "Navmesh '%s' can't be saved as mesh, m_navMesh is null", ID);
-	if (!FileExists((std::string(dir) + "\\" + m_matFile + ".mtl").c_str())) WriteMaterialFile(m_dir);
-
-	// Writing header
-	fprintf(f, "#\n# Wavefront OBJ file\n");
-	fprintf(f, "# Navigation mesh\n# ID: '%s'\n", m_config.m_id);
-	fprintf(f, "# Automatically generated by 'recastnavigation.cpp'\n");
-	fprintf(f, "#\nmtllib %s.mtl\n\n", m_matFile);
-
-	// Writing one group per tile
-	for (int i = 0; i < mesh->getMaxTiles(); ++i) if (mesh->getTile(i)->header)
-	{
-		fprintf(f, "g Tile%2i\n", i);
-		WriteTileToMesh(mesh->getTile(i), f);
-	}
-
-	fclose(f);
-	RECAST_LOG("NavMesh mesh saved as '%s'", filename);
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  NavMesh::Error                                                             |
+//  |  NavMeshBuilder::Error                                                      |
 //  |  Handles errors, logging, and error code maintenance.                 LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::Error(rcLogCategory level, int code, const char* format, ...)
@@ -944,7 +770,7 @@ void NavMeshBuilder::Error(rcLogCategory level, int code, const char* format, ..
 
 	if (m_config.m_printImmediately)
 	{
-		printf("\n\t");
+		printf("\n");
 		va_list ap;
 		__crt_va_start(ap, format);
 		vprintf(format, ap);
@@ -998,8 +824,8 @@ void BuildContext::doLog(const rcLogCategory category, const char* msg, const in
 //  +-----------------------------------------------------------------------------+
 void BuildContext::doStopTimer(const rcTimerLabel label)
 {
-	const TimeVal endTime = timer.elapsed();
-	const TimeVal deltaTime = endTime - m_startTime[label];
+	const float endTime = timer.elapsed();
+	const float deltaTime = endTime - m_startTime[label];
 	if (m_accTime[label] == -1)
 		m_accTime[label] = deltaTime;
 	else

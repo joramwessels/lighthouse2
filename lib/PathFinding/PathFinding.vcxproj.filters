@@ -21,7 +21,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="PathFinding.cpp" />
     <ClCompile Include="recastnavigation\DebugUtils\Source\DebugDraw.cpp">
       <Filter>DebugUtils</Filter>
     </ClCompile>
@@ -115,9 +114,9 @@
     <ClCompile Include="..\tinyxml2\tinyxml2.cpp">
       <Filter>tinyxml2</Filter>
     </ClCompile>
+    <ClCompile Include="navmesh_builder.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="PathFinding.h" />
     <ClInclude Include="recastnavigation\DebugUtils\Include\DebugDraw.h">
       <Filter>DebugUtils</Filter>
     </ClInclude>
@@ -193,5 +192,6 @@
     <ClInclude Include="..\tinyxml2\tinyxml2.h">
       <Filter>tinyxml2</Filter>
     </ClInclude>
+    <ClInclude Include="navmesh_builder.h" />
   </ItemGroup>
 </Project>

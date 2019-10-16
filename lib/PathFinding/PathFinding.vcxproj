@@ -132,7 +132,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\tinyxml2\tinyxml2.cpp" />
-    <ClCompile Include="PathFinding.cpp" />
+    <ClCompile Include="navmesh_builder.cpp" />
     <ClCompile Include="recastnavigation\DebugUtils\Source\DebugDraw.cpp" />
     <ClCompile Include="recastnavigation\DebugUtils\Source\DetourDebugDraw.cpp" />
     <ClCompile Include="recastnavigation\DebugUtils\Source\RecastDebugDraw.cpp" />
@@ -166,7 +166,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\tinyxml2\tinyxml2.h" />
-    <ClInclude Include="PathFinding.h" />
+    <ClInclude Include="navmesh_builder.h" />
     <ClInclude Include="recastnavigation\DebugUtils\Include\DebugDraw.h" />
     <ClInclude Include="recastnavigation\DebugUtils\Include\DetourDebugDraw.h" />
     <ClInclude Include="recastnavigation\DebugUtils\Include\RecastDebugDraw.h" />
