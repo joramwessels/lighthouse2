@@ -17,6 +17,8 @@
 #include "PathFinding.h"
 #include "gui.h"
 
+namespace AI_UI {
+
 // AntTweakBar data
 float mraysincl = 0, mraysexcl = 0;
 TwBar* settings = 0, *menu = 0;
@@ -25,6 +27,11 @@ bool currentMaterialConductor, currentMaterialDielectric;
 int currentMaterialID = -1;
 static CoreStats coreStats;
 
+// Triangle probing
+int probMeshID = -1;
+float3 probedPos;
+float3 pathStart, pathEnd;
+
 // Navmesh generation
 int navmeshMeshID = -1;
 int navmeshInstID = -1;
@@ -32,6 +39,7 @@ static NavMeshConfig ui_nm_config;
 static std::string ui_nm_id;
 static bool ui_nm_errorcode = false;
 static AI_DEMO_GUI* ai_debugger_gui = 0;
+static std::string ui_nm_meshFile = "";
 
 //  +-----------------------------------------------------------------------------+
 //  |  InitAntTweakBar                                                            |
@@ -45,7 +53,7 @@ void InitAntTweakBar()
 	menu = TwNewBar( "NavMesh" );
 	RefreshUI();
 
-	ai_debugger_gui = new AI_DEMO_GUI(renderer, navmesh->GetDir());
+	ai_debugger_gui = new AI_DEMO_GUI(renderer, navmesh->GetDir()); // TODO move somewhere else
 }
 
 // Button Callbacks
@@ -73,13 +81,13 @@ void TW_CALL BuildNavMesh(void *data)
 	ui_nm_errorcode = (bool)navmesh->GetError();
 	if (ui_nm_errorcode) return;
 	
-	// Load into renderer
+	// Replace mesh in renderer
 	RemoveMesh(navmeshMeshID, navmeshInstID);
+	// TODO: Remove old mesh file
 	ai_debugger_gui->Clean();
-	std::string meshfile = std::string(config->m_id) + ".obj";
-	navmeshMeshID = renderer->AddMesh(meshfile.c_str(), navmesh->GetDir(), 1.0f);
+	ui_nm_meshFile = "." + std::string(config->m_id) + ".obj";
+	navmeshMeshID = renderer->AddMesh(ui_nm_meshFile.c_str(), navmesh->GetDir(), 1.0f);
 	navmeshInstID = renderer->AddInstance(navmeshMeshID, mat4::Identity());
-
 	ai_debugger_gui->AddNodesToScene(navmesh);
 
 	ui_nm_config = *config;
@@ -114,13 +122,13 @@ void TW_CALL LoadNavMesh(void *data)
 	ui_nm_errorcode = (bool)navmesh->GetError();
 	if (ui_nm_errorcode) return;
 
-	// Load into renderer
+	// Replace mesh in renderer
 	RemoveMesh(navmeshMeshID, navmeshInstID);
+	// TODO: Remove old mesh file
 	ai_debugger_gui->Clean();
-	std::string meshfile = std::string(config->m_id) + ".obj";
-	navmeshMeshID = renderer->AddMesh(meshfile.c_str(), navmesh->GetDir(), 1.0f);
+	ui_nm_meshFile = "." + std::string(config->m_id) + ".obj";
+	navmeshMeshID = renderer->AddMesh(ui_nm_meshFile.c_str(), navmesh->GetDir(), 1.0f);
 	navmeshInstID = renderer->AddInstance(navmeshMeshID, mat4::Identity());
-
 	ai_debugger_gui->AddNodesToScene(navmesh);
 
 	ui_nm_config = *config;
@@ -145,6 +153,8 @@ void RefreshSettings()
 	TwDefine(" settings resizable=true movable=true iconifiable=true refresh=0.05 ");
 	TwDefine(" settings position='20 20' ");
 	int opened = 1, closed = 0;
+	TwType float3Type = TwDefineStruct("float3", float3Members, 3, sizeof(float3), NULL, NULL);
+
 	// create collapsed statistics block
 	TwAddVarRO(settings, "rays", TW_TYPE_UINT32, &coreStats.totalRays, " group='statistics'");
 	TwAddVarRO(settings, "build time", TW_TYPE_FLOAT, &coreStats.bvhBuildTime, " group='statistics'");
@@ -152,51 +162,15 @@ void RefreshSettings()
 	TwAddVarRO(settings, "shade time", TW_TYPE_FLOAT, &coreStats.shadeTime, " group='statistics'");
 	TwAddVarRO(settings, "mrays inc", TW_TYPE_FLOAT, &mraysincl, " group='statistics'");
 	TwAddVarRO(settings, "mrays ex", TW_TYPE_FLOAT, &mraysexcl, " group='statistics'");
-	TwAddSeparator(settings, "separator0", "group='statistics'");
-	TwAddVarRO(settings, "probed tri", TW_TYPE_INT32, &coreStats.probedTriid, " group='statistics'");
 	TwSetParam(settings, "statistics", "opened", TW_PARAM_INT32, 1, &closed);
-	// create collapsed material block
-	TwAddVarRO(settings, "name", TW_TYPE_STDSTRING, &currentMaterial.name, "group='material'");
-	TwAddVarRO(settings, "origin", TW_TYPE_STDSTRING, &currentMaterial.origin, "group='material'");
-	TwAddVarRO(settings, "ID", TW_TYPE_INT32, &currentMaterial.ID, "group='material'");
-	TwAddVarRO(settings, "flags", TW_TYPE_UINT32, &currentMaterial.flags, "group='material'");
-	TwAddVarRW(settings, "color", TW_TYPE_COLOR3F, &currentMaterial.color, "group='material'");
-	TwAddVarRW(settings, "transmiss", TW_TYPE_COLOR3F, &currentMaterial.absorption, "group='material'");
-	TwAddVarRW(settings, "metallic", TW_TYPE_FLOAT, &currentMaterial.metallic, "group='material' min=0 max=1 step=0.01");
-	TwAddVarRW(settings, "subsurface", TW_TYPE_FLOAT, &currentMaterial.subsurface, "group='material' min=0 max=1 step=0.01");
-	TwAddVarRW(settings, "specular", TW_TYPE_FLOAT, &currentMaterial.specular, "group='material' min=0 max=1 step=0.01");
-	TwAddVarRW(settings, "roughness", TW_TYPE_FLOAT, &currentMaterial.roughness, "group='material' min=0 max=1 step=0.01");
-	TwAddVarRW(settings, "specularTint", TW_TYPE_FLOAT, &currentMaterial.specularTint, "group='material' min=0 max=1 step=0.01");
-	TwAddVarRW(settings, "anisotropic", TW_TYPE_FLOAT, &currentMaterial.anisotropic, "group='material' min=0 max=1 step=0.01");
-	TwAddVarRW(settings, "sheen", TW_TYPE_FLOAT, &currentMaterial.sheen, "group='material' min=0 max=1 step=0.01");
-	TwAddVarRW(settings, "sheenTint", TW_TYPE_FLOAT, &currentMaterial.sheenTint, "group='material' min=0 max=1 step=0.01");
-	TwAddVarRW(settings, "clearcoat", TW_TYPE_FLOAT, &currentMaterial.clearcoat, "group='material' min=0 max=1 step=0.01");
-	TwAddVarRW(settings, "ccoatGloss", TW_TYPE_FLOAT, &currentMaterial.clearcoatGloss, "group='material' min=0 max=1 step=0.01");
-	TwAddVarRW(settings, "transmission", TW_TYPE_FLOAT, &currentMaterial.transmission, "group='material' min=0 max=1 step=0.01");
-	TwAddVarRW(settings, "eta", TW_TYPE_FLOAT, &currentMaterial.eta, "group='material' min=0 max=2 step=0.01");
-	TwAddSeparator(settings, "separator2", "group='material'");
-	TwStructMember float2Members[] = {
-		{ "x", TW_TYPE_FLOAT, offsetof(float2, x), "" },
-		{ "y", TW_TYPE_FLOAT, offsetof(float2, y), "" }
-	};
-	TwType float2Type = TwDefineStruct("float2", float2Members, 2, sizeof(float2), NULL, NULL);
-	TwStructMember mapMembers[] = {
-		{ "ID", TW_TYPE_INT32, offsetof(HostMaterial::MapProps, textureID), "" },
-		{ "scale", float2Type, offsetof(HostMaterial::MapProps, uvscale), "" },
-		{ "offset", float2Type, offsetof(HostMaterial::MapProps, uvoffset), "" }
-	};
-	TwType mapType = TwDefineStruct("Texture0", mapMembers, 3, sizeof(HostMaterial::MapProps), NULL, NULL);
-	TwAddVarRW(settings, "difftex0", mapType, &currentMaterial.map[TEXTURE0], " group='material' ");
-	TwAddVarRW(settings, "difftex1", mapType, &currentMaterial.map[TEXTURE1], " group='material' ");
-	TwAddVarRW(settings, "difftex2", mapType, &currentMaterial.map[TEXTURE2], " group='material' ");
-	TwAddVarRW(settings, "nrmlmap0", mapType, &currentMaterial.map[NORMALMAP0], " group='material' ");
-	TwAddVarRW(settings, "nrmlmap1", mapType, &currentMaterial.map[NORMALMAP1], " group='material' ");
-	TwAddVarRW(settings, "nrmlmap2", mapType, &currentMaterial.map[NORMALMAP2], " group='material' ");
-	TwAddSeparator(settings, "separator3", "group='material'");
-	TwSetParam(settings, "material", "opened", TW_PARAM_INT32, 1, &closed);
-	// create collapsed camera block
 
-	TwType float3Type = TwDefineStruct("float3", float3Members, 3, sizeof(float3), NULL, NULL);
+	// create collapsed renderer block
+	TwAddVarRW(settings, "epsilon", TW_TYPE_FLOAT, &renderer->GetSettings()->geometryEpsilon, "group='renderer'");
+	TwAddVarRW(settings, "maxDirect", TW_TYPE_FLOAT, &renderer->GetSettings()->filterDirectClamp, "group='renderer' min=1 max=50 step=0.5");
+	TwAddVarRW(settings, "maxIndirect", TW_TYPE_FLOAT, &renderer->GetSettings()->filterIndirectClamp, "group='renderer' min=1 max=50 step=0.5");
+	TwSetParam(settings, "renderer", "opened", TW_PARAM_INT32, 1, &closed);
+
+	// create collapsed camera block
 	TwAddVarRO(settings, "position", float3Type, &renderer->GetCamera()->position, "group='camera'");
 	TwAddVarRO(settings, "direction", float3Type, &renderer->GetCamera()->direction, "group='camera'");
 	TwAddVarRW(settings, "FOV", TW_TYPE_FLOAT, &renderer->GetCamera()->FOV, "group='camera' min=10 max=99 step=1");
@@ -206,10 +180,15 @@ void RefreshSettings()
 	TwAddVarRW(settings, "contrast", TW_TYPE_FLOAT, &renderer->GetCamera()->contrast, "group='camera' min=-1 max=1 step=0.01");
 	TwAddVarRW(settings, "clampValue", TW_TYPE_FLOAT, &renderer->GetCamera()->clampValue, "group='camera' min=1 max=100 step=1");
 	TwSetParam(settings, "camera", "opened", TW_PARAM_INT32, 1, &closed);
-	// create the renderer block
-	TwAddVarRW(settings, "epsilon", TW_TYPE_FLOAT, &renderer->GetSettings()->geometryEpsilon, "group='renderer'");
-	TwAddVarRW(settings, "maxDirect", TW_TYPE_FLOAT, &renderer->GetSettings()->filterDirectClamp, "group='renderer' min=1 max=50 step=0.5");
-	TwAddVarRW(settings, "maxIndirect", TW_TYPE_FLOAT, &renderer->GetSettings()->filterIndirectClamp, "group='renderer' min=1 max=50 step=0.5");
+
+	// create opened probing block
+	TwAddVarRO(settings, "Mesh ID", TW_TYPE_INT32, &probMeshID, "group='probing'");
+	TwAddVarRO(settings, "Inst ID", TW_TYPE_INT32, &coreStats.probedInstid, "group='probing'");
+	TwAddVarRO(settings, "Tri ID", TW_TYPE_INT32, &coreStats.probedTriid, "group='probing'");
+	TwAddVarRO(settings, "Pos", float3Type, &probedPos, "group='probing'");
+	TwAddVarRO(settings, "Start", float3Type, &pathStart, "group='probing'");
+	TwAddVarRO(settings, "End", float3Type, &pathEnd, "group='probing'");
+	TwSetParam(settings, "probing", "opened", TW_PARAM_INT32, 1, &closed);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -223,9 +202,15 @@ void RefreshMenu()
 	TwDefine(" NavMesh resizable=true movable=true iconifiable=true refresh=0.05 ");
 	TwDefine(" NavMesh position='1300 20' ");
 	int opened = 1, closed = 0;
+	TwEnumVal partitionEV[] = {
+		{ NavMeshConfig::SAMPLE_PARTITION_WATERSHED, "Watershed" },
+		{ NavMeshConfig::SAMPLE_PARTITION_MONOTONE, "Monotone" },
+		{ NavMeshConfig::SAMPLE_PARTITION_LAYERS, "Layers" }
+	};
+	TwType PartitionType = TwDefineEnum("PartitionType", partitionEV, 3);
+	TwType float3Type = TwDefineStruct("AABB", float3Members, 3, sizeof(float3), NULL, NULL);
 
 	// create voxelgrid block
-	TwType float3Type = TwDefineStruct("AABB", float3Members, 3, sizeof(float3), NULL, NULL);
 	TwAddVarRW(menu, "AABB min", float3Type, &ui_nm_config.m_bmin, " group='voxelgrid'");
 	TwAddVarRW(menu, "AABB max", float3Type, &ui_nm_config.m_bmax, " group='voxelgrid'");
 	TwAddVarRW(menu, "cell size", TW_TYPE_FLOAT, &ui_nm_config.m_cs, " group='voxelgrid' min=0");
@@ -246,12 +231,6 @@ void RefreshMenu()
 	TwSetParam(menu, "filtering", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create partitioning block
-	TwEnumVal partitionEV[] = {
-		{ NavMeshConfig::SAMPLE_PARTITION_WATERSHED, "Watershed" },
-		{ NavMeshConfig::SAMPLE_PARTITION_MONOTONE, "Monotone" },
-		{ NavMeshConfig::SAMPLE_PARTITION_LAYERS, "Layers" }
-	};
-	TwType PartitionType = TwDefineEnum("PartitionType", partitionEV, 3);
 	TwAddVarRW(menu, "partition type", PartitionType, &ui_nm_config.m_partitionType, " group='partitioning'");
 	TwAddVarRW(menu, "min region area", TW_TYPE_INT32, &ui_nm_config.m_minRegionArea, " group='partitioning' min=0");
 	TwAddVarRW(menu, "min merged region", TW_TYPE_INT32, &ui_nm_config.m_mergeRegionArea, " group='partitioning' min=0");
@@ -353,5 +332,54 @@ void PrintFPS( float deltaTime )
 	plainShader->Unbind();
 	glDisable( GL_BLEND );
 }
+
+//  +-----------------------------------------------------------------------------+
+//  |  HandleInput                                                                |
+//  |  Process user input.                                                  LH2'19|
+//  +-----------------------------------------------------------------------------+
+bool HandleInput(float frameTime)
+{
+	if (!hasFocus) return false;
+
+	// handle keyboard input
+	float translateSpeed = (GetAsyncKeyState(VK_SHIFT) ? 15.0f : 5.0f) * frameTime, rotateSpeed = 2.5f * frameTime;
+	bool changed = false;
+	Camera* camera = renderer->GetCamera();
+	if (GetAsyncKeyState('A')) { changed = true; camera->TranslateRelative(make_float3(-translateSpeed, 0, 0)); }
+	if (GetAsyncKeyState('D')) { changed = true; camera->TranslateRelative(make_float3(translateSpeed, 0, 0)); }
+	if (GetAsyncKeyState('W')) { changed = true; camera->TranslateRelative(make_float3(0, 0, translateSpeed)); }
+	if (GetAsyncKeyState('S')) { changed = true; camera->TranslateRelative(make_float3(0, 0, -translateSpeed)); }
+	if (GetAsyncKeyState('R')) { changed = true; camera->TranslateRelative(make_float3(0, translateSpeed, 0)); }
+	if (GetAsyncKeyState('F')) { changed = true; camera->TranslateRelative(make_float3(0, -translateSpeed, 0)); }
+	if (GetAsyncKeyState('B')) changed = true; // force restart
+	if (GetAsyncKeyState(VK_UP)) { changed = true; camera->TranslateTarget(make_float3(0, -rotateSpeed, 0)); }
+	if (GetAsyncKeyState(VK_DOWN)) { changed = true; camera->TranslateTarget(make_float3(0, rotateSpeed, 0)); }
+	if (GetAsyncKeyState(VK_LEFT)) { changed = true; camera->TranslateTarget(make_float3(-rotateSpeed, 0, 0)); }
+	if (GetAsyncKeyState(VK_RIGHT)) { changed = true; camera->TranslateTarget(make_float3(rotateSpeed, 0, 0)); }
+
+	// process button click
+	if ((leftClicked || rightClicked) && GetAsyncKeyState(VK_LSHIFT))
+	{
+		if (coreStats.probedDist <= 0.0f)
+		{
+			printf("\tPROBED DIST == 0.0f"); // DEBUG
+			return changed;
+		}
+
+		probMeshID = renderer->GetScene()->instances[coreStats.probedInstid];
+		probedPos = camera->position + camera->direction * coreStats.probedDist;
+		if (leftClicked) pathStart = probedPos;
+		if (rightClicked) pathEnd = probedPos;
+
+		camera->focalDistance = coreStats.probedDist;
+		changed = true;
+		leftClicked = rightClicked = false;
+	}
+
+	// let the main loop know if the camera should update
+	return changed;
+}
+
+} // namespace AI_UI
 
 // EOF

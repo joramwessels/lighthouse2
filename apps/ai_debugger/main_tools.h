@@ -41,8 +41,22 @@ void WindowFocusCallback( GLFWwindow* window, int focused ) { hasFocus = (focuse
 void MouseButtonCallback( GLFWwindow* window, int button, int action, int mods )
 {
 	TwEventMouseButtonGLFW( button, action );
-	if (button == 0 && action == 1 && !leftButtonDown) leftClicked = leftButtonDown = true;
-	else if (button == 0 && action == 0) leftButtonDown = false;
+	if (button == GLFW_MOUSE_BUTTON_1)
+	{
+		if (action == GLFW_PRESS) // first press
+			leftClicked = true;
+		else if (action == GLFW_RELEASE)
+			leftClicked = false;
+		// else if(action == GLFW_REPEAT) // held press
+	}
+	else if (button == GLFW_MOUSE_BUTTON_2)
+	{
+		if (action == GLFW_PRESS) // first press
+			rightClicked = true;
+		else if (action == GLFW_RELEASE)
+			rightClicked = false;
+		// else if(action == GLFW_REPEAT) // held press
+	}
 }
 void MousePosCallback( GLFWwindow* window, double x, double y )
 {

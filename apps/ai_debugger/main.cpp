@@ -23,7 +23,7 @@ static GLTexture* renderTarget = 0;
 static Shader* shader = 0;
 static uint scrwidth = 0, scrheight = 0, scrspp = 1;
 static bool camMoved = false, hasFocus = true, running = true;
-static bool leftButtonDown = false, leftClicked = false;
+static bool leftClicked = false, rightClicked = false;
 static string materialFile;
 static NavMeshBuilder* navmesh = 0;
 
@@ -59,48 +59,8 @@ void PrepareScene()
 	navmesh->GetConfig()->m_printBuildStats = true;
 	navmesh->GetConfig()->m_printImmediately = true;
 
-	ui_nm_config = *navmesh->GetConfig();
-	ui_nm_id = navmesh->GetConfig()->m_id;
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  HandleInput                                                                |
-//  |  Process user input.                                                  LH2'19|
-//  +-----------------------------------------------------------------------------+
-bool HandleInput( float frameTime )
-{
-	if (!hasFocus) return false;
-	// handle keyboard input
-	float translateSpeed = (GetAsyncKeyState(VK_SHIFT) ? 15.0f : 5.0f) * frameTime, rotateSpeed = 2.5f * frameTime;
-	bool changed = false;
-	Camera* camera = renderer->GetCamera();
-	if (GetAsyncKeyState('A')) { changed = true; camera->TranslateRelative(make_float3(-translateSpeed, 0, 0)); }
-	if (GetAsyncKeyState('D')) { changed = true; camera->TranslateRelative(make_float3(translateSpeed, 0, 0)); }
-	if (GetAsyncKeyState('W')) { changed = true; camera->TranslateRelative(make_float3(0, 0, translateSpeed)); }
-	if (GetAsyncKeyState('S')) { changed = true; camera->TranslateRelative(make_float3(0, 0, -translateSpeed)); }
-	if (GetAsyncKeyState('R')) { changed = true; camera->TranslateRelative(make_float3(0, translateSpeed, 0)); }
-	if (GetAsyncKeyState('F')) { changed = true; camera->TranslateRelative(make_float3(0, -translateSpeed, 0)); }
-	if (GetAsyncKeyState('B')) changed = true; // force restart
-	if (GetAsyncKeyState(VK_UP)) { changed = true; camera->TranslateTarget(make_float3(0, -rotateSpeed, 0)); }
-	if (GetAsyncKeyState(VK_DOWN)) { changed = true; camera->TranslateTarget(make_float3(0, rotateSpeed, 0)); }
-	if (GetAsyncKeyState(VK_LEFT)) { changed = true; camera->TranslateTarget(make_float3(-rotateSpeed, 0, 0)); }
-	if (GetAsyncKeyState(VK_RIGHT)) { changed = true; camera->TranslateTarget(make_float3(rotateSpeed, 0, 0)); }
-	// process left button click
-	if (leftClicked && GetAsyncKeyState(VK_LSHIFT))
-	{
-		int selectedMaterialID = renderer->GetTriangleMaterialID(coreStats.probedInstid, coreStats.probedTriid);
-		if (selectedMaterialID != -1)
-		{
-			currentMaterial = *renderer->GetMaterial(selectedMaterialID);
-			currentMaterialID = selectedMaterialID;
-			currentMaterial.Changed(); // update checksum so we can track changes
-		}
-		camera->focalDistance = coreStats.probedDist;
-		changed = true;
-		leftClicked = false;
-	}
-	// let the main loop know if the camera should update
-	return changed;
+	AI_UI::ui_nm_config = *navmesh->GetConfig();
+	AI_UI::ui_nm_id = navmesh->GetConfig()->m_id;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -123,8 +83,8 @@ int main()
 	// initialize scene
 	PrepareScene();
 	// initialize ui
-	InitAntTweakBar();
-	InitFPSPrinter();
+	AI_UI::InitAntTweakBar();
+	AI_UI::InitFPSPrinter();
 	// set initial window size
 	ReshapeWindowCallback( 0, SCRWIDTH, SCRHEIGHT );
 	// enter main loop
@@ -150,10 +110,10 @@ int main()
 		deltaTime = timer.elapsed();
 		timer.reset();
 		renderer->Render( c );
-		coreStats = renderer->GetCoreStats();
-		mraysincl = coreStats.totalRays / (coreStats.renderTime * 1000);
-		mraysexcl = coreStats.totalRays / (coreStats.traceTime0 * 1000);
-		if (HandleInput( deltaTime )) camMoved = true;
+		AI_UI::coreStats = renderer->GetCoreStats();
+		AI_UI::mraysincl = AI_UI::coreStats.totalRays / (AI_UI::coreStats.renderTime * 1000);
+		AI_UI::mraysexcl = AI_UI::coreStats.totalRays / (AI_UI::coreStats.traceTime0 * 1000);
+		if (AI_UI::HandleInput( deltaTime )) camMoved = true;
 		// postprocess
 		shader->Bind();
 		shader->SetInputTexture( 0, "color", renderTarget );
@@ -162,7 +122,7 @@ int main()
 		shader->Unbind();
 		// draw ui
 		TwDraw();
-		PrintFPS(deltaTime);
+		AI_UI::PrintFPS(deltaTime);
 		// finalize
 		glfwSwapBuffers( window );
 		// terminate

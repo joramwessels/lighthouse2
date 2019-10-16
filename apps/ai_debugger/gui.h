@@ -18,6 +18,8 @@
 #include "rendersystem.h"
 #include "pathfinding.h"
 
+namespace AI_UI {
+
 class AI_DEMO_GUI
 {
 public:
@@ -42,5 +44,7 @@ public:
 	std::vector<int> edgeInstances; // instance IDs of navmesh edges
 	mat4 cleanupTranform = mat4::Translate(10000.0f, 10000.0f, 10000.0f);
 };
+
+} // namespace AI_UI
 
 // EOF

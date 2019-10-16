@@ -16,6 +16,8 @@
 #include "gui.h"
 #include "DetourNode.h"
 
+namespace AI_UI {
+
 //  +-----------------------------------------------------------------------------+
 //  |  GUI::AddNodesToScene                                                       |
 //  |  Adds a all navmesh nodes as spheres to the scene.                    LH2'19|
@@ -117,5 +119,7 @@ void AI_DEMO_GUI::Clean()
 		renderer->SetNodeTransform(*it, cleanupTranform);
 	edgeCount = nodeCount = 0;
 }
+
+} // namespace AI_UI
 
 // EOF

@@ -774,7 +774,7 @@ void NavMeshBuilder::WriteMaterialFile(const char* dir)
 	if (!f) RECAST_ERROR(NMIO, "File '%s' could not be opened", filename);
 
 	// Writing contents
-	fprintf(f, "newmtl %s\n", m_matFile);
+	fprintf(f, "newmtl %s\n", "navmesh");
 	fprintf(f, "Ka    %.2f %.2f %.2f\n", 0.0f, 1.0f, 1.0f);
 	fprintf(f, "Kd    %.2f %.2f %.2f\n", 0.0f, 1.0f, 1.0f);
 	fprintf(f, "Ks    %.2f %.2f %.2f\n", 0.0f, 0.0f, 0.0f);
@@ -789,6 +789,15 @@ void NavMeshBuilder::WriteMaterialFile(const char* dir)
 	fprintf(f, "Ks    %.2f %.2f %.2f\n", 0.0f, 0.0f, 0.0f);
 	fprintf(f, "d     %.2f\n", 0.2f);
 	fprintf(f, "Tr    %.2f\n", 0.8f);
+	fprintf(f, "illum 1");
+
+	fprintf(f, "\n\n");
+	fprintf(f, "newmtl %s\n", "agent");
+	fprintf(f, "Ka    %.2f %.2f %.2f\n", 1.0f, 1.0f, 0.0f);
+	fprintf(f, "Kd    %.2f %.2f %.2f\n", 1.0f, 1.0f, 0.0f);
+	fprintf(f, "Ks    %.2f %.2f %.2f\n", 0.0f, 0.0f, 0.0f);
+	fprintf(f, "d     %.2f\n", 0.6f);
+	fprintf(f, "Tr    %.2f\n", 0.4f);
 	fprintf(f, "illum 1");
 
 	fclose(f);
@@ -858,7 +867,7 @@ void NavMeshBuilder::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 
 	// Writing faces
 	int faceCount = 0;
-	fprintf(f, "usemtl %s\n", m_matFile);
+	fprintf(f, "usemtl navmesh\n");
 	for (int i = 0; i < tile->header->polyCount; ++i)
 	{
 		const dtPoly poly = tile->polys[i];
@@ -900,7 +909,7 @@ void NavMeshBuilder::SaveAsMesh(const char* dir, const char* ID)
 
 	// Opening file
 	char filename[128];
-	sprintf_s(filename, "%s\\%s.obj", dir, ID);
+	sprintf_s(filename, "%s\\.%s.obj", dir, ID);
 	FILE* f;
 	fopen_s(&f, filename, "w");
 	if (!f) RECAST_ERROR(NMIO, "File '%s' could not be opened", filename);
