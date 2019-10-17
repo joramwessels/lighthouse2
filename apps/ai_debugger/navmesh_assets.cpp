@@ -27,6 +27,15 @@ void NavMeshAssets::ReplaceMesh(NavMeshBuilder* navmesh)
 	std::string filename = GetObjFileName(navmesh->GetConfig()->m_id);
 	m_navmeshMeshID = m_renderer->AddMesh(filename.c_str(), m_dir, 1.0f);
 	m_navmeshInstID = m_renderer->AddInstance(m_navmeshMeshID, mat4::Identity());
+
+	HostMaterial* mat = m_renderer->GetMaterial(m_renderer->GetTriangleMaterialID(0, m_navmeshInstID));
+	printf("Original navmesh material name: %s\n", mat->name);
+	mat->name = "navmesh";
+	mat->flags &= HostMaterial::HASALPHA;
+	mat->flags &= HostMaterial::ISCONDUCTOR;
+	mat->flags &= HostMaterial::ISDIELECTRIC;
+	mat->absorption = mat->color;
+
 	AddNodesToScene(navmesh);
 }
 
@@ -55,41 +64,30 @@ void NavMeshAssets::AddNodesToScene(NavMeshBuilder* navmesh)
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshAssets::AddNode                                                     |
-//  |  Adds a node to the scene. If there still are already initialized unused    |
-//  |  nodes, it translates one of those before allocating a new one.       LH2'19|
+//  |  Adds a node to the scene.                                            LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshAssets::AddNode(float x, float y, float z)
 {
 	mat4 translate = mat4::Translate(x, y, z);
-	if (nodeInstances.size() > nodeCount)
-	{
-		// Reusing allocated instances
-		int instanceID = nodeInstances[nodeCount];
-		m_renderer->SetNodeTransform(instanceID, translate);
-	}
-	else
-	{
-		// Out of unused instances
-		int instanceID = m_renderer->AddInstance(m_nodeMeshID, translate);
-		nodeInstances.push_back(instanceID);
-	}
-	nodeCount++;
+	nodeInstIDs.push_back(m_renderer->AddInstance(m_nodeMeshID, translate));
 }
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshAssets::Clean                                                       |
-//  |  Moves all instances to an invisible location untill needed.          LH2'19|
+//  |  Ensures all instances are removed from the scene.                    LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshAssets::Clean()
 {
-	// NOTE: Ideally instances and meshes can be deleted from the core
-	//		 to prevent a significant memory leaks, but by lack of a
-	//		 delete function, meshes are moved to a remote location
-	m_renderer->SetNodeTransform(m_navmeshInstID, m_cleanupTranform);
-	for (std::vector<int>::iterator it = nodeInstances.begin(); it < nodeInstances.end(); it++)
-		m_renderer->SetNodeTransform(*it, m_cleanupTranform);
-	nodeCount = 0;
-	// TODO: Remove old mesh file
+	// TODO: Remove old .obj file (requires new platform function)
+	// TODO: Remove the old navmesh mesh to prevent memory leaks
+	if (m_navmeshInstID >= 0) m_renderer->RemoveInstance(m_navmeshInstID);
+	if (m_startInstID >= 0) m_renderer->RemoveInstance(m_startInstID);
+	if (m_endInstID >= 0) m_renderer->RemoveInstance(m_endInstID);
+	for (std::vector<int>::iterator it = nodeInstIDs.begin(); it < nodeInstIDs.end(); it++)
+		m_renderer->RemoveInstance(*it);
+	nodeInstIDs.clear();
+	m_navmeshInstID = m_startInstID = m_endInstID = -1;
+	//m_navmeshMeshID = -1;
 }
 
 //  +-----------------------------------------------------------------------------+

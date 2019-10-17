@@ -31,7 +31,6 @@ public:
 		// Add meshes
 		m_nodeMeshID = m_renderer->AddMesh("node.obj", m_dir, .01f);
 		m_agentMeshID = m_renderer->AddMesh("agent.obj", m_dir, .01f);
-		// TODO: add cylinder mesh
 	};
 	~NavMeshAssets() {};
 
@@ -42,12 +41,9 @@ private:
 	RenderAPI* m_renderer;
 	const char* m_dir;
 
-	int m_nodeMeshID, m_navmeshMeshID, m_navmeshInstID;
-	int m_agentMeshID, m_startInstID, m_endInstID;
-	int nodeCount;					// count of used node instances in scene
-	std::vector<int> nodeInstances; // instance IDs of navmesh nodes
-
-	mat4 m_cleanupTranform = mat4::Translate(10000.0f, 10000.0f, 10000.0f);
+	int m_nodeMeshID = -1, m_navmeshMeshID = -1, m_navmeshInstID = -1;
+	int m_agentMeshID = -1, m_startInstID = -1, m_endInstID = -1;
+	std::vector<int> nodeInstIDs;
 
 	void AddNodesToScene(NavMeshBuilder* navmesh);
 	void AddNode(float x, float y, float z);
