@@ -19,112 +19,140 @@
 
 namespace AI_UI {
 
-// AntTweakBar data
-float mraysincl = 0, mraysexcl = 0;
-TwBar* settings = 0, *menu = 0;
-HostMaterial currentMaterial; // will contain a copy of the material we're editing
-bool currentMaterialConductor, currentMaterialDielectric;
-int currentMaterialID = -1;
+static TwBar* settings = 0, *navmesh = 0;
+static NavMeshAssets* navMeshAssets = 0;
+static bool leftClickLastFrame = false;
+static bool rightClickLastFrame = false;
+
+// Settings bar
+static float mraysincl = 0, mraysexcl = 0;
 static CoreStats coreStats;
+static int probMeshID = -1;
+static float3 probedPos;
+static float3 pathStart, pathEnd;
 
-// Triangle probing
-int probMeshID = -1;
-float3 probedPos;
-float3 pathStart, pathEnd;
-
-// Navmesh generation
-int navmeshMeshID = -1;
-int navmeshInstID = -1;
+// Navmesh bar
 static NavMeshConfig ui_nm_config;
 static std::string ui_nm_id;
 static bool ui_nm_errorcode = false;
-static std::string ui_nm_meshFile = "";
-static NavMeshAssets* navMeshAssets = 0;
 
-//  +-----------------------------------------------------------------------------+
-//  |  InitAntTweakBar                                                            |
-//  |  Prepares a basic user interface.                                     LH2'19|
-//  +-----------------------------------------------------------------------------+
-void RefreshUI();
-void InitAntTweakBar()
-{
-	TwInit( TW_OPENGL_CORE, NULL );
-	settings = TwNewBar( "settings" );
-	menu = TwNewBar( "NavMesh" );
-	RefreshUI();
+// Path Finding bar
 
-	navMeshAssets = new NavMeshAssets(renderer, navmesh->GetDir()); // TODO move somewhere else
-}
 
-// Button Callbacks
-void TW_CALL BuildNavMesh(void *data)
-{
-	// Set configurations
-	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
-	NavMeshConfig* config = navmesh->GetConfig();
-	*config = ui_nm_config;
-	config->m_id = ui_nm_id.c_str();
+// Forward declarations
+void InitFPSPrinter();
+void PrintFPS(float deltaTime);
+void RefreshSettings();
+void RefreshMenu();
 
-	// Build new mesh
-	navmesh->Cleanup();
-	navmesh->Build(renderer->GetScene());
-	navmesh->DumpLog();
-	ui_nm_errorcode = (bool)navmesh->GetError();
-	if (ui_nm_errorcode) return;
-	navMeshAssets->ReplaceMesh(navmesh);
-
-	ui_nm_config = *config;
-	ui_nm_id = config->m_id;
-}
-void TW_CALL SaveNavMesh(void *data)
-{
-	// Set configurations
-	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
-	NavMeshConfig* config = navmesh->GetConfig();
-	*config = ui_nm_config;
-	config->m_id = ui_nm_id.c_str();
-
-	navmesh->Serialize();
-	navmesh->DumpLog();
-	ui_nm_errorcode = (bool)navmesh->GetError();
-}
-void TW_CALL LoadNavMesh(void *data)
-{
-	// Set configurations
-	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
-	NavMeshConfig* config = navmesh->GetConfig();
-	*config = ui_nm_config;
-	config->m_id = ui_nm_id.c_str();
-
-	// Load mesh
-	navmesh->Deserialize();
-	navmesh->DumpLog();
-	ui_nm_errorcode = (bool)navmesh->GetError();
-	if (ui_nm_errorcode) return;
-	navMeshAssets->ReplaceMesh(navmesh);
-
-	ui_nm_config = *config;
-	ui_nm_id = config->m_id;
-}
-
-// TW types
-TwStructMember float3Members[] = {
-	{ "x", TW_TYPE_FLOAT, offsetof(float3, x), "" },
-	{ "y", TW_TYPE_FLOAT, offsetof(float3, y), "" },
-	{ "z", TW_TYPE_FLOAT, offsetof(float3, z), "" }
-};
 
 //  +-----------------------------------------------------------------------------+
 //  |  RefreshUI                                                                  |
 //  |  AntTweakBar.                                                         LH2'19|
 //  +-----------------------------------------------------------------------------+
+void RefreshUI()
+{
+	RefreshSettings();
+	RefreshMenu();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  InitGUI                                                                    |
+//  |  Prepares a basic user interface.                                     LH2'19|
+//  +-----------------------------------------------------------------------------+
+void InitGUI()
+{
+	// Init AntTweakBar
+	TwInit( TW_OPENGL_CORE, NULL );
+	settings = TwNewBar( "Settings" );
+	navmesh = TwNewBar( "NavMesh" );
+	RefreshUI();
+
+	navMeshAssets = new NavMeshAssets(renderer, "data\\ai\\");
+
+	InitFPSPrinter();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  TW_CALL BuildNavMesh                                                       |
+//  |  Callback function for AntTweakBar button.                            LH2'19|
+//  +-----------------------------------------------------------------------------+
+void TW_CALL BuildNavMesh(void *data)
+{
+	// Set configurations
+	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
+	NavMeshConfig* config = navMeshBuilder->GetConfig();
+	*config = ui_nm_config;
+	config->m_id = ui_nm_id.c_str();
+
+	// Build new mesh
+	navMeshBuilder->Cleanup();
+	navMeshBuilder->Build(renderer->GetScene());
+	navMeshBuilder->DumpLog();
+	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
+	if (ui_nm_errorcode) return;
+	navMeshAssets->ReplaceMesh(navMeshBuilder);
+
+	ui_nm_config = *config;
+	ui_nm_id = config->m_id;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  TW_CALL SaveNavMesh                                                        |
+//  |  Callback function for AntTweakBar button.                            LH2'19|
+//  +-----------------------------------------------------------------------------+
+void TW_CALL SaveNavMesh(void *data)
+{
+	// Set configurations
+	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
+	NavMeshConfig* config = navMeshBuilder->GetConfig();
+	*config = ui_nm_config;
+	config->m_id = ui_nm_id.c_str();
+
+	navMeshBuilder->Serialize();
+	navMeshBuilder->DumpLog();
+	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  TW_CALL LoadNavMesh                                                        |
+//  |  Callback function for AntTweakBar button.                            LH2'19|
+//  +-----------------------------------------------------------------------------+
+void TW_CALL LoadNavMesh(void *data)
+{
+	// Set configurations
+	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
+	NavMeshConfig* config = navMeshBuilder->GetConfig();
+	*config = ui_nm_config;
+	config->m_id = ui_nm_id.c_str();
+
+	// Load mesh
+	navMeshBuilder->Deserialize();
+	navMeshBuilder->DumpLog();
+	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
+	if (ui_nm_errorcode) return;
+	navMeshAssets->ReplaceMesh(navMeshBuilder);
+
+	ui_nm_config = *config;
+	ui_nm_id = config->m_id;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  RefreshSettings                                                            |
+//  |  Defines the layout of the 'Settings' bar.                            LH2'19|
+//  +-----------------------------------------------------------------------------+
 void RefreshSettings()
 {
-	TwDefine(" settings size='200 400' color='50 120 50' alpha=220");
-	TwDefine(" settings help='LightHouse2 data' ");
-	TwDefine(" settings resizable=true movable=true iconifiable=true refresh=0.05 ");
-	TwDefine(" settings position='20 20' ");
+	TwDefine(" Settings size='200 400' color='50 120 50' alpha=220");
+	TwDefine(" Settings help='LightHouse2 data' ");
+	TwDefine(" Settings resizable=true movable=true iconifiable=true refresh=0.05 ");
+	TwDefine(" Settings position='20 20' ");
 	int opened = 1, closed = 0;
+	TwStructMember float3Members[] = {
+		{ "x", TW_TYPE_FLOAT, offsetof(float3, x), "" },
+		{ "y", TW_TYPE_FLOAT, offsetof(float3, y), "" },
+		{ "z", TW_TYPE_FLOAT, offsetof(float3, z), "" }
+	};
 	TwType float3Type = TwDefineStruct("float3", float3Members, 3, sizeof(float3), NULL, NULL);
 
 	// create collapsed statistics block
@@ -164,8 +192,8 @@ void RefreshSettings()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  RefreshUI                                                                  |
-//  |  AntTweakBar.                                                         LH2'19|
+//  |  RefreshMenu                                                                |
+//  |  Defines the layout of the 'NavMesh' bar.                                LH2'19|
 //  +-----------------------------------------------------------------------------+
 void RefreshMenu()
 {
@@ -180,65 +208,60 @@ void RefreshMenu()
 		{ NavMeshConfig::SAMPLE_PARTITION_LAYERS, "Layers" }
 	};
 	TwType PartitionType = TwDefineEnum("PartitionType", partitionEV, 3);
+	TwStructMember float3Members[] = {
+		{ "x", TW_TYPE_FLOAT, offsetof(float3, x), "" },
+		{ "y", TW_TYPE_FLOAT, offsetof(float3, y), "" },
+		{ "z", TW_TYPE_FLOAT, offsetof(float3, z), "" }
+	};
 	TwType float3Type = TwDefineStruct("AABB", float3Members, 3, sizeof(float3), NULL, NULL);
 
 	// create voxelgrid block
-	TwAddVarRW(menu, "AABB min", float3Type, &ui_nm_config.m_bmin, " group='voxelgrid'");
-	TwAddVarRW(menu, "AABB max", float3Type, &ui_nm_config.m_bmax, " group='voxelgrid'");
-	TwAddVarRW(menu, "cell size", TW_TYPE_FLOAT, &ui_nm_config.m_cs, " group='voxelgrid' min=0");
-	TwAddVarRW(menu, "cell height", TW_TYPE_FLOAT, &ui_nm_config.m_ch, " group='voxelgrid' min=0");
-	TwSetParam(menu, "voxelgrid", "opened", TW_PARAM_INT32, 1, &closed);
+	TwAddVarRW(navmesh, "AABB min", float3Type, &ui_nm_config.m_bmin, " group='voxelgrid'");
+	TwAddVarRW(navmesh, "AABB max", float3Type, &ui_nm_config.m_bmax, " group='voxelgrid'");
+	TwAddVarRW(navmesh, "cell size", TW_TYPE_FLOAT, &ui_nm_config.m_cs, " group='voxelgrid' min=0");
+	TwAddVarRW(navmesh, "cell height", TW_TYPE_FLOAT, &ui_nm_config.m_ch, " group='voxelgrid' min=0");
+	TwSetParam(navmesh, "voxelgrid", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create agent block
-	TwAddVarRW(menu, "max slope", TW_TYPE_FLOAT, &ui_nm_config.m_walkableSlopeAngle, " group='agent' min=0 max=90");
-	TwAddVarRW(menu, "min height", TW_TYPE_INT32, &ui_nm_config.m_walkableHeight, " group='agent' min=1");
-	TwAddVarRW(menu, "max climb", TW_TYPE_INT32, &ui_nm_config.m_walkableClimb, " group='agent' min=0");
-	TwAddVarRW(menu, "min radius", TW_TYPE_INT32, &ui_nm_config.m_walkableRadius, " group='agent' min=1");
-	TwSetParam(menu, "agent", "opened", TW_PARAM_INT32, 1, &closed);
+	TwAddVarRW(navmesh, "max slope", TW_TYPE_FLOAT, &ui_nm_config.m_walkableSlopeAngle, " group='agent' min=0 max=90");
+	TwAddVarRW(navmesh, "min height", TW_TYPE_INT32, &ui_nm_config.m_walkableHeight, " group='agent' min=1");
+	TwAddVarRW(navmesh, "max climb", TW_TYPE_INT32, &ui_nm_config.m_walkableClimb, " group='agent' min=0");
+	TwAddVarRW(navmesh, "min radius", TW_TYPE_INT32, &ui_nm_config.m_walkableRadius, " group='agent' min=1");
+	TwSetParam(navmesh, "agent", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create filtering block
-	TwAddVarRW(menu, "low hanging obstacles", TW_TYPE_BOOL8, &ui_nm_config.m_filterLowHangingObstacles, " group='filtering'");
-	TwAddVarRW(menu, "ledge spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterLedgeSpans, " group='filtering'");
-	TwAddVarRW(menu, "low height spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterWalkableLowHeightSpans, " group='filtering'");
-	TwSetParam(menu, "filtering", "opened", TW_PARAM_INT32, 1, &closed);
+	TwAddVarRW(navmesh, "low hanging obstacles", TW_TYPE_BOOL8, &ui_nm_config.m_filterLowHangingObstacles, " group='filtering'");
+	TwAddVarRW(navmesh, "ledge spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterLedgeSpans, " group='filtering'");
+	TwAddVarRW(navmesh, "low height spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterWalkableLowHeightSpans, " group='filtering'");
+	TwSetParam(navmesh, "filtering", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create partitioning block
-	TwAddVarRW(menu, "partition type", PartitionType, &ui_nm_config.m_partitionType, " group='partitioning'");
-	TwAddVarRW(menu, "min region area", TW_TYPE_INT32, &ui_nm_config.m_minRegionArea, " group='partitioning' min=0");
-	TwAddVarRW(menu, "min merged region", TW_TYPE_INT32, &ui_nm_config.m_mergeRegionArea, " group='partitioning' min=0");
-	TwSetParam(menu, "partitioning", "opened", TW_PARAM_INT32, 1, &closed);
+	TwAddVarRW(navmesh, "partition type", PartitionType, &ui_nm_config.m_partitionType, " group='partitioning'");
+	TwAddVarRW(navmesh, "min region area", TW_TYPE_INT32, &ui_nm_config.m_minRegionArea, " group='partitioning' min=0");
+	TwAddVarRW(navmesh, "min merged region", TW_TYPE_INT32, &ui_nm_config.m_mergeRegionArea, " group='partitioning' min=0");
+	TwSetParam(navmesh, "partitioning", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create rasterization block
-	TwAddVarRW(menu, "max edge length", TW_TYPE_INT32, &ui_nm_config.m_maxEdgeLen, " group='poly mesh' min=0");
-	TwAddVarRW(menu, "max simpl err", TW_TYPE_FLOAT, &ui_nm_config.m_maxSimplificationError, " group='poly mesh' min=0");
-	TwAddVarRW(menu, "max verts per poly", TW_TYPE_INT32, &ui_nm_config.m_maxVertsPerPoly, " group='poly mesh' min=3 max=6");
-	TwAddVarRW(menu, "detail sample dist", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleDist, " group='poly mesh'");
-	TwAddVarRW(menu, "detail max err", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleMaxError, " group='poly mesh' min=0 help='een heleboelnie tinterresa nteinformatie'");
-	TwSetParam(menu, "poly mesh", "opened", TW_PARAM_INT32, 1, &closed);
+	TwAddVarRW(navmesh, "max edge length", TW_TYPE_INT32, &ui_nm_config.m_maxEdgeLen, " group='poly mesh' min=0");
+	TwAddVarRW(navmesh, "max simpl err", TW_TYPE_FLOAT, &ui_nm_config.m_maxSimplificationError, " group='poly mesh' min=0");
+	TwAddVarRW(navmesh, "max verts per poly", TW_TYPE_INT32, &ui_nm_config.m_maxVertsPerPoly, " group='poly mesh' min=3 max=6");
+	TwAddVarRW(navmesh, "detail sample dist", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleDist, " group='poly mesh'");
+	TwAddVarRW(navmesh, "detail max err", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleMaxError, " group='poly mesh' min=0 help='een heleboelnie tinterresa nteinformatie'");
+	TwSetParam(navmesh, "poly mesh", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create output block
-	TwAddVarRW(menu, "NavMesh ID", TW_TYPE_STDSTRING, &ui_nm_id, " group='output'");
-	TwAddVarRW(menu, "Print build stats", TW_TYPE_BOOL8, &ui_nm_config.m_printBuildStats, " group='output'");
-	TwAddVarRW(menu, "Print immediately", TW_TYPE_BOOL8, &ui_nm_config.m_printImmediately, " group='output'");
-	TwAddSeparator(menu, "menuseparator0", "group='output'");
-	TwAddVarRO(menu, "error code", TW_TYPE_BOOL8, &ui_nm_errorcode, " group='output' true='ERROR' false=''");
-	TwAddSeparator(menu, "menuseparator1", "group='output'");
-	TwAddButton(menu, "Build", BuildNavMesh, NULL, " label='Build' ");
-	TwAddButton(menu, "Save", SaveNavMesh, NULL, " label='Save' ");
-	TwAddSeparator(menu, "menuseparator2", "group='output'");
-	TwAddButton(menu, "Load", LoadNavMesh, NULL, " label='Load' ");
-	TwAddSeparator(menu, "menuseparator3", "group='output'");
-	TwSetParam(menu, "output", "opened", TW_PARAM_INT32, 1, &opened);
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  RefreshUI                                                                  |
-//  |  AntTweakBar.                                                         LH2'19|
-//  +-----------------------------------------------------------------------------+
-void RefreshUI()
-{
-	RefreshSettings();
-	RefreshMenu();
+	TwAddVarRW(navmesh, "NavMesh ID", TW_TYPE_STDSTRING, &ui_nm_id, " group='output'");
+	TwAddVarRW(navmesh, "Print build stats", TW_TYPE_BOOL8, &ui_nm_config.m_printBuildStats, " group='output'");
+	TwAddVarRW(navmesh, "Print immediately", TW_TYPE_BOOL8, &ui_nm_config.m_printImmediately, " group='output'");
+	TwAddSeparator(navmesh, "menuseparator0", "group='output'");
+	TwAddVarRO(navmesh, "error code", TW_TYPE_BOOL8, &ui_nm_errorcode, " group='output' true='ERROR' false=''");
+	TwAddSeparator(navmesh, "menuseparator1", "group='output'");
+	TwAddButton(navmesh, "Build", BuildNavMesh, NULL, " label='Build' ");
+	TwAddButton(navmesh, "Save", SaveNavMesh, NULL, " label='Save' ");
+	TwAddSeparator(navmesh, "menuseparator2", "group='output'");
+	TwAddButton(navmesh, "Load", LoadNavMesh, NULL, " label='Load' ");
+	TwAddSeparator(navmesh, "menuseparator3", "group='output'");
+	TwSetParam(navmesh, "output", "opened", TW_PARAM_INT32, 1, &opened);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -265,8 +288,8 @@ bool HandleInput(float frameTime)
 	if (GetAsyncKeyState(VK_LEFT)) { changed = true; camera->TranslateTarget(make_float3(-rotateSpeed, 0, 0)); }
 	if (GetAsyncKeyState(VK_RIGHT)) { changed = true; camera->TranslateTarget(make_float3(rotateSpeed, 0, 0)); }
 
-	// process button click
-	if ((leftClicked || rightClicked) && GetAsyncKeyState(VK_LSHIFT))
+	// Probing results are one frame delayed
+	if (leftClickLastFrame || rightClickLastFrame)
 	{
 		if (coreStats.probedDist <= 0.0f)
 		{
@@ -276,84 +299,23 @@ bool HandleInput(float frameTime)
 
 		probMeshID = renderer->GetScene()->instances[coreStats.probedInstid];
 		probedPos = camera->position + camera->direction * coreStats.probedDist;
-		if (leftClicked) pathStart = probedPos;
-		if (rightClicked) pathEnd = probedPos;
-
+		if (leftClickLastFrame) pathStart = probedPos;
+		if (rightClickLastFrame) pathEnd = probedPos;
 		camera->focalDistance = coreStats.probedDist;
+		leftClickLastFrame = rightClickLastFrame = false;
 		changed = true;
+	}
+
+	// process button click
+	if ((leftClicked || rightClicked) && GetAsyncKeyState(VK_LSHIFT))
+	{
+		if (leftClicked) leftClickLastFrame = true;
+		if (rightClicked) rightClickLastFrame = true;
 		leftClicked = rightClicked = false;
 	}
 
 	// let the main loop know if the camera should update
 	return changed;
-}
-
-
-
-
-
-GLTexture* digit[10], *hud;
-Shader* plainShader = 0, *shadowShader = 0;
-float smoothed = 1.0f, smoothFactor = 0.1f;
-
-void InitFPSPrinter()
-{
-	// load digits
-	for (int i = 0; i < 10; i++)
-	{
-		char t[128] = "data//system//digit0.png";
-		t[strlen(t) - 5] += i;
-		digit[i] = new GLTexture(t, GL_LINEAR);
-	}
-	// load HUD
-	hud = new GLTexture("data//system//hud.png", GL_LINEAR);
-	// load shaders
-	plainShader = new Shader("shaders/plain.vert", "shaders/plain.frag");
-	shadowShader = new Shader("shaders/plain.vert", "shaders/plain_shadow.frag");
-}
-
-void DrawDigit(int d, float x, float y, float scale = 1.0f)
-{
-	plainShader->SetInputTexture(0, "color", digit[d]);
-	mat4 T = mat4::Scale(make_float3(0.06f * scale, 0.1f * scale, 1));
-	T.cell[12] = x, T.cell[13] = y;
-	plainShader->SetInputMatrix("view", T);
-	DrawQuad();
-}
-
-void DrawHUD(float x, float y)
-{
-	plainShader->SetInputTexture(0, "color", hud);
-	float scale = 4.5f;
-	mat4 T = mat4::Scale(scale * make_float3(0.06f, 0.1f, 1));
-	T.cell[12] = x, T.cell[13] = y;
-	plainShader->SetInputMatrix("view", T);
-	DrawQuad();
-}
-
-void PrintFPS(float deltaTime)
-{
-	float fps = (int)(1.0f / deltaTime);
-	smoothed = (1 - smoothFactor) * smoothed + smoothFactor * fps;
-	if (smoothFactor > 0.05f) smoothFactor -= 0.05f;
-	int ifps = smoothed * 10, d1 = (ifps / 1000) % 10, d2 = (ifps / 100) % 10, d3 = (ifps / 10) % 10, d4 = ifps % 10;
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	shadowShader->Bind();
-	float xpos = -0.91f, ypos = -0.81f;
-	DrawDigit(d1, xpos, ypos); xpos += 0.12f;
-	DrawDigit(d2, xpos, ypos); xpos += 0.12f;
-	DrawDigit(d3, xpos, ypos); xpos += 0.14f;
-	DrawDigit(d4, xpos, ypos - 0.03f, 0.7f);
-	shadowShader->Unbind();
-	plainShader->Bind();
-	xpos = -0.92f, ypos = -0.8f;
-	DrawDigit(d1, xpos, ypos); xpos += 0.12f;
-	DrawDigit(d2, xpos, ypos); xpos += 0.12f;
-	DrawDigit(d3, xpos, ypos); xpos += 0.14f;
-	DrawDigit(d4, xpos, ypos - 0.03f, 0.7f);
-	plainShader->Unbind();
-	glDisable(GL_BLEND);
 }
 
 } // namespace AI_UI

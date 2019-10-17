@@ -3,6 +3,7 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="navmesh_assets.cpp" />
+    <ClCompile Include="main_ui.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main_tools.h" />

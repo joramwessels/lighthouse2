@@ -24,8 +24,8 @@ static Shader* shader = 0;
 static uint scrwidth = 0, scrheight = 0, scrspp = 1;
 static bool camMoved = false, hasFocus = true, running = true;
 static bool leftClicked = false, rightClicked = false;
-static string materialFile;
-static NavMeshBuilder* navmesh = 0;
+
+static NavMeshBuilder* navMeshBuilder = 0;
 
 #include "main_ui.h"
 #include "main_tools.h"
@@ -51,16 +51,16 @@ void PrepareScene()
 	renderer->AddDirectionalLight(make_float3(-1), make_float3(255));
 
 	// Navmesh builder
-	navmesh = new NavMeshBuilder("data\\ai\\");
-	navmesh->GetConfig()->SetCellSize(.3f, .2f);
-	navmesh->GetConfig()->SetAgentInfo(10.0f, 10, 2, 2);
-	navmesh->GetConfig()->SetPolySettings(12, 1.3f, 8.0f, 20.0f, 6);
-	navmesh->GetConfig()->SetDetailPolySettings(6.0f, 1.0f);
-	navmesh->GetConfig()->m_printBuildStats = true;
-	navmesh->GetConfig()->m_printImmediately = true;
+	navMeshBuilder = new NavMeshBuilder("data\\ai\\");
+	navMeshBuilder->GetConfig()->SetCellSize(.3f, .2f);
+	navMeshBuilder->GetConfig()->SetAgentInfo(10.0f, 10, 2, 2);
+	navMeshBuilder->GetConfig()->SetPolySettings(12, 1.3f, 8.0f, 20.0f, 6);
+	navMeshBuilder->GetConfig()->SetDetailPolySettings(6.0f, 1.0f);
+	navMeshBuilder->GetConfig()->m_printBuildStats = true;
+	navMeshBuilder->GetConfig()->m_printImmediately = true;
 
-	AI_UI::ui_nm_config = *navmesh->GetConfig();
-	AI_UI::ui_nm_id = navmesh->GetConfig()->m_id;
+	AI_UI::ui_nm_config = *navMeshBuilder->GetConfig();
+	AI_UI::ui_nm_id = navMeshBuilder->GetConfig()->m_id;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -83,8 +83,7 @@ int main()
 	// initialize scene
 	PrepareScene();
 	// initialize ui
-	AI_UI::InitAntTweakBar();
-	AI_UI::InitFPSPrinter();
+	AI_UI::InitGUI();
 	// set initial window size
 	ReshapeWindowCallback( 0, SCRWIDTH, SCRHEIGHT );
 	// enter main loop
