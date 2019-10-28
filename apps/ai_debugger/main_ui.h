@@ -15,6 +15,7 @@
 
 #include "anttweakbar.h"
 #include "navmesh_builder.h"
+#include "navmesh_navigator.h"
 #include "navmesh_assets.h"
 
 namespace AI_UI {
@@ -26,8 +27,9 @@ static bool rightClickLastFrame = false;
 
 // Settings bar
 static float mraysincl = 0, mraysexcl = 0;
-static CoreStats coreStats;
-static int probMeshID = -1;
+enum MeshName { INPUT, NAVMESH, NODE, EDGE, AGENT };
+static MeshName meshName;
+static int probMeshID = -1, probeInstID = -1, probeTriID = -1;
 static float3 probedPos;
 static float3 pathStart, pathEnd;
 
@@ -43,8 +45,27 @@ static bool ui_nm_errorcode = false;
 void InitFPSPrinter();
 void PrintFPS(float deltaTime);
 void RefreshSettings();
-void RefreshMenu();
+void RefreshNavMesh();
 
+
+//  +-----------------------------------------------------------------------------+
+//  |  WorldToScreenPos (TODO)                                                    |
+//  |  Converts a world position to a screen position.                      LH2'19|
+//  +-----------------------------------------------------------------------------+
+int2 WorldToScreenPos(float3 worldPos, Camera* camera)
+{
+	float3 dir = worldPos - camera->position; // vector from camera to pos
+	float3 up = make_float3(0, 1, 0), forward = camera->direction;
+	float3 right = normalize(cross(forward, up));
+	up = cross(right, forward);
+	// undo camera rotation
+
+	// find dir pointing at screen
+	// find vector from corner to there
+	// find its relative x- and y lengths
+
+	return int2();
+}
 
 //  +-----------------------------------------------------------------------------+
 //  |  RefreshUI                                                                  |
@@ -53,7 +74,7 @@ void RefreshMenu();
 void RefreshUI()
 {
 	RefreshSettings();
-	RefreshMenu();
+	RefreshNavMesh();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -80,7 +101,7 @@ void InitGUI()
 void TW_CALL BuildNavMesh(void *data)
 {
 	// Set configurations
-	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
+	ui_nm_errorcode = NMSUCCESS;
 	NavMeshConfig* config = navMeshBuilder->GetConfig();
 	*config = ui_nm_config;
 	config->m_id = ui_nm_id.c_str();
@@ -92,9 +113,11 @@ void TW_CALL BuildNavMesh(void *data)
 	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
 	if (ui_nm_errorcode) return;
 	navMeshAssets->ReplaceMesh(navMeshBuilder);
+	navMeshNavigator = navMeshBuilder->GetNavigator(); // TODO: move?
 
 	ui_nm_config = *config;
 	ui_nm_id = config->m_id;
+	camMoved = true;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -104,7 +127,7 @@ void TW_CALL BuildNavMesh(void *data)
 void TW_CALL SaveNavMesh(void *data)
 {
 	// Set configurations
-	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
+	ui_nm_errorcode = NMSUCCESS;
 	NavMeshConfig* config = navMeshBuilder->GetConfig();
 	*config = ui_nm_config;
 	config->m_id = ui_nm_id.c_str();
@@ -121,7 +144,7 @@ void TW_CALL SaveNavMesh(void *data)
 void TW_CALL LoadNavMesh(void *data)
 {
 	// Set configurations
-	ui_nm_errorcode = NavMeshBuilder::NMSUCCESS;
+	ui_nm_errorcode = NMSUCCESS;
 	NavMeshConfig* config = navMeshBuilder->GetConfig();
 	*config = ui_nm_config;
 	config->m_id = ui_nm_id.c_str();
@@ -132,9 +155,11 @@ void TW_CALL LoadNavMesh(void *data)
 	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
 	if (ui_nm_errorcode) return;
 	navMeshAssets->ReplaceMesh(navMeshBuilder);
+	navMeshNavigator = navMeshBuilder->GetNavigator(); // TODO: move?
 
 	ui_nm_config = *config;
 	ui_nm_id = config->m_id;
+	camMoved = true;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -148,6 +173,14 @@ void RefreshSettings()
 	TwDefine(" Settings resizable=true movable=true iconifiable=true refresh=0.05 ");
 	TwDefine(" Settings position='20 20' ");
 	int opened = 1, closed = 0;
+	TwEnumVal meshEnum[] = {
+		{ NAVMESH, "Triangle" },
+		{ AGENT, "Agent"},
+		{ NODE, "Node" },
+		{ EDGE, "Edge" },
+		{ INPUT, "Input Mesh"}
+	};
+	TwType meshEnumType = TwDefineEnum("MeshType", meshEnum, 5);
 	TwStructMember float3Members[] = {
 		{ "x", TW_TYPE_FLOAT, offsetof(float3, x), "" },
 		{ "y", TW_TYPE_FLOAT, offsetof(float3, y), "" },
@@ -182,9 +215,10 @@ void RefreshSettings()
 	TwSetParam(settings, "camera", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create opened probing block
+	TwAddVarRO(settings, "Mesh", meshEnumType, &meshName, "group='probing'");
 	TwAddVarRO(settings, "Mesh ID", TW_TYPE_INT32, &probMeshID, "group='probing'");
-	TwAddVarRO(settings, "Inst ID", TW_TYPE_INT32, &coreStats.probedInstid, "group='probing'");
-	TwAddVarRO(settings, "Tri ID", TW_TYPE_INT32, &coreStats.probedTriid, "group='probing'");
+	TwAddVarRO(settings, "Inst ID", TW_TYPE_INT32, &probeInstID, "group='probing'");
+	TwAddVarRO(settings, "Tri ID", TW_TYPE_INT32, &probeTriID, "group='probing'");
 	TwAddVarRO(settings, "Pos", float3Type, &probedPos, "group='probing'");
 	TwAddVarRO(settings, "Start", float3Type, &pathStart, "group='probing'");
 	TwAddVarRO(settings, "End", float3Type, &pathEnd, "group='probing'");
@@ -195,7 +229,7 @@ void RefreshSettings()
 //  |  RefreshMenu                                                                |
 //  |  Defines the layout of the 'NavMesh' bar.                                LH2'19|
 //  +-----------------------------------------------------------------------------+
-void RefreshMenu()
+void RefreshNavMesh()
 {
 	TwDefine(" NavMesh size='280 400' color='50 120 50' alpha=220");
 	TwDefine(" NavMesh help='NavMesh generation options' ");
@@ -252,7 +286,6 @@ void RefreshMenu()
 	// create output block
 	TwAddVarRW(navmesh, "NavMesh ID", TW_TYPE_STDSTRING, &ui_nm_id, " group='output'");
 	TwAddVarRW(navmesh, "Print build stats", TW_TYPE_BOOL8, &ui_nm_config.m_printBuildStats, " group='output'");
-	TwAddVarRW(navmesh, "Print immediately", TW_TYPE_BOOL8, &ui_nm_config.m_printImmediately, " group='output'");
 	TwAddSeparator(navmesh, "menuseparator0", "group='output'");
 	TwAddVarRO(navmesh, "error code", TW_TYPE_BOOL8, &ui_nm_errorcode, " group='output' true='ERROR' false=''");
 	TwAddSeparator(navmesh, "menuseparator1", "group='output'");
@@ -288,20 +321,53 @@ bool HandleInput(float frameTime)
 	if (GetAsyncKeyState(VK_LEFT)) { changed = true; camera->TranslateTarget(make_float3(-rotateSpeed, 0, 0)); }
 	if (GetAsyncKeyState(VK_RIGHT)) { changed = true; camera->TranslateTarget(make_float3(rotateSpeed, 0, 0)); }
 
-	// Probing results are one frame delayed
+	// Probing results are one frame delayed due to camera refresh
 	if (leftClickLastFrame || rightClickLastFrame)
 	{
+		// DEBUG: crashes when probed distance is 0.0f
 		if (coreStats.probedDist <= 0.0f)
 		{
-			printf("\tPROBED DIST == 0.0f"); // DEBUG
+			printf("\tPROBED DIST == 0.0f ");
 			return changed;
 		}
 
-		probMeshID = renderer->GetScene()->instances[coreStats.probedInstid];
-		probedPos = camera->position + camera->direction * coreStats.probedDist;
-		if (leftClickLastFrame) pathStart = probedPos;
-		if (rightClickLastFrame) pathEnd = probedPos;
-		camera->focalDistance = coreStats.probedDist;
+		// Identify probed instance
+		probeInstID = coreStats.probedInstid;
+		probeTriID = coreStats.probedTriid;
+		probMeshID = renderer->GetScene()->instances[probeInstID]; // TODO: instances array appears to have a mesh per instance
+		if (navMeshAssets->isNavMesh(probeInstID)) meshName = NAVMESH;
+		else if (navMeshAssets->isAgent(probeInstID)) meshName = AGENT;
+		else if (navMeshAssets->isNode(probeInstID)) meshName = NODE;
+		else if (navMeshAssets->isEdge(probeInstID)) meshName = EDGE;
+		else meshName = INPUT;
+
+		// Get 3D probe position
+		ViewPyramid p = camera->GetView();
+		float3 unitRight = (p.p2 - p.p1) / scrwidth;
+		float3 unitDown = (p.p3 - p.p1) / scrheight;
+		float3 pixelLoc = p.p1 + probeCoords.x * unitRight + probeCoords.y * unitDown;
+		probedPos = camera->position + normalize(pixelLoc - camera->position) * coreStats.probedDist;
+
+		// Apply new probe position
+		if (leftClickLastFrame && meshName == NAVMESH)
+		{
+			pathStart = probedPos;
+			navMeshAssets->pathStart = new float3(probedPos);
+			if (navMeshAssets->pathEnd)
+				navMeshAssets->PlotPath(navMeshNavigator, pathStart, pathEnd);
+			//navMeshAssets->PlaceAgent(probedPos); // DEBUG
+		}
+		if (rightClickLastFrame && meshName == NAVMESH)
+		{
+			pathEnd = probedPos;
+			navMeshAssets->pathEnd = new float3(probedPos);
+			if (navMeshAssets->pathStart)
+				navMeshAssets->PlotPath(navMeshNavigator, pathStart, pathEnd);
+		}
+		if (coreStats.probedDist < 1000) // prevents scene from going invisible
+			camera->focalDistance = coreStats.probedDist;
+
+		// Reset click delay and update focal distance
 		leftClickLastFrame = rightClickLastFrame = false;
 		changed = true;
 	}
@@ -312,6 +378,7 @@ bool HandleInput(float frameTime)
 		if (leftClicked) leftClickLastFrame = true;
 		if (rightClicked) rightClickLastFrame = true;
 		leftClicked = rightClicked = false;
+		changed = true; // probing requires a camera refresh
 	}
 
 	// let the main loop know if the camera should update

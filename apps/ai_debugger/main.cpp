@@ -17,6 +17,7 @@
 #include "system.h"
 #include "rendersystem.h"
 #include "navmesh_builder.h"
+#include "navmesh_navigator.h"
 
 static RenderAPI* renderer = 0;
 static GLTexture* renderTarget = 0;
@@ -24,8 +25,11 @@ static Shader* shader = 0;
 static uint scrwidth = 0, scrheight = 0, scrspp = 1;
 static bool camMoved = false, hasFocus = true, running = true;
 static bool leftClicked = false, rightClicked = false;
+static int2 probeCoords;
+static CoreStats coreStats;
 
 static NavMeshBuilder* navMeshBuilder = 0;
+static NavMeshNavigator* navMeshNavigator = 0;
 
 #include "main_ui.h"
 #include "main_tools.h"
@@ -57,7 +61,6 @@ void PrepareScene()
 	navMeshBuilder->GetConfig()->SetPolySettings(12, 1.3f, 8.0f, 20.0f, 6);
 	navMeshBuilder->GetConfig()->SetDetailPolySettings(6.0f, 1.0f);
 	navMeshBuilder->GetConfig()->m_printBuildStats = true;
-	navMeshBuilder->GetConfig()->m_printImmediately = true;
 
 	AI_UI::ui_nm_config = *navMeshBuilder->GetConfig();
 	AI_UI::ui_nm_id = navMeshBuilder->GetConfig()->m_id;
@@ -109,9 +112,9 @@ int main()
 		deltaTime = timer.elapsed();
 		timer.reset();
 		renderer->Render( c );
-		AI_UI::coreStats = renderer->GetCoreStats();
-		AI_UI::mraysincl = AI_UI::coreStats.totalRays / (AI_UI::coreStats.renderTime * 1000);
-		AI_UI::mraysexcl = AI_UI::coreStats.totalRays / (AI_UI::coreStats.traceTime0 * 1000);
+		coreStats = renderer->GetCoreStats();
+		AI_UI::mraysincl = coreStats.totalRays / (coreStats.renderTime * 1000);
+		AI_UI::mraysexcl = coreStats.totalRays / (coreStats.traceTime0 * 1000);
 		if (AI_UI::HandleInput( deltaTime )) camMoved = true;
 		// postprocess
 		shader->Bind();

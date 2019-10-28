@@ -17,6 +17,43 @@
 #include "DetourNode.h"
 
 //  +-----------------------------------------------------------------------------+
+//  |  NavMeshAssets::PlotPath (TODO)                                             |
+//  |  Plots the given path from start to end as a line.                    LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshAssets::PlotPath(NavMeshNavigator* navmesh, float3 start, float3 end, int maxSize)
+{
+	// Finding path
+	dtPolyRef* path = (dtPolyRef*)malloc(maxSize * sizeof(dtPolyRef));
+	int pathCount;
+	if (navmesh->FindPath(start, end, path, &pathCount, maxSize)) return;
+
+	// Initializing target
+	float3 iterPos, targetPos;
+	if(navmesh->FindClosestPointOnPoly(path[0], start, &iterPos)) return;
+	if(navmesh->FindClosestPointOnPoly(path[pathCount - 1], end, &targetPos)) return;
+
+	// DEBUG: spawn sphere on each path node
+	for (int i = 0; i < pathCount; i++)
+	{
+		if (navmesh->FindClosestPointOnPoly(path[i], start, &iterPos)) return;
+		AddNode(iterPos.x, iterPos.y, iterPos.z); // DEBUG
+	}
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshAssets::GetPolyTriangleInstances                                    |
+//  |  Resolves the triangle indices from the given polygon ref.            LH2'19|
+//  +-----------------------------------------------------------------------------+
+const std::vector<int>*  NavMeshAssets::GetPolyTriangleIndices(dtPolyRef poly, int tileIdx)
+{
+	// TODO: how to deal with different tiles?
+	//const dtNavMesh* navmesh = m_navmesh;
+	//const dtMeshTile* tile = navmesh->getTile(tileIdx);
+	//if (!tile->header) return (std::vector<int>*) printf("\tERROR: TILE 0 DOES NOT EXIST\n");
+	return m_polyTriIdx[poly];
+}
+
+//  +-----------------------------------------------------------------------------+
 //  |  NavMeshAssets::ReplaceMesh                                                 |
 //  |  Removes the old navmesh assets and adds the new one.                 LH2'19|
 //  +-----------------------------------------------------------------------------+
@@ -27,16 +64,27 @@ void NavMeshAssets::ReplaceMesh(NavMeshBuilder* navmesh)
 	std::string filename = GetObjFileName(navmesh->GetConfig()->m_id);
 	m_navmeshMeshID = m_renderer->AddMesh(filename.c_str(), m_dir, 1.0f);
 	m_navmeshInstID = m_renderer->AddInstance(m_navmeshMeshID, mat4::Identity());
-
-	HostMaterial* mat = m_renderer->GetMaterial(m_renderer->GetTriangleMaterialID(0, m_navmeshInstID));
-	printf("Original navmesh material name: %s\n", mat->name);
-	mat->name = "navmesh";
-	mat->flags &= HostMaterial::HASALPHA;
-	mat->flags &= HostMaterial::ISCONDUCTOR;
-	mat->flags &= HostMaterial::ISDIELECTRIC;
-	mat->absorption = mat->color;
-
 	AddNodesToScene(navmesh);
+	AddEdgesToScene(navmesh);
+	NavMeshConfig* config = navmesh->GetConfig();
+	m_agentHeight = config->m_walkableHeight * config->m_ch; // voxels to world units
+	m_agentRadius = config->m_walkableRadius * config->m_cs; // voxels to world units
+	m_navmesh = navmesh->GetMesh();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshAssets::PlaceAgent                                                  |
+//  |  Places the test agent at the given position.                         LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshAssets::PlaceAgent(float3 pos)
+{
+	mat4 move = mat4::Translate(pos);
+	mat4 scale = mat4::Scale(make_float3(m_agentRadius * 2, m_agentHeight, m_agentRadius * 2));
+	mat4 transform = move * scale;
+	if (m_startInstID < 0)
+		m_startInstID = m_renderer->AddInstance(m_agentMeshID, transform);
+	else
+		m_renderer->SetNodeTransform(m_startInstID, transform);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -69,7 +117,41 @@ void NavMeshAssets::AddNodesToScene(NavMeshBuilder* navmesh)
 void NavMeshAssets::AddNode(float x, float y, float z)
 {
 	mat4 translate = mat4::Translate(x, y, z);
-	nodeInstIDs.push_back(m_renderer->AddInstance(m_nodeMeshID, translate));
+	int nodeinst = m_renderer->AddInstance(m_nodeMeshID, translate);
+	nodes.push_back({ nodeinst, make_float3(x, y, z) });
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshAssets::AddEdgesToScene (TODO)                                      |
+//  |  Adds a all navmesh edges as cylinders to the scene.                  LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshAssets::AddEdgesToScene(NavMeshBuilder* navmesh)
+{
+	return; // DEBUG
+	const dtNavMesh* mesh = navmesh->GetMesh();
+	for (int a = 0; a < mesh->getMaxTiles(); a++)
+	{
+		const dtMeshTile* tile = mesh->getTile(a);
+		for (int i = 0; i < tile->header->vertCount; ++i)
+		{
+			const float* v = &tile->verts[i * 3];
+			AddNode(v[0], v[1], v[2]);
+		}
+		for (int i = 0; i < tile->header->detailVertCount; ++i)
+		{
+			const float* v = &tile->detailVerts[i * 3];
+			AddNode(v[0], v[1], v[2]);
+		}
+	}
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshAssets::AddEdge (TODO)                                              |
+//  |  Adds an edge to the scene.                                           LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshAssets::AddEdge(float3 node1, float3 node2)
+{
+
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -81,11 +163,15 @@ void NavMeshAssets::Clean()
 	// TODO: Remove old .obj file (requires new platform function)
 	// TODO: Remove the old navmesh mesh to prevent memory leaks
 	if (m_navmeshInstID >= 0) m_renderer->RemoveInstance(m_navmeshInstID);
+	if (m_startInstID < 0) printf("NO KNOWN AGENT INST ID\n"); // DEBUG
 	if (m_startInstID >= 0) m_renderer->RemoveInstance(m_startInstID);
 	if (m_endInstID >= 0) m_renderer->RemoveInstance(m_endInstID);
-	for (std::vector<int>::iterator it = nodeInstIDs.begin(); it < nodeInstIDs.end(); it++)
-		m_renderer->RemoveInstance(*it);
-	nodeInstIDs.clear();
+	for (std::vector<Node>::iterator it = nodes.begin(); it < nodes.end(); it++)
+		m_renderer->RemoveInstance(it->instID);
+	nodes.clear();
+	for (std::vector<Edge>::iterator it = edges.begin(); it < edges.end(); it++)
+		m_renderer->RemoveInstance(it->instID);
+	edges.clear();
 	m_navmeshInstID = m_startInstID = m_endInstID = -1;
 	//m_navmeshMeshID = -1;
 }
@@ -155,6 +241,11 @@ void NavMeshAssets::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 	}
 	fprintf(f, "# %i vertices\n\n", vertCount);
 
+	// Writing texture coordinates
+	fprintf(f, "vt 0 0\n");
+	fprintf(f, "vt 0 1\n");
+	fprintf(f, "vt 1 1\n");
+
 	// Writing normals
 	int normCount = 0;
 	for (int i = 0; i < tile->header->polyCount; ++i)
@@ -199,9 +290,15 @@ void NavMeshAssets::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 	fprintf(f, "usemtl navmesh\n");
 	for (int i = 0; i < tile->header->polyCount; ++i)
 	{
+		std::vector<int>* triIdx = new std::vector<int>; // The triangle indices of this polygon
 		const dtPoly poly = tile->polys[i];
+
+		// If it's an off-mesh connection, continue
 		if (poly.getType() == DT_POLYTYPE_OFFMESH_CONNECTION)
+		{
+			m_polyTriIdx.push_back(triIdx);
 			continue;
+		}
 		const dtPolyDetail pd = tile->detailMeshes[i];
 
 		// For each triangle in the polygon
@@ -220,10 +317,13 @@ void NavMeshAssets::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 			// Write the face to the file
 			fprintf(f, "f");
 			for (int k = 0; k < 3; k++)
-				fprintf(f, " %i//%i", v[k] + 1, faceCount + 1); // +1 because .obj indices start at 1
+				fprintf(f, " %i/%i/%i", v[k] + 1, k + 1, faceCount + 1); // +1 because .obj indices start at 1
 			fprintf(f, "\n");
+
+			triIdx->push_back(faceCount); // Adds the triangle to the poly
 			faceCount++;
 		}
+		m_polyTriIdx.push_back(triIdx);
 	}
 	fprintf(f, "# %i faces\n\n", faceCount);
 }

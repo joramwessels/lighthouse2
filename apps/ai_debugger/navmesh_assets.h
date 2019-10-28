@@ -20,7 +20,7 @@
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshAssets                                                              |
-//  |  NavMeshAssets class handles the scene assets of the navmesh.         LH2'19|
+//  |  NavMeshAssets class handles the representation of the navmesh.       LH2'19|
 //  +-----------------------------------------------------------------------------+
 class NavMeshAssets
 {
@@ -30,23 +30,59 @@ public:
 	{
 		// Add meshes
 		m_nodeMeshID = m_renderer->AddMesh("node.obj", m_dir, .01f);
-		m_agentMeshID = m_renderer->AddMesh("agent.obj", m_dir, .01f);
+		m_agentMeshID = m_renderer->AddMesh("agent.obj", m_dir, 1.0f);
+		m_edgeMeshID = m_renderer->AddMesh("agent.obj", m_dir, .01f);
 	};
 	~NavMeshAssets() {};
 
 	void ReplaceMesh(NavMeshBuilder* navmesh);
+	void PlaceAgent(float3 pos);
+	void PlotPath(NavMeshNavigator* navmesh, float3 start, float3 end, int maxSize=100);
 	void Clean();
+
+	//bool isNavMesh(int meshID) const { return meshID == m_navmeshMeshID; }; // DEBUG: These are faster, but require HostScene.instances to be fixed
+	//bool isAgent(int meshID) const { return meshID == m_agentMeshID; };
+	//bool isNode(int meshID) const { return meshID == m_nodeMeshID; };
+	//bool isEdge(int meshID) const { return meshID == m_edgeMeshID; };
+	bool isNavMesh(int instID) const { return instID == m_navmeshInstID; };
+	bool isAgent(int instID) const { return instID == m_startInstID; };
+	bool isNode(int instID) const {
+		for (int i = 0; i < nodes.size(); i++)
+			if (nodes[i].instID == instID) return true;
+		return false;
+	}
+	bool isEdge(int instID) const {
+		for (int i = 0; i < edges.size(); i++)
+			if (edges[i].instID == instID) return true;
+		return false;
+	}
+
+	float3* pathStart = 0, *pathEnd = 0;
 
 private:
 	RenderAPI* m_renderer;
+	dtNavMesh* m_navmesh;
 	const char* m_dir;
 
-	int m_nodeMeshID = -1, m_navmeshMeshID = -1, m_navmeshInstID = -1;
+	int m_navmeshMeshID = -1, m_navmeshInstID = -1;
+	int m_nodeMeshID = -1, m_edgeMeshID = -1;
 	int m_agentMeshID = -1, m_startInstID = -1, m_endInstID = -1;
-	std::vector<int> nodeInstIDs;
+	int m_agentHeight, m_agentRadius;
+	
+	struct Node { int instID; float3 pos; };
+	struct Edge { int instID; int n1, n2; };
+	std::vector<Node> nodes;
+	std::vector<Edge> edges;
+	std::vector<std::vector<int>*> m_polyTriIdx; // The poly's triangle indices within the mesh
+	float3 selectedTriColor = { 1.0f, 1.0f, 0.0f };
 
 	void AddNodesToScene(NavMeshBuilder* navmesh);
 	void AddNode(float x, float y, float z);
+	void AddEdgesToScene(NavMeshBuilder* navmesh);
+	void AddEdge(float3 node1, float3 node2);
+
+	const std::vector<int>* GetPolyTriangleIndices(dtPolyRef poly, int tileIdx = 0);
+
 	void WriteMaterialFile();
 	void WriteTileToMesh(const dtMeshTile* tile, FILE* file);
 	void SaveAsMesh(NavMeshBuilder* navmesh);

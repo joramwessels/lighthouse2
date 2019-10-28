@@ -4,7 +4,8 @@ Kd    0.00 1.00 1.00
 Ks    0.00 0.00 0.00
 d     0.20
 Tr    0.80
-illum 1
+illum 9
+map_Kd navmesh_tex.png
 
 newmtl node
 Ka  1.0000  0.0000  1.0000

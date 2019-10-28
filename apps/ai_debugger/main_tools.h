@@ -63,6 +63,7 @@ void MousePosCallback( GLFWwindow* window, double x, double y )
 	TwMouseMotion( (int)x, (int)y );
 	// set pixel probe pos for triangle picking
 	renderer->SetProbePos( make_int2( (int)x, (int)y ) );
+	probeCoords = make_int2((int)x, (int)y);
 }
 void MouseWheelCallback( GLFWwindow* window, double x, double y )
 {
