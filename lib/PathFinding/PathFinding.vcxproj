@@ -132,6 +132,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\tinyxml2\tinyxml2.cpp" />
+    <ClCompile Include="navmesh_navigator.cpp" />
     <ClCompile Include="navmesh_builder.cpp" />
     <ClCompile Include="recastnavigation\DebugUtils\Source\DebugDraw.cpp" />
     <ClCompile Include="recastnavigation\DebugUtils\Source\DetourDebugDraw.cpp" />
@@ -166,6 +167,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\tinyxml2\tinyxml2.h" />
+    <ClInclude Include="buildcontext.h" />
+    <ClInclude Include="navmesh_common.h" />
+    <ClCompile Include="navmesh_config.cpp" />
+    <ClInclude Include="navmesh_navigator.h" />
     <ClInclude Include="navmesh_builder.h" />
     <ClInclude Include="recastnavigation\DebugUtils\Include\DebugDraw.h" />
     <ClInclude Include="recastnavigation\DebugUtils\Include\DetourDebugDraw.h" />

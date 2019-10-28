@@ -15,18 +15,11 @@
 
 #pragma once
 
-#include <string.h> // memset
-#include <vector>	// vector
+#include "Recast.h" // rcContext, rcHeightfield, rcPolyMesh, etc.
 
-#include "tinyxml2.h" // configuration saving and -loading
-
-#include "Recast.h"				  // navmesh generation
-#include "RecastDump.h"			  // duLogBuildTimes
-#include "DetourNavMesh.h"		  // Detour navmesh
-#include "DetourNavMeshBuilder.h" // Detour navmesh generation
-#include "DetourNavMeshQuery.h"	  // Detour query system
-
-#include "rendersystem.h" // HostScene, HostMesh, HostTri, float3, int3
+#include "rendersystem.h"	   // HostScene, HostMesh, HostTri, float3, int3, FileExists
+#include "navmesh_navigator.h" // NavMeshNavigator, SerializeNavMesh, DeserializeNavMesh
+#include "navmesh_common.h"    // error handling
 
 namespace lighthouse2 {
 
@@ -36,6 +29,16 @@ namespace lighthouse2 {
 //  +-----------------------------------------------------------------------------+
 struct NavMeshConfig
 {
+
+	int m_width, m_height, m_tileSize, m_borderSize;		 // Automatically computed
+	float m_cs, m_ch;										 // Voxel cell size and -height
+	float3 m_bmin, m_bmax;									 // AABB navmesh restraints
+	float m_walkableSlopeAngle;								 // In degrees
+	int m_walkableHeight, m_walkableClimb, m_walkableRadius; // In voxels
+	int m_maxEdgeLen;
+	float m_maxSimplificationError;
+	int m_minRegionArea, m_mergeRegionArea, m_maxVertsPerPoly; // maxVertsPerPoly should not exceed 6
+	float m_detailSampleDist, m_detailSampleMaxError;
 
 	//  +-------------------------------------------------------------------------------------------------------+
 	//  |  SamplePartitionType                                                                                  |
@@ -72,23 +75,12 @@ struct NavMeshConfig
 		SAMPLE_PARTITION_LAYERS,
 	};
 
-	int m_width, m_height, m_tileSize, m_borderSize;		 // Automatically computed
-	float m_cs, m_ch;										 // Voxel cell size and -height
-	float3 m_bmin, m_bmax;									 // AABB navmesh restraints
-	float m_walkableSlopeAngle;								 // In degrees
-	int m_walkableHeight, m_walkableClimb, m_walkableRadius; // In voxels
-	int m_maxEdgeLen;
-	float m_maxSimplificationError;
-	int m_minRegionArea, m_mergeRegionArea, m_maxVertsPerPoly; // maxVertsPerPoly should not exceed 6
-	float m_detailSampleDist, m_detailSampleMaxError;
-
 	SamplePartitionType m_partitionType; // The partitioning method
 	bool m_keepInterResults;			 // Holding on to the intermediate data structures
 	bool m_filterLowHangingObstacles;	 // Filtering for low obstacles
 	bool m_filterLedgeSpans;			 // Filtering for ledges
 	bool m_filterWalkableLowHeightSpans; // Filtering for low ceilings
 	bool m_printBuildStats;				 // Printing detailed build time statistics
-	bool m_printImmediately;			 // Printing log entries immediately or at dumpLog
 	const char* m_id;					 // Name of the navmesh instance
 
 	NavMeshConfig();
@@ -100,7 +92,7 @@ struct NavMeshConfig
 	void SetPolySettings(int maxEdgeLen, float maxSimplificationError,
 		int minRegionArea, int minMergedRegionArea, int maxVertPerPoly);
 	void SetDetailPolySettings(float sampleDist, float maxSimplificationError);
-	void NavMeshConfig::SetPartitionType(SamplePartitionType type) { m_partitionType = type; };
+	void SetPartitionType(SamplePartitionType type) { m_partitionType = type; };
 	void SetKeepInterResults(bool keep) { m_keepInterResults = keep; };
 	void SetSurfaceFilterSettings(bool lowHangingObstacles,
 		bool ledgeSpans, bool WalkableLowHeightSpans);
@@ -113,93 +105,22 @@ struct NavMeshConfig
 };
 
 //  +-----------------------------------------------------------------------------+
-//  |  BuildContext                                                               |
-//  |  An implementation of the virtual native Recast logging class.        LH2'19|
-//  +-----------------------------------------------------------------------------+
-class BuildContext : public rcContext
-{
-	float m_startTime[RC_MAX_TIMERS];
-	float m_accTime[RC_MAX_TIMERS];
-
-	static const int MAX_MESSAGES = 1000;
-	const char* m_messages[MAX_MESSAGES];
-	int m_messageCount;
-	static const int TEXT_POOL_SIZE = 8000;
-	char m_textPool[TEXT_POOL_SIZE];
-	int m_textPoolSize;
-	Timer timer;
-
-public:
-	BuildContext() : m_messageCount(0), m_textPoolSize(0)
-	{
-		memset(m_messages, 0, sizeof(char*) * MAX_MESSAGES);
-		resetTimers();
-	};
-
-	/// Dumps the log to stdout.
-	void dumpLog(const char* format, ...);
-	/// Returns number of log messages.
-	int getLogCount() const { return m_messageCount; };
-	/// Returns log message text.
-	const char* getLogText(const int i) const { return m_messages[i] + 1; };
-
-protected:
-	/// Virtual functions for custom implementations.
-	///@{
-	virtual void doResetLog() { m_messageCount = 0; m_textPoolSize = 0; };
-	virtual void doLog(const rcLogCategory category, const char* msg, const int len);
-	virtual void doResetTimers() { for (int i = 0; i < RC_MAX_TIMERS; ++i) m_accTime[i] = -1; };
-	virtual void doStartTimer(const rcTimerLabel label) { m_startTime[label] = timer.elapsed(); };
-	virtual void doStopTimer(const rcTimerLabel label);
-	virtual int doGetAccumulatedTime(const rcTimerLabel label) const { return m_accTime[label] * 1000000.0f; };
-	///@}
-};
-
-//  +-----------------------------------------------------------------------------+
 //  |  NavMeshBuilder                                                             |
-//  |  NavMesh class definition.                                            LH2'19|
+//  |  A contex in which navmeshes can be build, edited, and saved.         LH2'19|
 //  +-----------------------------------------------------------------------------+
 class NavMeshBuilder
 {
 public:
 
-	//  +-----------------------------------------------------------------------------+
-	//  |  NavMeshErrorCode                                                           |
-	//  |  Encodes bitwise info about the last error.                                 |
-	//  |  Error codes can be interpreted by bitwise & operations.              LH2'19|
-	//  +-----------------------------------------------------------------------------+
-	enum NavMeshErrorCode
-	{
-		NMSUCCESS = 0x0,	// No issues
-		NMRECAST = 0x1,		// Caused by Recast
-		NMDETOUR = 0x2,		// Caused by Detour
-		NMINPUT = 0x4,		// Incorrect input
-		NMALLOCATION = 0x8, // Allocation failed, most likely out of memory
-		NMCREATION = 0x16,	// A R/D function failed to create a structure
-		NMIO = 0x32			// Issues with I/O
-	};
-
 	// constructor / destructor
-	NavMeshBuilder(const char* dir) : m_dir(dir)
-	{
-		m_ctx = new BuildContext();
-		m_triareas = 0;
-		m_heightField = 0;
-		m_chf = 0;
-		m_cset = 0;
-		m_pmesh = 0;
-		m_dmesh = 0;
-		m_navMesh = 0;
-		m_navQuery = 0;
-		m_errorCode = 0;
-	};
+	NavMeshBuilder(const char* dir);
 	~NavMeshBuilder() { Cleanup(); };
 
-	void Build(HostScene* scene);
-	void Serialize() { Serialize(m_dir, m_config.m_id); };
-	void Deserialize() { Deserialize(m_dir, m_config.m_id); };
+	int Build(HostScene* scene);
+	int Serialize() { return Serialize(m_dir, m_config.m_id); };
+	int Deserialize() { return Deserialize(m_dir, m_config.m_id); };
 	void Cleanup();
-	void DumpLog() const { ((BuildContext*)m_ctx)->dumpLog("\n"); };
+	void DumpLog() const;
 
 	void SetConfig(NavMeshConfig config) { m_config = config; };
 	void SetID(const char* id) { m_config.m_id = id; };
@@ -207,8 +128,8 @@ public:
 	const char* GetDir() const { return m_dir; };
 	NavMeshConfig* GetConfig() { return &m_config; };
 	dtNavMesh* GetMesh() const { return m_navMesh; };
-	dtNavMeshQuery* GetQuery() const { return m_navQuery; };
 	int GetError() { int e = m_errorCode; m_errorCode = NMSUCCESS; return e; };
+	NavMeshNavigator* GetNavigator() const { return new NavMeshNavigator(m_navMesh); };
 
 protected:
 
@@ -225,21 +146,19 @@ protected:
 	rcPolyMesh* m_pmesh;			// The polygon mesh
 	rcPolyMeshDetail* m_dmesh;		// The detailed polygon mesh
 	dtNavMesh* m_navMesh;			// The final navmesh as used by Detour
-	dtNavMeshQuery* m_navQuery;		// The navmesh query system
 	int m_errorCode;
 
 	// Build functions
-	void RasterizePolygonSoup(const int vert_count, const float* verts, const int tri_count, const int* tris);
-	void FilterWalkableSurfaces();
-	void PartitionWalkableSurface();
-	void ExtractContours();
-	void BuildPolygonMesh();
-	void CreateDetailMesh();
-	void CreateDetourData();
+	int RasterizePolygonSoup(const int vert_count, const float* verts, const int tri_count, const int* tris);
+	int FilterWalkableSurfaces();
+	int PartitionWalkableSurface();
+	int ExtractContours();
+	int BuildPolygonMesh();
+	int CreateDetailMesh();
+	int CreateDetourData();
 
-	void Serialize(const char* dir, const char* ID);
-	void Deserialize(const char* dir, const char* ID);
-	void Error(rcLogCategory level, int code, const char* format, ...);
+	int Serialize(const char* dir, const char* ID);
+	int Deserialize(const char* dir, const char* ID);
 };
 
 // Area Types // TODO make accessible to app

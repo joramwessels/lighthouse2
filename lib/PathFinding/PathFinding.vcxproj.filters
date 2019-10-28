@@ -115,6 +115,8 @@
       <Filter>tinyxml2</Filter>
     </ClCompile>
     <ClCompile Include="navmesh_builder.cpp" />
+    <ClCompile Include="navmesh_navigator.cpp" />
+    <ClCompile Include="navmesh_config.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="recastnavigation\DebugUtils\Include\DebugDraw.h">
@@ -193,5 +195,8 @@
       <Filter>tinyxml2</Filter>
     </ClInclude>
     <ClInclude Include="navmesh_builder.h" />
+    <ClInclude Include="navmesh_navigator.h" />
+    <ClInclude Include="navmesh_common.h" />
+    <ClInclude Include="buildcontext.h" />
   </ItemGroup>
 </Project>
