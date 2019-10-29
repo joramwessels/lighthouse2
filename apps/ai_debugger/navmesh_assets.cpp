@@ -13,14 +13,37 @@
    limitations under the License.
 */
 
-#include "navmesh_assets.h"
 #include "DetourNode.h"
 
+#include "platform.h" // GLFW, CreateVBO, BindVBO
+#include "navmesh_assets.h"
+
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshAssets::PlotPath (TODO)                                             |
-//  |  Plots the given path from start to end as a line.                    LH2'19|
+//  |  WorldToScreenPos (TODO)                                                    |
+//  |  Converts a world position to a screen position.                      LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshAssets::PlotPath(NavMeshNavigator* navmesh, float3 start, float3 end, int maxSize)
+float2 WorldToScreenPos(float3 worldPos, Camera* camera)
+{
+	ViewPyramid p = camera->GetView();
+	float3 dir = worldPos - camera->position;				// vector from camera to pos
+	dir -= camera->direction * dot(dir, camera->direction); // vector to screen intersection
+	float3 right = p.p2 - p.p1, up = p.p1 - p.p3;			// vectors from corner to corner
+	float x = dot(dir, normalize(right)) / (.5*length(right));
+	float y = dot(dir, normalize(up)) / (.5*length(up));
+
+	//float3 up = make_float3(0, 1, 0), forward = camera->direction;
+	//float3 right = normalize(cross(forward, up));
+	//up = cross(right, forward);
+
+	return make_float2(x, y);
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshAssets::UpdatePath                                                  |
+//  |  Recalculates the path from start to end. *maxSize* is the                  |
+//  |  maximum number of allocated nodes, and defaults to 100.              LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshAssets::UpdatePath(NavMeshNavigator* navmesh, float3 start, float3 end, int maxSize)
 {
 	// Finding path
 	dtPolyRef* path = (dtPolyRef*)malloc(maxSize * sizeof(dtPolyRef));
@@ -30,14 +53,62 @@ void NavMeshAssets::PlotPath(NavMeshNavigator* navmesh, float3 start, float3 end
 	// Initializing target
 	float3 iterPos, targetPos;
 	if(navmesh->FindClosestPointOnPoly(path[0], start, &iterPos)) return;
-	if(navmesh->FindClosestPointOnPoly(path[pathCount - 1], end, &targetPos)) return;
+	if(navmesh->FindClosestPointOnPoly(path[pathCount - 1], end, &targetPos)) return; // TODO: necessary? end is unused
 
-	// DEBUG: spawn sphere on each path node
+	// Resetting path array
+	if (m_path) delete[] m_path;
+	m_path = (float3*)malloc(pathCount * sizeof(float3));
+	m_pathCount = pathCount;
+
+	// Adding nodes to path array
 	for (int i = 0; i < pathCount; i++)
 	{
-		if (navmesh->FindClosestPointOnPoly(path[i], start, &iterPos)) return;
-		AddNode(iterPos.x, iterPos.y, iterPos.z); // DEBUG
+		if (navmesh->FindClosestPointOnPoly(path[i], iterPos, &iterPos)) return; // TODO: take previous iterPos instead of start
+		m_path[i] = iterPos;
 	}
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshAssets::PlotPath (TODO)                                             |
+//  |  Plots the path calculated before as a series of lines                      |
+//  |  using the renderer's viewpyramid to convert 3D to 2D.                LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshAssets::PlotPath(float3 start)
+{
+	if (!m_pathCount || !m_path) return;
+
+	// Convert world positions to screen positions
+	std::vector<float2> vertices;
+	std::vector<float4> colors;
+	Camera* view = m_renderer->GetCamera();
+	vertices.push_back(WorldToScreenPos(start, view));
+	colors.push_back(m_pathColor);
+	for (int i = 0; i < m_pathCount; i++)
+	{
+		vertices.push_back(WorldToScreenPos(m_path[i], view));
+		colors.push_back(m_pathColor);
+	}
+
+	// Create VBOs
+	static GLuint vboID = 0;
+	GLuint vertexBuffer = CreateVBO((const GLfloat*)&vertices[0], vertices.size() * sizeof(float2));
+	GLuint colorBuffer = CreateVBO((const GLfloat*)&colors[0], colors.size() * sizeof(float4));
+	glGenVertexArrays(1, &vboID);
+	glBindVertexArray(vboID);
+	BindVBO(0, 2, vertexBuffer); // 0 = position attribute, 2 = floats in vertex
+	BindVBO(3, 4, colorBuffer);  // 3 = color attribute, 4 = floats in color
+	glBindVertexArray(0);
+	CheckGL();
+
+	// Draw
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBindVertexArray(vboID);
+	glLineWidth(m_pathWidth);
+	glDrawArrays(GL_LINE_STRIP, 0, vertices.size());
+	glBindVertexArray(0);
+	CheckGL();
+	glDisable(GL_BLEND);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -70,6 +141,7 @@ void NavMeshAssets::ReplaceMesh(NavMeshBuilder* navmesh)
 	m_agentHeight = config->m_walkableHeight * config->m_ch; // voxels to world units
 	m_agentRadius = config->m_walkableRadius * config->m_cs; // voxels to world units
 	m_navmesh = navmesh->GetMesh();
+	m_renderer->SynchronizeSceneData();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -172,8 +244,12 @@ void NavMeshAssets::Clean()
 	for (std::vector<Edge>::iterator it = edges.begin(); it < edges.end(); it++)
 		m_renderer->RemoveInstance(it->instID);
 	edges.clear();
+
 	m_navmeshInstID = m_startInstID = m_endInstID = -1;
 	//m_navmeshMeshID = -1;
+	if (m_path) delete[] m_path;
+	m_path = 0;
+	m_pathCount = 0;
 }
 
 //  +-----------------------------------------------------------------------------+

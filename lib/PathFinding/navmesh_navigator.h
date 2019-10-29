@@ -15,7 +15,9 @@
 
 #pragma once
 
-#include "DetourNavMeshQuery.h" // dtNavMesh, dtNavMeshQuery, dtQueryFilter
+//#ifdef PATHFINDINGBUILD
+	#include "DetourNavMeshQuery.h" // dtNavMesh, dtNavMeshQuery, dtQueryFilter
+//#endif
 
 #include "navmesh_common.h"
 

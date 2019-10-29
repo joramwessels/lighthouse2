@@ -49,25 +49,6 @@ void RefreshNavMesh();
 
 
 //  +-----------------------------------------------------------------------------+
-//  |  WorldToScreenPos (TODO)                                                    |
-//  |  Converts a world position to a screen position.                      LH2'19|
-//  +-----------------------------------------------------------------------------+
-int2 WorldToScreenPos(float3 worldPos, Camera* camera)
-{
-	float3 dir = worldPos - camera->position; // vector from camera to pos
-	float3 up = make_float3(0, 1, 0), forward = camera->direction;
-	float3 right = normalize(cross(forward, up));
-	up = cross(right, forward);
-	// undo camera rotation
-
-	// find dir pointing at screen
-	// find vector from corner to there
-	// find its relative x- and y lengths
-
-	return int2();
-}
-
-//  +-----------------------------------------------------------------------------+
 //  |  RefreshUI                                                                  |
 //  |  AntTweakBar.                                                         LH2'19|
 //  +-----------------------------------------------------------------------------+
@@ -92,6 +73,15 @@ void InitGUI()
 	navMeshAssets = new NavMeshAssets(renderer, "data\\ai\\");
 
 	InitFPSPrinter();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  DrawNavMesh                                                                |
+//  |  Draws the GL aspects of the navmesh.                                 LH2'19|
+//  +-----------------------------------------------------------------------------+
+void DrawNavMesh()
+{
+	navMeshAssets->PlotPath(pathStart);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -353,16 +343,16 @@ bool HandleInput(float frameTime)
 		{
 			pathStart = probedPos;
 			navMeshAssets->pathStart = new float3(probedPos);
-			if (navMeshAssets->pathEnd)
-				navMeshAssets->PlotPath(navMeshNavigator, pathStart, pathEnd);
+			if (navMeshAssets->pathEnd) // if both start and end are set
+				navMeshAssets->UpdatePath(navMeshNavigator, pathStart, pathEnd);
 			//navMeshAssets->PlaceAgent(probedPos); // DEBUG
 		}
 		if (rightClickLastFrame && meshName == NAVMESH)
 		{
 			pathEnd = probedPos;
 			navMeshAssets->pathEnd = new float3(probedPos);
-			if (navMeshAssets->pathStart)
-				navMeshAssets->PlotPath(navMeshNavigator, pathStart, pathEnd);
+			if (navMeshAssets->pathStart) // if both start and end are set
+				navMeshAssets->UpdatePath(navMeshNavigator, pathStart, pathEnd);
 		}
 		if (coreStats.probedDist < 1000) // prevents scene from going invisible
 			camera->focalDistance = coreStats.probedDist;

@@ -82,6 +82,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>../tinyxml2;../GLFW/Include;../half2.1.0;../platform;recastnavigation/Recast/Include;../RenderSystem;recastnavigation/DetourTileCache/Include;recastnavigation/DetourCrowd/Include;recastnavigation/Detour/Include;recastnavigation/DebugUtils/Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>PATHFINDINGBUILD;WIN32;WIN64;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Lib>
       <AdditionalDependencies>rendersystem.lib; platform.lib</AdditionalDependencies>
@@ -118,6 +119,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>../tinyxml2;../GLFW/Include;../half2.1.0;../platform;recastnavigation/Recast/Include;../RenderSystem;recastnavigation/DetourTileCache/Include;recastnavigation/DetourCrowd/Include;recastnavigation/Detour/Include;recastnavigation/DebugUtils/Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>PATHFINDINGBUILD;WIN32;WIN64;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>

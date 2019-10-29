@@ -15,7 +15,9 @@
 
 #pragma once
 
-#include "Recast.h" // rcContext, rcHeightfield, rcPolyMesh, etc.
+//#ifdef PATHFINDINGBUILD
+	#include "Recast.h" // rcContext, rcHeightfield, rcPolyMesh, etc.
+//#endif
 
 #include "rendersystem.h"	   // HostScene, HostMesh, HostTri, float3, int3, FileExists
 #include "navmesh_navigator.h" // NavMeshNavigator, SerializeNavMesh, DeserializeNavMesh

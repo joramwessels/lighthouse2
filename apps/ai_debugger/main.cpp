@@ -123,6 +123,7 @@ int main()
 		DrawQuad();
 		shader->Unbind();
 		// draw ui
+		AI_UI::DrawNavMesh();
 		TwDraw();
 		AI_UI::PrintFPS(deltaTime);
 		// finalize

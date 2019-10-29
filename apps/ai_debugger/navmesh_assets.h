@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include "DetourNavMesh.h" // TODO: replace all Detour calls with NavMeshNavigator calls?
+
 #include "rendersystem.h"
 #include "navmesh_builder.h"
 
@@ -37,7 +39,8 @@ public:
 
 	void ReplaceMesh(NavMeshBuilder* navmesh);
 	void PlaceAgent(float3 pos);
-	void PlotPath(NavMeshNavigator* navmesh, float3 start, float3 end, int maxSize=100);
+	void UpdatePath(NavMeshNavigator* navmesh, float3 start, float3 end, int maxSize = 100);
+	void PlotPath(float3 start);
 	void Clean();
 
 	//bool isNavMesh(int meshID) const { return meshID == m_navmeshMeshID; }; // DEBUG: These are faster, but require HostScene.instances to be fixed
@@ -74,7 +77,14 @@ private:
 	std::vector<Node> nodes;
 	std::vector<Edge> edges;
 	std::vector<std::vector<int>*> m_polyTriIdx; // The poly's triangle indices within the mesh
-	float3 selectedTriColor = { 1.0f, 1.0f, 0.0f };
+
+	float3 m_selectedTriColor = { 1.0f, 1.0f, 0.0f };
+	mat4 m_edgeScale = mat4::Scale(make_float3(0.1f, 0.1f, 0.1f)); // TODO
+
+	float3* m_path = 0;  // The last calculated path as world coordinates
+	int m_pathCount = 0; // The number of nodes in the path
+	float4 m_pathColor = { 1.0f, 0.0f, 0.0f, 0.5f };
+	float m_pathWidth = 3.0f;
 
 	void AddNodesToScene(NavMeshBuilder* navmesh);
 	void AddNode(float x, float y, float z);

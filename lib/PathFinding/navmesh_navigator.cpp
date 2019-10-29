@@ -56,7 +56,9 @@ int NavMeshNavigator::FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float
 	if (dtStatusFailed(err))
 		DETOUR_ERROR(NMDETOUR, "Closest point on poly '%i' to (%.2f, %.2f, %.2f) could not be found",
 			polyID, pos.x, pos.y, pos.z);
-	closest = &make_float3(closestl[0], closestl[1], closestl[2]);
+	closest->x = closestl[0];
+	closest->y = closestl[1];
+	closest->z = closestl[2];
 	return NMSUCCESS;
 }
 
