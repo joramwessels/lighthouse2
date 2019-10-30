@@ -45,6 +45,64 @@ int NavMeshNavigator::FindPath(float3 start, float3 end, dtPolyRef* path, int* p
 }
 
 //  +-----------------------------------------------------------------------------+
+//  |  NavMeshNavigator::FindPath                                                 |
+//  |  Finds the shortest path from start to end.                                 |
+//  |  *path* is the resulting vector of world positions to follow.               |
+//  |  *distToEnd* is the error from the last pos to the end, 0.0 when reachable. |
+//  |  *maxCount* specifies the maximum path length in nodes.               LH2'19|
+//  +-----------------------------------------------------------------------------+
+int NavMeshNavigator::FindPath(float3 start, float3 end, std::vector<float3>& path, float& distToEnd, int maxCount)
+{
+	// Prepare pathfinding
+	dtPolyRef startRef, endRef;
+	m_errorCode = FindNearestPoly(start, &startRef);
+	m_errorCode = FindNearestPoly(end, &endRef);
+	if (m_errorCode) return m_errorCode;
+	float startl[3] = { start.x, start.y, start.z };
+	float endl[3] = { end.x, end.y, end.z };
+	dtPolyRef* polyPath = (dtPolyRef*)malloc(sizeof(dtPolyRef)*maxCount);
+	int pathCount;
+
+	// Calculate path
+	dtStatus err = m_query->findPath(startRef, endRef, startl, endl, &m_filter, polyPath, &pathCount, maxCount);
+	if (dtStatusFailed(err))
+		DETOUR_ERROR(NMDETOUR, "Could find a path from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)",
+			start.x, start.y, start.z, end.x, end.y, end.z);
+
+	// Convert polygon refs to positions
+	if (!path.empty()) path.clear();
+	path.reserve(pathCount + 1);
+	float iterPos[3] = { start.x, start.y, start.z };
+	for (int i = 0; i < pathCount; i++)
+	{
+		dtStatus err = m_query->closestPointOnPoly(polyPath[i], iterPos, iterPos, 0);
+		if (dtStatusFailed(err))
+			DETOUR_ERROR(NMDETOUR, "Closest point on poly '%i' to (%.2f, %.2f, %.2f) could not be found",
+				polyPath[i], iterPos[0], iterPos[1], iterPos[2]);
+		path.push_back({ iterPos[0], iterPos[1], iterPos[2] });
+	}
+	
+	// Add last position
+	if (polyPath[pathCount - 1] == endRef) // reachable
+	{
+		path.push_back(end);
+		distToEnd = 0;
+	}
+	else // unreachable
+	{
+		dtStatus err = m_query->closestPointOnPoly(polyPath[pathCount - 1], endl, iterPos, 0);
+		if (dtStatusFailed(err))
+			DETOUR_ERROR(NMDETOUR, "Closest point on poly '%i' to (%.2f, %.2f, %.2f) could not be found",
+				polyPath[pathCount - 1], iterPos[0], iterPos[1], iterPos[2]);
+		float3 lastPathPos = { iterPos[0], iterPos[1], iterPos[2] };
+		path.push_back(lastPathPos);
+		distToEnd = length(end - lastPathPos);
+	}
+
+	return NMSUCCESS;
+}
+
+//  +-----------------------------------------------------------------------------+
 //  |  NavMeshNavigator::FindNearestPointOnPoly                                   |
 //  |  Finds the nearest pos on the specified *polyID* from the given position.   |
 //  |  *closest* is the output.                                             LH2'19|

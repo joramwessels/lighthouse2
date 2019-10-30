@@ -61,10 +61,8 @@ public:
 	int FindNearestPoly(float3 pos, dtPolyRef* polyID, float3* polyPos = 0) const;
 	int FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float3* nearestPoint, bool* posOverPoly=0);
 	int FindPath(float3 start, float3 end, dtPolyRef* path, int* pathCount, int maxCount=100);
+	int FindPath(float3 start, float3 end, std::vector<float3>& path, float& distToEnd, int maxCount = 100);
 	void Clean();
-
-	//const dtNavMesh* GetMesh() const { return m_navmesh; };
-	//const dtNavMeshQuery* GetQuery() const { return m_query; };
 
 protected:
 	int m_errorCode;		 // error code of the last error

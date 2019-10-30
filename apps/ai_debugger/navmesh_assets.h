@@ -72,10 +72,9 @@ private:
 	float3 m_selectedTriColor = { 1.0f, 1.0f, 0.0f };
 	mat4 m_edgeScale = mat4::Scale(make_float3(0.1f, 0.1f, 0.1f)); // TODO
 
-	float3* m_path = 0;  // The last calculated path as world coordinates
-	int m_pathCount = 0; // The number of nodes in the path
+	std::vector<float3> m_path;  // The last calculated path as world coordinates
 	float4 m_pathColor = { 1.0f, 0.0f, 0.0f, 0.5f };
-	float m_pathWidth = 3.0f;
+	float m_distToEnd = -1, m_pathWidth = 3.0f;
 
 	void AddNodesToScene(NavMeshBuilder* navmesh);
 	void AddNode(float x, float y, float z);

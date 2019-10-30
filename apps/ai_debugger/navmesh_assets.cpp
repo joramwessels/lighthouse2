@@ -25,28 +25,7 @@
 //  +-----------------------------------------------------------------------------+
 void NavMeshAssets::UpdatePath(NavMeshNavigator* navmesh, float3 start, float3 end, int maxSize)
 {
-	// Finding path
-	dtPolyRef* path = (dtPolyRef*)malloc(maxSize * sizeof(dtPolyRef));
-	int pathCount;
-	if (navmesh->FindPath(start, end, path, &pathCount, maxSize)) return;
-
-	// Initializing target
-	float3 iterPos, targetPos;
-	if(navmesh->FindClosestPointOnPoly(path[0], start, &iterPos)) return;
-	if(navmesh->FindClosestPointOnPoly(path[pathCount - 1], end, &targetPos)) return;
-
-	// Resetting path array
-	if (m_path) delete[] m_path;
-	m_pathCount = pathCount + 1; // one extra node for the end pos
-	m_path = (float3*)malloc(m_pathCount * sizeof(float3));
-	m_path[pathCount] = end;
-
-	// Adding nodes to path array
-	for (int i = 0; i < pathCount; i++)
-	{
-		if (navmesh->FindClosestPointOnPoly(path[i], iterPos, &iterPos)) return; // TODO: take previous iterPos instead of start
-		m_path[i] = iterPos;
-	}
+	if (navmesh->FindPath(start, end, m_path, m_distToEnd, maxSize)) return;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -56,7 +35,7 @@ void NavMeshAssets::UpdatePath(NavMeshNavigator* navmesh, float3 start, float3 e
 //  +-----------------------------------------------------------------------------+
 void NavMeshAssets::PlotPath(float3 start)
 {
-	if (!m_pathCount || !m_path) return;
+	if (m_path.empty()) return;
 
 	// Convert world positions to screen positions
 	std::vector<float2> vertices;
@@ -64,9 +43,9 @@ void NavMeshAssets::PlotPath(float3 start)
 	Camera* view = m_renderer->GetCamera();
 	vertices.push_back(view->WorldToScreenPos(start));
 	colors.push_back(m_pathColor);
-	for (int i = 0; i < m_pathCount; i++)
+	for (std::vector<float3>::iterator i = m_path.begin(); i < m_path.end(); i++)
 	{
-		vertices.push_back(view->WorldToScreenPos(m_path[i]));
+		vertices.push_back(view->WorldToScreenPos(*i));
 		colors.push_back(m_pathColor);
 	}
 
@@ -211,9 +190,8 @@ void NavMeshAssets::Clean()
 
 	m_navmeshInstID = m_startInstID = m_endInstID = -1;
 	//m_navmeshMeshID = -1;
-	if (m_path) delete[] m_path;
-	m_path = 0;
-	m_pathCount = 0;
+	m_path = std::vector<float3>();
+	m_distToEnd = -1;
 
 	m_renderer->SynchronizeSceneData();
 }
