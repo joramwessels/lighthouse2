@@ -34,6 +34,9 @@ public:
 		m_nodeMeshID = m_renderer->AddMesh("node.obj", m_dir, .01f);
 		m_agentMeshID = m_renderer->AddMesh("agent.obj", m_dir, 1.0f);
 		m_edgeMeshID = m_renderer->AddMesh("agent.obj", m_dir, .01f);
+		m_renderer->GetScene()->meshes[m_nodeMeshID]->name = "Vertex";
+		m_renderer->GetScene()->meshes[m_agentMeshID]->name = "Agent";
+		m_renderer->GetScene()->meshes[m_edgeMeshID]->name = "Edge";
 	};
 	~NavMeshAssets() {};
 
@@ -43,28 +46,16 @@ public:
 	void PlotPath(float3 start);
 	void Clean();
 
-	//bool isNavMesh(int meshID) const { return meshID == m_navmeshMeshID; }; // DEBUG: These are faster, but require HostScene.instances to be fixed
-	//bool isAgent(int meshID) const { return meshID == m_agentMeshID; };
-	//bool isNode(int meshID) const { return meshID == m_nodeMeshID; };
-	//bool isEdge(int meshID) const { return meshID == m_edgeMeshID; };
-	bool isNavMesh(int instID) const { return instID == m_navmeshInstID; };
-	bool isAgent(int instID) const { return instID == m_startInstID; };
-	bool isNode(int instID) const {
-		for (int i = 0; i < nodes.size(); i++)
-			if (nodes[i].instID == instID) return true;
-		return false;
-	}
-	bool isEdge(int instID) const {
-		for (int i = 0; i < edges.size(); i++)
-			if (edges[i].instID == instID) return true;
-		return false;
-	}
+	bool isNavMesh(int meshID) const { return meshID == m_navmeshMeshID; };
+	bool isAgent(int meshID) const { return meshID == m_agentMeshID; };
+	bool isNode(int meshID) const { return meshID == m_nodeMeshID; };
+	bool isEdge(int meshID) const { return meshID == m_edgeMeshID; };
 
 	float3* pathStart = 0, *pathEnd = 0;
 
 private:
 	RenderAPI* m_renderer;
-	dtNavMesh* m_navmesh;
+	NavMeshNavigator* m_navmesh;
 	const char* m_dir;
 
 	int m_navmeshMeshID = -1, m_navmeshInstID = -1;
@@ -91,7 +82,7 @@ private:
 	void AddEdgesToScene(NavMeshBuilder* navmesh);
 	void AddEdge(float3 node1, float3 node2);
 
-	const std::vector<int>* GetPolyTriangleIndices(dtPolyRef poly, int tileIdx = 0);
+	//const std::vector<int>* GetPolyTriangleIndices(dtPolyRef poly, int tileIdx = 0);
 
 	void WriteMaterialFile();
 	void WriteTileToMesh(const dtMeshTile* tile, FILE* file);

@@ -28,7 +28,7 @@ static bool rightClickLastFrame = false;
 // Settings bar
 static float mraysincl = 0, mraysexcl = 0;
 enum MeshName { INPUT, NAVMESH, NODE, EDGE, AGENT };
-static MeshName meshName;
+static std::string meshName;
 static int probMeshID = -1, probeInstID = -1, probeTriID = -1;
 static float3 probedPos;
 static float3 pathStart, pathEnd;
@@ -163,14 +163,6 @@ void RefreshSettings()
 	TwDefine(" Settings resizable=true movable=true iconifiable=true refresh=0.05 ");
 	TwDefine(" Settings position='20 20' ");
 	int opened = 1, closed = 0;
-	TwEnumVal meshEnum[] = {
-		{ NAVMESH, "Triangle" },
-		{ AGENT, "Agent"},
-		{ NODE, "Node" },
-		{ EDGE, "Edge" },
-		{ INPUT, "Input Mesh"}
-	};
-	TwType meshEnumType = TwDefineEnum("MeshType", meshEnum, 5);
 	TwStructMember float3Members[] = {
 		{ "x", TW_TYPE_FLOAT, offsetof(float3, x), "" },
 		{ "y", TW_TYPE_FLOAT, offsetof(float3, y), "" },
@@ -205,7 +197,7 @@ void RefreshSettings()
 	TwSetParam(settings, "camera", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create opened probing block
-	TwAddVarRO(settings, "Mesh", meshEnumType, &meshName, "group='probing'");
+	TwAddVarRO(settings, "Mesh", TW_TYPE_STDSTRING, &meshName, "group='probing'");
 	TwAddVarRO(settings, "Mesh ID", TW_TYPE_INT32, &probMeshID, "group='probing'");
 	TwAddVarRO(settings, "Inst ID", TW_TYPE_INT32, &probeInstID, "group='probing'");
 	TwAddVarRO(settings, "Tri ID", TW_TYPE_INT32, &probeTriID, "group='probing'");
@@ -324,12 +316,8 @@ bool HandleInput(float frameTime)
 		// Identify probed instance
 		probeInstID = coreStats.probedInstid;
 		probeTriID = coreStats.probedTriid;
-		probMeshID = renderer->GetScene()->instances[probeInstID]; // TODO: instances array appears to have a mesh per instance
-		if (navMeshAssets->isNavMesh(probeInstID)) meshName = NAVMESH;
-		else if (navMeshAssets->isAgent(probeInstID)) meshName = AGENT;
-		else if (navMeshAssets->isNode(probeInstID)) meshName = NODE;
-		else if (navMeshAssets->isEdge(probeInstID)) meshName = EDGE;
-		else meshName = INPUT;
+		probMeshID = renderer->GetScene()->nodes[probeInstID]->meshID;
+		meshName = renderer->GetScene()->meshes[probMeshID]->name;
 
 		// Get 3D probe position
 		ViewPyramid p = camera->GetView();
@@ -339,7 +327,7 @@ bool HandleInput(float frameTime)
 		probedPos = camera->position + normalize(pixelLoc - camera->position) * coreStats.probedDist;
 
 		// Apply new probe position
-		if (leftClickLastFrame && meshName == NAVMESH)
+		if (leftClickLastFrame && navMeshAssets->isNavMesh(probMeshID))
 		{
 			pathStart = probedPos;
 			navMeshAssets->pathStart = new float3(probedPos);
@@ -347,7 +335,7 @@ bool HandleInput(float frameTime)
 				navMeshAssets->UpdatePath(navMeshNavigator, pathStart, pathEnd);
 			//navMeshAssets->PlaceAgent(probedPos); // DEBUG
 		}
-		if (rightClickLastFrame && meshName == NAVMESH)
+		if (rightClickLastFrame && navMeshAssets->isNavMesh(probMeshID))
 		{
 			pathEnd = probedPos;
 			navMeshAssets->pathEnd = new float3(probedPos);

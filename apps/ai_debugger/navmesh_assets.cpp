@@ -15,28 +15,8 @@
 
 #include "DetourNode.h"
 
-#include "platform.h" // GLFW, CreateVBO, BindVBO
+#include "platform.h"       // DrawLineStrip
 #include "navmesh_assets.h"
-
-//  +-----------------------------------------------------------------------------+
-//  |  WorldToScreenPos (TODO)                                                    |
-//  |  Converts a world position to a screen position.                      LH2'19|
-//  +-----------------------------------------------------------------------------+
-float2 WorldToScreenPos(float3 worldPos, Camera* camera)
-{
-	ViewPyramid p = camera->GetView();
-	float3 dir = worldPos - camera->position;				// vector from camera to pos
-	dir -= camera->direction * dot(dir, camera->direction); // vector to screen intersection
-	float3 right = p.p2 - p.p1, up = p.p1 - p.p3;			// vectors from corner to corner
-	float x = dot(dir, normalize(right)) / (.5*length(right));
-	float y = dot(dir, normalize(up)) / (.5*length(up));
-
-	//float3 up = make_float3(0, 1, 0), forward = camera->direction;
-	//float3 right = normalize(cross(forward, up));
-	//up = cross(right, forward);
-
-	return make_float2(x, y);
-}
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshAssets::UpdatePath                                                  |
@@ -53,12 +33,13 @@ void NavMeshAssets::UpdatePath(NavMeshNavigator* navmesh, float3 start, float3 e
 	// Initializing target
 	float3 iterPos, targetPos;
 	if(navmesh->FindClosestPointOnPoly(path[0], start, &iterPos)) return;
-	if(navmesh->FindClosestPointOnPoly(path[pathCount - 1], end, &targetPos)) return; // TODO: necessary? end is unused
+	if(navmesh->FindClosestPointOnPoly(path[pathCount - 1], end, &targetPos)) return;
 
 	// Resetting path array
 	if (m_path) delete[] m_path;
-	m_path = (float3*)malloc(pathCount * sizeof(float3));
-	m_pathCount = pathCount;
+	m_pathCount = pathCount + 1; // one extra node for the end pos
+	m_path = (float3*)malloc(m_pathCount * sizeof(float3));
+	m_path[pathCount] = end;
 
 	// Adding nodes to path array
 	for (int i = 0; i < pathCount; i++)
@@ -69,7 +50,7 @@ void NavMeshAssets::UpdatePath(NavMeshNavigator* navmesh, float3 start, float3 e
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshAssets::PlotPath (TODO)                                             |
+//  |  NavMeshAssets::PlotPath                                                    |
 //  |  Plots the path calculated before as a series of lines                      |
 //  |  using the renderer's viewpyramid to convert 3D to 2D.                LH2'19|
 //  +-----------------------------------------------------------------------------+
@@ -81,48 +62,29 @@ void NavMeshAssets::PlotPath(float3 start)
 	std::vector<float2> vertices;
 	std::vector<float4> colors;
 	Camera* view = m_renderer->GetCamera();
-	vertices.push_back(WorldToScreenPos(start, view));
+	vertices.push_back(view->WorldToScreenPos(start));
 	colors.push_back(m_pathColor);
 	for (int i = 0; i < m_pathCount; i++)
 	{
-		vertices.push_back(WorldToScreenPos(m_path[i], view));
+		vertices.push_back(view->WorldToScreenPos(m_path[i]));
 		colors.push_back(m_pathColor);
 	}
 
-	// Create VBOs
-	static GLuint vboID = 0;
-	GLuint vertexBuffer = CreateVBO((const GLfloat*)&vertices[0], vertices.size() * sizeof(float2));
-	GLuint colorBuffer = CreateVBO((const GLfloat*)&colors[0], colors.size() * sizeof(float4));
-	glGenVertexArrays(1, &vboID);
-	glBindVertexArray(vboID);
-	BindVBO(0, 2, vertexBuffer); // 0 = position attribute, 2 = floats in vertex
-	BindVBO(3, 4, colorBuffer);  // 3 = color attribute, 4 = floats in color
-	glBindVertexArray(0);
-	CheckGL();
-
-	// Draw
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glBindVertexArray(vboID);
-	glLineWidth(m_pathWidth);
-	glDrawArrays(GL_LINE_STRIP, 0, vertices.size());
-	glBindVertexArray(0);
-	CheckGL();
-	glDisable(GL_BLEND);
+	DrawLineStrip(vertices, colors, m_pathWidth);
 }
 
-//  +-----------------------------------------------------------------------------+
-//  |  NavMeshAssets::GetPolyTriangleInstances                                    |
-//  |  Resolves the triangle indices from the given polygon ref.            LH2'19|
-//  +-----------------------------------------------------------------------------+
-const std::vector<int>*  NavMeshAssets::GetPolyTriangleIndices(dtPolyRef poly, int tileIdx)
-{
-	// TODO: how to deal with different tiles?
-	//const dtNavMesh* navmesh = m_navmesh;
-	//const dtMeshTile* tile = navmesh->getTile(tileIdx);
-	//if (!tile->header) return (std::vector<int>*) printf("\tERROR: TILE 0 DOES NOT EXIST\n");
-	return m_polyTriIdx[poly];
-}
+////  +-----------------------------------------------------------------------------+
+////  |  NavMeshAssets::GetPolyTriangleInstances                                    |
+////  |  Resolves the triangle indices from the given polygon ref.            LH2'19|
+////  +-----------------------------------------------------------------------------+
+//const std::vector<int>*  NavMeshAssets::GetPolyTriangleIndices(dtPolyRef poly, int tileIdx)
+//{
+//	// TODO: how to deal with different tiles?
+//	//const dtNavMesh* navmesh = m_navmesh;
+//	//const dtMeshTile* tile = navmesh->getTile(tileIdx);
+//	//if (!tile->header) return (std::vector<int>*) printf("\tERROR: TILE 0 DOES NOT EXIST\n");
+//	return m_polyTriIdx[poly];
+//}
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshAssets::ReplaceMesh                                                 |
@@ -131,17 +93,19 @@ const std::vector<int>*  NavMeshAssets::GetPolyTriangleIndices(dtPolyRef poly, i
 void NavMeshAssets::ReplaceMesh(NavMeshBuilder* navmesh)
 {
 	Clean();
+
 	SaveAsMesh(navmesh);
 	std::string filename = GetObjFileName(navmesh->GetConfig()->m_id);
 	m_navmeshMeshID = m_renderer->AddMesh(filename.c_str(), m_dir, 1.0f);
+	m_renderer->GetScene()->meshes[m_navmeshMeshID]->name = "NavMesh";
 	m_navmeshInstID = m_renderer->AddInstance(m_navmeshMeshID, mat4::Identity());
+	m_navmesh = navmesh->GetNavigator();
+
 	AddNodesToScene(navmesh);
 	AddEdgesToScene(navmesh);
 	NavMeshConfig* config = navmesh->GetConfig();
 	m_agentHeight = config->m_walkableHeight * config->m_ch; // voxels to world units
 	m_agentRadius = config->m_walkableRadius * config->m_cs; // voxels to world units
-	m_navmesh = navmesh->GetMesh();
-	m_renderer->SynchronizeSceneData();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -250,6 +214,8 @@ void NavMeshAssets::Clean()
 	if (m_path) delete[] m_path;
 	m_path = 0;
 	m_pathCount = 0;
+
+	m_renderer->SynchronizeSceneData();
 }
 
 //  +-----------------------------------------------------------------------------+
