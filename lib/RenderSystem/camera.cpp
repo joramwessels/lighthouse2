@@ -100,9 +100,9 @@ ViewPyramid Camera::GetView()
 
 //  +-----------------------------------------------------------------------------+
 //  |  Camera::WorldToScreenPos                                                   |
-//  |  Converts a world position to a screen position.                      LH2'19|
+//  |  Converts an array of world positions to screen positions.            LH2'19|
 //  +-----------------------------------------------------------------------------+
-float2 Camera::WorldToScreenPos(float3 worldPos)
+void Camera::WorldToScreenPos(float3* W, float2* S, int count)
 {
 	// Calculate camera axis
 	ViewPyramid p = GetView();
@@ -111,15 +111,20 @@ float2 Camera::WorldToScreenPos(float3 worldPos)
 	float3 x = normalize(p1p2);						  // camera unit axis
 	float3 y = normalize(p3p1);					      // camera unit axis
 	float3 z = normalize(f);						  // camera unit axis
+	float invflen = 1 / length(f);					  // the inversed focal distance
+	float invxscrlen = 1 / (length(p1p2) * .5f);	  // half the screen width inversed
+	float invyscrlen = 1 / (length(p3p1) * .5f);	  // half the screen height inversed
 
-	// Transform coordinate
-	float3 dir = worldPos - p.pos;				   // vector from camera to pos
-	dir = { dot(dir, x),dot(dir, y),dot(dir, z) }; // make dir relative to camera
-	dir *= (1 / (dir.z / length(f)));			   // trim dir to hit the screen
-	dir.x /= (length(p1p2)*.5f);				   // convert x to screen scale
-	dir.y /= (length(p3p1)*.5f);				   // convert y to screen scale
-
-	return make_float2(dir);
+	// Transform coordinates
+	float3 dir;
+	for (int i = 0; i < count; i++)
+	{
+		dir = W[i] - p.pos;								// vector from camera to pos
+		dir = { dot(dir, x),dot(dir, y),dot(dir, z) };	// make dir relative to camera
+		dir *= (1 / (dir.z * invflen));					// trim dir to hit the screen
+		dir.x *= invxscrlen; dir.y *= invyscrlen;		// convert to screen scale
+		S[i] = make_float2(dir);
+	}
 }
 
 //  +-----------------------------------------------------------------------------+
