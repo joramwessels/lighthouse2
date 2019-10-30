@@ -99,6 +99,30 @@ ViewPyramid Camera::GetView()
 }
 
 //  +-----------------------------------------------------------------------------+
+//  |  Camera::WorldToScreenPos                                                   |
+//  |  Converts a world position to a screen position.                      LH2'19|
+//  +-----------------------------------------------------------------------------+
+float2 Camera::WorldToScreenPos(float3 worldPos)
+{
+	// Calculate camera axis
+	ViewPyramid p = GetView();
+	float3 p1p2 = p.p2 - p.p1, p3p1 = p.p1 - p.p3;	  // screen edges
+	float3 f = ((p.p3 - p.pos) + (p.p2 - p.pos)) / 2; // focal point
+	float3 x = normalize(p1p2);						  // camera unit axis
+	float3 y = normalize(p3p1);					      // camera unit axis
+	float3 z = normalize(f);						  // camera unit axis
+
+	// Transform coordinate
+	float3 dir = worldPos - p.pos;				   // vector from camera to pos
+	dir = { dot(dir, x),dot(dir, y),dot(dir, z) }; // make dir relative to camera
+	dir *= (1 / (dir.z / length(f)));			   // trim dir to hit the screen
+	dir.x /= (length(p1p2)*.5f);				   // convert x to screen scale
+	dir.y /= (length(p3p1)*.5f);				   // convert y to screen scale
+
+	return make_float2(dir);
+}
+
+//  +-----------------------------------------------------------------------------+
 //  |  Camera::Serialize                                                          |
 //  |  Save the camera data to the specified xml file.                      LH2'19|
 //  +-----------------------------------------------------------------------------+
