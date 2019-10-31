@@ -117,6 +117,7 @@
     <ClCompile Include="navmesh_builder.cpp" />
     <ClCompile Include="navmesh_navigator.cpp" />
     <ClCompile Include="navmesh_config.cpp" />
+    <ClCompile Include="navmesh_shader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="recastnavigation\DebugUtils\Include\DebugDraw.h">
@@ -198,5 +199,6 @@
     <ClInclude Include="navmesh_navigator.h" />
     <ClInclude Include="navmesh_common.h" />
     <ClInclude Include="buildcontext.h" />
+    <ClInclude Include="navmesh_shader.h" />
   </ItemGroup>
 </Project>

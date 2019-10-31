@@ -2,13 +2,11 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="navmesh_assets.cpp" />
     <ClCompile Include="main_ui.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main_tools.h" />
     <ClInclude Include="main_ui.h" />
-    <ClInclude Include="navmesh_assets.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="shaders">

@@ -81,7 +81,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>../tinyxml2;../GLFW/Include;../half2.1.0;../platform;recastnavigation/Recast/Include;../RenderSystem;recastnavigation/DetourTileCache/Include;recastnavigation/DetourCrowd/Include;recastnavigation/Detour/Include;recastnavigation/DebugUtils/Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../FreeImage/inc;../tinyxml2;../zlib;../GLFW/include;../glad/Include;../half2.1.0;../platform;../RenderSystem;recastnavigation/Recast/Include;recastnavigation/DetourTileCache/Include;recastnavigation/DetourCrowd/Include;recastnavigation/Detour/Include;recastnavigation/DebugUtils/Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>PATHFINDINGBUILD;WIN32;WIN64;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Lib>
@@ -118,7 +118,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>../tinyxml2;../GLFW/Include;../half2.1.0;../platform;recastnavigation/Recast/Include;../RenderSystem;recastnavigation/DetourTileCache/Include;recastnavigation/DetourCrowd/Include;recastnavigation/Detour/Include;recastnavigation/DebugUtils/Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../FreeImage/inc;../tinyxml2;../zlib;../GLFW/include;../glad/Include;../half2.1.0;../platform;../RenderSystem;recastnavigation/Recast/Include;recastnavigation/DetourTileCache/Include;recastnavigation/DetourCrowd/Include;recastnavigation/Detour/Include;recastnavigation/DebugUtils/Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>PATHFINDINGBUILD;WIN32;WIN64;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
@@ -134,6 +134,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\tinyxml2\tinyxml2.cpp" />
+    <ClCompile Include="navmesh_shader.cpp" />
     <ClCompile Include="navmesh_navigator.cpp" />
     <ClCompile Include="navmesh_builder.cpp" />
     <ClCompile Include="recastnavigation\DebugUtils\Source\DebugDraw.cpp" />
@@ -170,6 +171,7 @@
   <ItemGroup>
     <ClInclude Include="..\tinyxml2\tinyxml2.h" />
     <ClInclude Include="buildcontext.h" />
+    <ClInclude Include="navmesh_shader.h" />
     <ClInclude Include="navmesh_common.h" />
     <ClCompile Include="navmesh_config.cpp" />
     <ClInclude Include="navmesh_navigator.h" />

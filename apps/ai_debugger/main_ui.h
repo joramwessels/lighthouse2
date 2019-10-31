@@ -16,12 +16,12 @@
 #include "anttweakbar.h"
 #include "navmesh_builder.h"
 #include "navmesh_navigator.h"
-#include "navmesh_assets.h"
+#include "navmesh_shader.h"
 
 namespace AI_UI {
 
-static TwBar* settings = 0, *navmesh = 0;
-static NavMeshAssets* navMeshAssets = 0;
+static TwBar* settings = 0, *navmesh = 0, *navigation;
+static NavMeshShader* navMeshShader = 0;
 static bool leftClickLastFrame = false;
 static bool rightClickLastFrame = false;
 
@@ -31,7 +31,7 @@ enum MeshName { INPUT, NAVMESH, NODE, EDGE, AGENT };
 static std::string meshName;
 static int probMeshID = -1, probeInstID = -1, probeTriID = -1;
 static float3 probedPos;
-static float3 pathStart, pathEnd;
+static float3 *pathStart = 0, *pathEnd = 0;
 
 // Navmesh bar
 static NavMeshConfig ui_nm_config;
@@ -39,41 +39,13 @@ static std::string ui_nm_id;
 static bool ui_nm_errorcode = false;
 
 // Path Finding bar
-
+static std::vector<float3> path;
+static float distToEnd;
 
 // Forward declarations
 void InitFPSPrinter();
 void PrintFPS(float deltaTime);
-void RefreshSettings();
-void RefreshNavMesh();
 
-
-//  +-----------------------------------------------------------------------------+
-//  |  RefreshUI                                                                  |
-//  |  AntTweakBar.                                                         LH2'19|
-//  +-----------------------------------------------------------------------------+
-void RefreshUI()
-{
-	RefreshSettings();
-	RefreshNavMesh();
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  InitGUI                                                                    |
-//  |  Prepares a basic user interface.                                     LH2'19|
-//  +-----------------------------------------------------------------------------+
-void InitGUI()
-{
-	// Init AntTweakBar
-	TwInit( TW_OPENGL_CORE, NULL );
-	settings = TwNewBar( "Settings" );
-	navmesh = TwNewBar( "NavMesh" );
-	RefreshUI();
-
-	navMeshAssets = new NavMeshAssets(renderer, "data\\ai\\");
-
-	InitFPSPrinter();
-}
 
 //  +-----------------------------------------------------------------------------+
 //  |  DrawNavMesh                                                                |
@@ -81,7 +53,7 @@ void InitGUI()
 //  +-----------------------------------------------------------------------------+
 void DrawNavMesh()
 {
-	navMeshAssets->PlotPath(pathStart);
+	if (pathStart && pathEnd) navMeshShader->DrawGL();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -102,8 +74,8 @@ void TW_CALL BuildNavMesh(void *data)
 	navMeshBuilder->DumpLog();
 	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
 	if (ui_nm_errorcode) return;
-	navMeshAssets->ReplaceMesh(navMeshBuilder);
-	navMeshNavigator = navMeshBuilder->GetNavigator(); // TODO: move?
+	navMeshShader->UpdateMesh(navMeshBuilder);
+	navMeshNavigator = navMeshBuilder->GetNavigator();
 
 	ui_nm_config = *config;
 	ui_nm_id = config->m_id;
@@ -144,8 +116,8 @@ void TW_CALL LoadNavMesh(void *data)
 	navMeshBuilder->DumpLog();
 	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
 	if (ui_nm_errorcode) return;
-	navMeshAssets->ReplaceMesh(navMeshBuilder);
-	navMeshNavigator = navMeshBuilder->GetNavigator(); // TODO: move?
+	navMeshShader->UpdateMesh(navMeshBuilder);
+	navMeshNavigator = navMeshBuilder->GetNavigator();
 
 	ui_nm_config = *config;
 	ui_nm_id = config->m_id;
@@ -202,14 +174,12 @@ void RefreshSettings()
 	TwAddVarRO(settings, "Inst ID", TW_TYPE_INT32, &probeInstID, "group='probing'");
 	TwAddVarRO(settings, "Tri ID", TW_TYPE_INT32, &probeTriID, "group='probing'");
 	TwAddVarRO(settings, "Pos", float3Type, &probedPos, "group='probing'");
-	TwAddVarRO(settings, "Start", float3Type, &pathStart, "group='probing'");
-	TwAddVarRO(settings, "End", float3Type, &pathEnd, "group='probing'");
 	TwSetParam(settings, "probing", "opened", TW_PARAM_INT32, 1, &closed);
 }
 
 //  +-----------------------------------------------------------------------------+
 //  |  RefreshMenu                                                                |
-//  |  Defines the layout of the 'NavMesh' bar.                                LH2'19|
+//  |  Defines the layout of the 'NavMesh' bar.                             LH2'19|
 //  +-----------------------------------------------------------------------------+
 void RefreshNavMesh()
 {
@@ -280,6 +250,60 @@ void RefreshNavMesh()
 }
 
 //  +-----------------------------------------------------------------------------+
+//  |  RefreshMenu                                                                |
+//  |  Defines the layout of the 'NavMesh' bar.                             LH2'19|
+//  +-----------------------------------------------------------------------------+
+void RefreshNavigation()
+{
+	TwDefine(" Navigation size='280 400' color='50 120 50' alpha=220");
+	TwDefine(" Navigation help='Pathfinding options' ");
+	TwDefine(" Navigation resizable=true movable=true iconifiable=true refresh=0.05 ");
+	TwDefine(" Navigation position='1300 440' ");
+	int opened = 1, closed = 0;
+	TwStructMember float3Members[] = {
+		{ "x", TW_TYPE_FLOAT, offsetof(float3, x), "" },
+		{ "y", TW_TYPE_FLOAT, offsetof(float3, y), "" },
+		{ "z", TW_TYPE_FLOAT, offsetof(float3, z), "" }
+	};
+	TwType float3Type = TwDefineStruct("pos", float3Members, 3, sizeof(float3), NULL, NULL);
+
+	// create path block
+	TwAddVarRO(navigation, "Start", float3Type, &pathStart, "group='path'");
+	TwAddVarRO(navigation, "End", float3Type, &pathEnd, "group='path'");
+	TwAddVarRO(navigation, "Distance to end", TW_TYPE_FLOAT, &distToEnd, "group='path'");
+	TwSetParam(navigation, "path", "opened", TW_PARAM_INT32, 1, &opened);
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  RefreshUI                                                                  |
+//  |  AntTweakBar.                                                         LH2'19|
+//  +-----------------------------------------------------------------------------+
+void RefreshUI()
+{
+	RefreshSettings();
+	RefreshNavMesh();
+	RefreshNavigation();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  InitGUI                                                                    |
+//  |  Prepares a basic user interface.                                     LH2'19|
+//  +-----------------------------------------------------------------------------+
+void InitGUI()
+{
+	// Init AntTweakBar
+	TwInit(TW_OPENGL_CORE, NULL);
+	settings = TwNewBar("Settings");
+	navmesh = TwNewBar("NavMesh");
+	navigation = TwNewBar("Navigation");
+	RefreshUI();
+
+	navMeshShader = new NavMeshShader(renderer, "data\\ai\\");
+
+	InitFPSPrinter();
+}
+
+//  +-----------------------------------------------------------------------------+
 //  |  HandleInput                                                                |
 //  |  Process user input.                                                  LH2'19|
 //  +-----------------------------------------------------------------------------+
@@ -316,8 +340,8 @@ bool HandleInput(float frameTime)
 		// Identify probed instance
 		probeInstID = coreStats.probedInstid;
 		probeTriID = coreStats.probedTriid;
-		probMeshID = renderer->GetScene()->nodes[probeInstID]->meshID;
-		meshName = renderer->GetScene()->meshes[probMeshID]->name;
+		probMeshID = renderer->GetInstanceMeshID(probeInstID);
+		meshName = renderer->GetMesh(probMeshID)->name;
 
 		// Get 3D probe position
 		ViewPyramid p = camera->GetView();
@@ -327,20 +351,20 @@ bool HandleInput(float frameTime)
 		probedPos = camera->position + normalize(pixelLoc - camera->position) * coreStats.probedDist;
 
 		// Apply new probe position
-		if (leftClickLastFrame && navMeshAssets->isNavMesh(probMeshID))
+		if (leftClickLastFrame && navMeshShader->isNavMesh(probMeshID))
 		{
-			pathStart = probedPos;
-			navMeshAssets->pathStart = new float3(probedPos);
-			if (navMeshAssets->pathEnd) // if both start and end are set
-				navMeshAssets->UpdatePath(navMeshNavigator, pathStart, pathEnd);
+			pathStart = new float3(probedPos);
+			if (pathEnd) // if both start and end are set
+				if (!navMeshNavigator->FindPath(*pathStart, *pathEnd, path, distToEnd))
+					navMeshShader->SetPath(*pathStart, &path);
 			//navMeshAssets->PlaceAgent(probedPos); // DEBUG
 		}
-		if (rightClickLastFrame && navMeshAssets->isNavMesh(probMeshID))
+		if (rightClickLastFrame && navMeshShader->isNavMesh(probMeshID))
 		{
-			pathEnd = probedPos;
-			navMeshAssets->pathEnd = new float3(probedPos);
-			if (navMeshAssets->pathStart) // if both start and end are set
-				navMeshAssets->UpdatePath(navMeshNavigator, pathStart, pathEnd);
+			pathEnd = new float3(probedPos);
+			if (pathStart) // if both start and end are set
+				if (!navMeshNavigator->FindPath(*pathStart, *pathEnd, path, distToEnd))
+					navMeshShader->SetPath(*pathStart, &path);
 		}
 		if (coreStats.probedDist < 1000) // prevents scene from going invisible
 			camera->focalDistance = coreStats.probedDist;

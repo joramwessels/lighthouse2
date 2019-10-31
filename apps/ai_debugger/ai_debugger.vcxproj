@@ -91,7 +91,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main_ui.cpp" />
-    <ClCompile Include="navmesh_assets.cpp" />
     <ClCompile Include="main.cpp">
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
       </PrecompiledHeaderFile>
@@ -100,7 +99,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="navmesh_assets.h" />
     <ClInclude Include="main_tools.h" />
     <ClInclude Include="main_ui.h" />
   </ItemGroup>
