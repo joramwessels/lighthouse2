@@ -142,7 +142,7 @@ HostScene* RenderAPI::GetScene()
 	return renderer->scene;
 }
 
-int GetInstanceMeshID(int instID)
+int RenderAPI::GetInstanceMeshID(int instID)
 {
 	int nodeID;
 	std::vector<int> instances = renderer->scene->instances;
@@ -157,7 +157,7 @@ int GetInstanceMeshID(int instID)
 	return node->meshID;
 }
 
-HostMesh* GetMesh(int meshID)
+HostMesh* RenderAPI::GetMesh(int meshID)
 {
 	if (renderer->scene->meshes.size() >= meshID) return 0;
 	return renderer->scene->meshes[meshID];
