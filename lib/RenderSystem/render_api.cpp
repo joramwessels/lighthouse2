@@ -159,7 +159,7 @@ int RenderAPI::GetInstanceMeshID(int instID)
 
 HostMesh* RenderAPI::GetMesh(int meshID)
 {
-	if (renderer->scene->meshes.size() >= meshID) return 0;
+	if (renderer->scene->meshes.size() <= meshID) return 0;
 	return renderer->scene->meshes[meshID];
 }
 
