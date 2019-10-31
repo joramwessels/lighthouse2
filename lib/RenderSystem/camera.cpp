@@ -102,7 +102,7 @@ ViewPyramid Camera::GetView()
 //  |  Camera::WorldToScreenPos                                                   |
 //  |  Converts an array of world positions to screen positions.            LH2'19|
 //  +-----------------------------------------------------------------------------+
-void Camera::WorldToScreenPos(float3* W, float2* S, int count)
+void Camera::WorldToScreenPos(const float3* W, float2* S, int count)
 {
 	// Calculate camera axis
 	ViewPyramid p = GetView();
@@ -120,7 +120,8 @@ void Camera::WorldToScreenPos(float3* W, float2* S, int count)
 	for (int i = 0; i < count; i++)
 	{
 		dir = W[i] - p.pos;								// vector from camera to pos
-		dir = { dot(dir, x),dot(dir, y),dot(dir, z) };	// make dir relative to camera
+		dir = { dot(dir, x), dot(dir, y), dot(dir, z) };// make dir relative to camera
+		if (dir.z < 0) dir *= {1000.0f, 1000.0f, 0.0f};	// prevent looking backwards (TODO: improve)
 		dir *= (1 / (dir.z * invflen));					// trim dir to hit the screen
 		dir.x *= invxscrlen; dir.y *= invyscrlen;		// convert to screen scale
 		S[i] = make_float2(dir);

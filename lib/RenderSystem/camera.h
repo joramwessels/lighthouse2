@@ -44,7 +44,7 @@ public:
 	void TranslateRelative( float3 T );				// move camera relative to orientation
 	void TranslateTarget( float3 T );				// move camera target; used for rotating camera
 	ViewPyramid GetView();							// calculate a view based on the setup
-	void WorldToScreenPos(float3* W, float2* S, int count);	// convert world pos to screen pos
+	void WorldToScreenPos(const float3* W, float2* S, int count);	// convert world pos to screen pos
 	void Serialize( const char* xmlFile = 0 );		// save the camera to an xml file
 	void Deserialize( const char* xmlFile );		// load the camera from an xml file
 	// private methods
