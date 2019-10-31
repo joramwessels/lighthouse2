@@ -142,6 +142,27 @@ HostScene* RenderAPI::GetScene()
 	return renderer->scene;
 }
 
+int GetInstanceMeshID(int instID)
+{
+	int nodeID;
+	std::vector<int> instances = renderer->scene->instances;
+	if (instances.size() > instID) nodeID = instances[instID];
+	else return -1;
+
+	HostNode* node;
+	std::vector<HostNode*> nodes = renderer->scene->nodes;
+	if (nodes.size() > nodeID) node = nodes[nodeID];
+	else return -1;
+
+	return node->meshID;
+}
+
+HostMesh* GetMesh(int meshID)
+{
+	if (renderer->scene->meshes.size() >= meshID) return 0;
+	return renderer->scene->meshes[meshID];
+}
+
 int RenderAPI::FindMaterialID( const char* name )
 {
 	return renderer->scene->FindMaterialID( name );

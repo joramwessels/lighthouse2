@@ -53,6 +53,8 @@ public:
 	HostMaterial* GetTriangleMaterial( const int triId, const int instId );
 	HostMaterial* GetMaterial( const int matId );
 	HostScene* GetScene();
+	int GetInstanceMeshID(int instID);
+	HostMesh* GetMesh(int meshID);
 	int FindNode( const char* name );
 	int FindMaterialID( const char* name );
 	int AddMaterial( const float3 color );
