@@ -125,19 +125,25 @@ void DrawQuad()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  DrawLines																  |
-//  |  Draws lines using GL.                                                      |
-//  |  *verts* are start-end pairs of screen coordinates.                         |
-//  |  *colors* are the respective rgba colors of each vertex.              LH2'19|
+//  |  DrawShapeOnScreen			    										  |
+//  |  Draws the specified shape from the given vertices using GL.                |
+//  |  *verts* are the 2D screen coordinates.                                     |
+//  |  *colors* are the respective rgba colors of each vertex.                    |
+//  |  *GLshape* can be:													      |
+//  |     GL_POINTS       *verts* are individual points (squares of size *width)  |
+//  |     GL_LINES        *verts* consists of vertex pairs					      |
+//  |     GL_LINE_STRIP   *verts* consists of consequtive vertices			      |
+//  |     GL_TRIANGLE_FAN *verts* consists of  consequtive verts around a poly    |
+//  |  *width* is the line/point width in pixels.                           LH2'19|
 //  +-----------------------------------------------------------------------------+
-void DrawLines(std::vector<float2> verts, std::vector<float4> colors, float width)
+void DrawShapeOnScreen(std::vector<float2> verts, std::vector<float4> colors, uint GLshape, float width)
 {
 	if (verts.size() == 0) return;
 
 	// Create VBOs
 	static GLuint vboID = 0;
-	GLuint vertexBuffer = CreateVBO((const GLfloat*)&verts[0], verts.size() * sizeof(float2));
-	GLuint colorBuffer = CreateVBO((const GLfloat*)&colors[0], colors.size() * sizeof(float4));
+	GLuint vertexBuffer = CreateVBO((const GLfloat*)&verts[0], (uint) verts.size() * sizeof(float2));
+	GLuint colorBuffer = CreateVBO((const GLfloat*)&colors[0], (uint) colors.size() * sizeof(float4));
 	glGenVertexArrays(1, &vboID);
 	glBindVertexArray(vboID);
 	BindVBO(0, 2, vertexBuffer); // 0 = position attribute, 2 = floats in vertex
@@ -149,40 +155,9 @@ void DrawLines(std::vector<float2> verts, std::vector<float4> colors, float widt
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glBindVertexArray(vboID);
+	glPointSize(width);
 	glLineWidth(width);
-	glDrawArrays(GL_LINES, 0, verts.size());
-	glBindVertexArray(0);
-	CheckGL();
-	glDisable(GL_BLEND);
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  DrawLineStrip															  |
-//  |  Draws connected lines using GL.											  |
-//  |  *verts* are consequtive screen coordinates that will be connected.         |
-//  |  *colors* are the respective rgba colors of each vertex.              LH2'19|
-//  +-----------------------------------------------------------------------------+
-void DrawLineStrip(std::vector<float2> verts, std::vector<float4> colors, float width)
-{
-	if (verts.size() == 0) return;
-
-	// Create VBOs
-	static GLuint vboID = 0;
-	GLuint vertexBuffer = CreateVBO((const GLfloat*)&verts[0], verts.size() * sizeof(float2));
-	GLuint colorBuffer = CreateVBO((const GLfloat*)&colors[0], colors.size() * sizeof(float4));
-	glGenVertexArrays(1, &vboID);
-	glBindVertexArray(vboID);
-	BindVBO(0, 2, vertexBuffer); // 0 = position attribute, 2 = floats in vertex
-	BindVBO(3, 4, colorBuffer);  // 3 = color attribute, 4 = floats in color
-	glBindVertexArray(0);
-	CheckGL();
-
-	// Draw
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glBindVertexArray(vboID);
-	glLineWidth(width);
-	glDrawArrays(GL_LINE_STRIP, 0, verts.size());
+	glDrawArrays(GLshape, 0, verts.size());
 	glBindVertexArray(0);
 	CheckGL();
 	glDisable(GL_BLEND);
