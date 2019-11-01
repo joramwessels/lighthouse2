@@ -20,19 +20,6 @@
 
 namespace lighthouse2 {
 
-////  +-----------------------------------------------------------------------------+
-////  |  NavMeshShader::GetPolyTriangleInstances                                    |
-////  |  Resolves the triangle indices from the given polygon ref.            LH2'19|
-////  +-----------------------------------------------------------------------------+
-//const std::vector<int>*  NavMeshShader::GetPolyTriangleIndices(dtPolyRef poly, int tileIdx)
-//{
-//	// TODO: how to deal with different tiles?
-//	//const dtNavMesh* navmesh = m_navmesh;
-//	//const dtMeshTile* tile = navmesh->getTile(tileIdx);
-//	//if (!tile->header) return (std::vector<int>*) printf("\tERROR: TILE 0 DOES NOT EXIST\n");
-//	return m_polyTriIdx[poly];
-//}
-
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::UpdateMesh                                                  |
 //  |  Removes the old navmesh assets and adds the new one.                 LH2'19|
@@ -57,6 +44,10 @@ void NavMeshShader::UpdateMesh(NavMeshBuilder* navmesh)
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::DrawGL() const
 {
+	if (m_shadeVerts) ShadeVertsGL();
+	if (m_shadeEdges) ShadeEdgesGL();
+	if (m_shadeTris) ShadeTrianglesGL();
+
 	if (m_vertHighlight.idx >= 0) DrawVertHighlightGL();
 	if (m_edgeHighlight.v1 >= 0) DrawEdgeHighlightGL();
 
@@ -77,6 +68,7 @@ void NavMeshShader::PlaceAgent(float3 pos)
 	else
 		m_renderer->SetNodeTransform(m_startInstID, transform);
 }
+
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::AddNavMeshToScene                                           |
 //  |  Adds the navmesh triangles to the scene as a single mesh.            LH2'19|
@@ -88,7 +80,20 @@ void NavMeshShader::AddNavMeshToScene(NavMeshBuilder* navmesh)
 	m_navmeshMeshID = m_renderer->AddMesh(filename.c_str(), m_dir, 1.0f);
 	m_renderer->GetMesh(m_navmeshMeshID)->name = "NavMesh";
 	m_navmeshInstID = m_renderer->AddInstance(m_navmeshMeshID, mat4::Identity());
-	// TODO: remove .obj file
+	// TODO: remove .obj file (requires new platform function)
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::RemoveNavMeshFromScene                                      |
+//  |  Removes the navmesh instance and mesh from the scene.                LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::RemoveNavMeshFromScene()
+{
+	if (m_navmeshInstID >= 0) m_renderer->RemoveInstance(m_navmeshInstID);
+	m_navmeshInstID = -1;
+	// TODO: Remove the old navmesh mesh to prevent memory leaks
+	//if (m_navmeshMeshID >= 0) m_renderer->RemoveMesh(m_navmeshMeshID);
+	//m_navmeshMeshID = -1;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -102,18 +107,45 @@ void NavMeshShader::AddVertsToScene()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::AddEdgesToScene (TODO)                                      |
+//  |  NavMeshShader::RemoveVertsFromScene                                        |
+//  |  Removes all vertex instances from the scene.                         LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::RemoveVertsFromScene()
+{
+	for (std::vector<Vert>::iterator i = verts.begin(); i < verts.end(); i++)
+	{
+		m_renderer->RemoveInstance(i->instID);
+		i->instID = -1;
+	}
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::AddEdgesToScene                                             |
 //  |  Adds all precomputed navmesh edges as cylinders to the scene.        LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddEdgesToScene()
 {
-	return; // DEBUG
 	for (std::vector<Edge>::iterator i = edges.begin(); i < edges.end(); i++)
 	{
 		float3 v1 = verts[i->v1].pos, v2 = verts[i->v2].pos;
-		mat4 tra = mat4::Translate(v1);
-		mat4 rot; // TODO: calculate rotation from two vertex positions
-		i->instID = m_renderer->AddInstance(m_edgeMeshID, m_edgeScale * rot * tra);
+		float3 v1v2 = v2 - v1; float len = length(v1v2); v1v2 /= len;
+		mat4 sca = mat4::Scale(make_float3(m_edgeWidth, len, m_edgeWidth));
+		mat4 rot = mat4::Rotate(cross({ 0, 1, 0 }, v1v2), -acosf(v1v2.y));
+		mat4 tra = mat4::Translate((v1 + v2) / 2);
+		i->instID = m_renderer->AddInstance(m_edgeMeshID, tra * rot * sca);
+	}
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::RemoveEdgesFromScene                                        |
+//  |  Removes all edge instances from the scene.                           LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::RemoveEdgesFromScene()
+{
+	for (std::vector<Edge>::iterator i = edges.begin(); i < edges.end(); i++)
+	{
+		m_renderer->RemoveInstance(i->instID);
+		i->instID = -1;
 	}
 }
 
@@ -222,28 +254,27 @@ void NavMeshShader::PlotPath() const
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::Clean                                                       |
-//  |  Ensures all instances are removed from the scene.                    LH2'19|
+//  |  Resets the internal NavMesh representation and stops shading it.     LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::Clean()
 {
 	if (m_startInstID < 0) printf("NO KNOWN AGENT INST ID\n"); // DEBUG
 
-	// TODO: Remove old .obj file (requires new platform function)
-	// TODO: Remove the old navmesh mesh to prevent memory leaks
-	if (m_navmeshInstID >= 0) m_renderer->RemoveInstance(m_navmeshInstID);
-	m_navmeshInstID = -1;
-	//m_navmeshMeshID = -1;
+
 	if (m_startInstID >= 0) m_renderer->RemoveInstance(m_startInstID);
 	m_startInstID = -1;
 	if (m_endInstID >= 0) m_renderer->RemoveInstance(m_endInstID);
 	m_endInstID = -1;
-	for (std::vector<Vert>::iterator it = verts.begin(); it < verts.end(); it++)
-		m_renderer->RemoveInstance(it->instID);
+
+	RemoveNavMeshFromScene();
+	RemoveVertsFromScene();
+	RemoveEdgesFromScene();
+
 	verts.clear();
-	for (std::vector<Edge>::iterator it = edges.begin(); it < edges.end(); it++)
-		m_renderer->RemoveInstance(it->instID);
 	edges.clear();
+
 	m_path = 0;
+	m_shadeTris = m_shadeVerts = m_shadeEdges = false;
 
 	m_vertHighlight = Vert();
 	m_edgeHighlight = Edge();
@@ -258,12 +289,12 @@ void NavMeshShader::Clean()
 void NavMeshShader::AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, const dtPoly* poly)
 {
 	for (std::vector<Edge>::iterator i = edges.begin(); i < edges.end(); i++)
-	{
 		if ((i->v1 == v1 && i->v2 == v2) || (i->v1 == v2 && i->v2 == v1))
+		{
 			i->poly2 = poly; // edge already exists, so add the second poly
-		else
-			edges.push_back({ v1, v2, -1, poly }); // add a new edge
-	}
+			return;
+		}
+	edges.push_back({ v1, v2, -1, poly }); // add a new edge
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -418,18 +449,13 @@ void NavMeshShader::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 	fprintf(f, "usemtl navmesh\n");
 	for (int i = 0; i < tile->header->polyCount; ++i)
 	{
-		std::vector<int>* triIdx = new std::vector<int>; // The triangle indices of this polygon
 		const dtPoly poly = tile->polys[i];
 
 		// If it's an off-mesh connection, continue
-		if (poly.getType() == DT_POLYTYPE_OFFMESH_CONNECTION)
-		{
-			m_polyTriIdx.push_back(triIdx);
-			continue;
-		}
-		const dtPolyDetail pd = tile->detailMeshes[i];
+		if (poly.getType() == DT_POLYTYPE_OFFMESH_CONNECTION) continue;
 
 		// For each triangle in the polygon
+		const dtPolyDetail pd = tile->detailMeshes[i];
 		for (int j = 0; j < pd.triCount; ++j)
 		{
 			const unsigned char* tri = &tile->detailTris[(pd.triBase + j) * 4];
@@ -448,10 +474,8 @@ void NavMeshShader::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 				fprintf(f, " %i/%i/%i", v[k] + 1, k + 1, faceCount + 1); // +1 because .obj indices start at 1
 			fprintf(f, "\n");
 
-			triIdx->push_back(faceCount); // Adds the triangle to the poly
 			faceCount++;
 		}
-		m_polyTriIdx.push_back(triIdx);
 	}
 	fprintf(f, "# %i faces\n\n", faceCount);
 }

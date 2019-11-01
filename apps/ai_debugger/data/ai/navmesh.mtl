@@ -1,11 +1,17 @@
+newmtl default
+Ka    .8 .8 .8
+Kd    .8 .8 .8
+Ks    .0 .0 .0
+d     1.0
+illum 1
+
 newmtl navmesh
 Ka    0.00 1.00 1.00
 Kd    0.00 1.00 1.00
 Ks    0.00 0.00 0.00
 d     0.20
 Tr    0.80
-illum 9
-map_Kd navmesh_tex.png
+illum 1
 
 newmtl vertex
 Ka  1.0000  0.0000  1.0000

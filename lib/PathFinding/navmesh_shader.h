@@ -37,7 +37,7 @@ public:
 		// Add meshes
 		m_vertMeshID = m_renderer->AddMesh("vertex.obj", m_dir, .01f);
 		m_agentMeshID = m_renderer->AddMesh("agent.obj", m_dir, 1.0f);
-		m_edgeMeshID = m_renderer->AddMesh("agent.obj", m_dir, .01f);
+		m_edgeMeshID = m_renderer->AddMesh("edge.obj", m_dir, 1.0f);
 		m_renderer->GetScene()->meshes[m_vertMeshID]->name = "Vertex";
 		m_renderer->GetScene()->meshes[m_agentMeshID]->name = "Agent";
 		m_renderer->GetScene()->meshes[m_edgeMeshID]->name = "Edge";
@@ -49,8 +49,11 @@ public:
 	void PlaceAgent(float3 pos);
 
 	void AddNavMeshToScene(NavMeshBuilder* navmesh);
+	void RemoveNavMeshFromScene();
 	void AddVertsToScene();
+	void RemoveVertsFromScene();
 	void AddEdgesToScene();
+	void RemoveEdgesFromScene();
 
 	void AddNavMeshToGL(bool useGL = true) { m_shadeTris = useGL; };
 	void AddVertsToGL(bool useGL = true) { m_shadeVerts = useGL; };
@@ -88,16 +91,17 @@ private:
 	std::vector<Edge> edges;
 	void ExtractVertsAndEdges(const dtNavMesh* navmesh);
 	void AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, const dtPoly* poly);
-	mat4 m_edgeScale = mat4::Scale(make_float3(0.1f, 0.1f, 0.1f)); // TODO
+	mat4 m_edgeScale = mat4::Scale(make_float3(1.0f, 1.0f, 1.0f)); // TODO
+	float m_edgeWidth = .1f;
 
 	// Highlighting
+	int m_vertHighlightMeshID = -1, m_edgeHighlightMeshID = -1;
 	Vert m_vertHighlight;
 	Edge m_edgeHighlight;
 	//dtPolyRef m_polyHighlight;
 	void DrawVertHighlightGL() const;
 	void DrawEdgeHighlightGL() const;
 
-	std::vector<std::vector<int>*> m_polyTriIdx; // The poly's triangle indices within the mesh
 	float3 m_selectedTriColor = { 1.0f, 1.0f, 0.0f };
 
 	// Path
