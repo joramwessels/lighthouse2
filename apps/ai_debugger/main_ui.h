@@ -45,6 +45,7 @@ static float distToEnd;
 // Forward declarations
 void InitFPSPrinter();
 void PrintFPS(float deltaTime);
+void DrawPathMarkers(float3* start, float3* end, Camera* camera);
 
 
 //  +-----------------------------------------------------------------------------+
@@ -54,6 +55,7 @@ void PrintFPS(float deltaTime);
 void DrawNavMesh()
 {
 	navMeshShader->DrawGL();
+	DrawPathMarkers(pathStart, pathEnd, renderer->GetCamera());
 }
 
 //  +-----------------------------------------------------------------------------+

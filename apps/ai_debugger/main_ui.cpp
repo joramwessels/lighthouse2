@@ -14,6 +14,7 @@
 */
 
 #include "platform.h" // Shader
+#include "camera.h"
 
 namespace AI_UI {
 
@@ -82,6 +83,40 @@ void PrintFPS(float deltaTime)
 	DrawDigit(d4, xpos, ypos - 0.03f, 0.7f);
 	plainShader->Unbind();
 	glDisable(GL_BLEND);
+}
+
+// Path beacon constants
+const float3 len = make_float3(0.0f, 4.0f, 0.0f);
+const float4 stcolor = { 0, 1.0f, 0, 1.0f };
+const float4 encolor = { 1.0f, 0, 0, 1.0f };
+const float linewidth = 10.0f;
+
+//  +-----------------------------------------------------------------------------+
+//  |  DrawPathMarkers                                                            |
+//  |  Draws the start and end of the path as beacons.                      LH2'19|
+//  +-----------------------------------------------------------------------------+
+void DrawPathMarkers(float3* start, float3* end, Camera* camera)
+{
+	if (!start && !end) return;
+	std::vector<float3> world;
+	std::vector<float4> color;
+	if (start)
+	{
+		world.push_back(*start);
+		world.push_back(*start + len);
+		color.push_back(stcolor);
+		color.push_back(float4());
+	}
+	if (end)
+	{
+		world.push_back(*end);
+		world.push_back(*end + len);
+		color.push_back(encolor);
+		color.push_back(float4());
+	}
+	std::vector<float2> screen(world.size());
+	camera->WorldToScreenPos(world.data(), screen.data(), world.size());
+	DrawShapeOnScreen(screen, color, GL_LINES, linewidth);
 }
 
 } // namespace AI_UI
