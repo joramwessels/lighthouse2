@@ -29,7 +29,7 @@ void NavMeshShader::UpdateMesh(NavMeshBuilder* navmesh)
 	Clean();
 	ExtractVertsAndEdges(navmesh->GetMesh());
 	
-	AddNavMeshToScene(navmesh);
+	AddPolysToScene(navmesh);
 	AddVertsToScene();
 	AddEdgesToScene();
 
@@ -46,12 +46,13 @@ void NavMeshShader::DrawGL() const
 {
 	if (m_shadeVerts) ShadeVertsGL();
 	if (m_shadeEdges) ShadeEdgesGL();
-	if (m_shadeTris) ShadeTrianglesGL();
+	if (m_shadeTris) ShadePolysGL();
 
-	if (m_vertHighlight.idx >= 0) DrawVertHighlightGL();
-	if (m_edgeHighlight.v1 >= 0) DrawEdgeHighlightGL();
+	if (m_polySelect) DrawPolyHighlightGL();
+	if (m_vertSelect) DrawVertHighlightGL();
+	if (m_edgeSelect) DrawEdgeHighlightGL();
 
-	PlotPath();
+	if (m_path && ! m_path->empty()) PlotPath();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -73,7 +74,7 @@ void NavMeshShader::PlaceAgent(float3 pos)
 //  |  NavMeshShader::AddNavMeshToScene                                           |
 //  |  Adds the navmesh triangles to the scene as a single mesh.            LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::AddNavMeshToScene(NavMeshBuilder* navmesh)
+void NavMeshShader::AddPolysToScene(NavMeshBuilder* navmesh)
 {
 	SaveAsMesh(navmesh);
 	std::string filename = GetObjFileName(navmesh->GetConfig()->m_id);
@@ -87,7 +88,7 @@ void NavMeshShader::AddNavMeshToScene(NavMeshBuilder* navmesh)
 //  |  NavMeshShader::RemoveNavMeshFromScene                                      |
 //  |  Removes the navmesh instance and mesh from the scene.                LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::RemoveNavMeshFromScene()
+void NavMeshShader::RemovePolysFromScene()
 {
 	if (m_navmeshInstID >= 0) m_renderer->RemoveInstance(m_navmeshInstID);
 	m_navmeshInstID = -1;
@@ -103,7 +104,7 @@ void NavMeshShader::RemoveNavMeshFromScene()
 void NavMeshShader::AddVertsToScene()
 {
 	for (std::vector<Vert>::iterator i = verts.begin(); i < verts.end(); i++)
-		i->instID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(i->pos));
+		i->instID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(i->pos) * mat4::Scale(m_vertWidth));
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -153,7 +154,7 @@ void NavMeshShader::RemoveEdgesFromScene()
 //  |  NavMeshShader::ShadeTrianglesGL (TODO)                                     |
 //  |  Plots all navmesh triangles using GL.                                LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::ShadeTrianglesGL() const
+void NavMeshShader::ShadePolysGL() const
 {
 
 }
@@ -177,56 +178,87 @@ void NavMeshShader::ShadeEdgesGL() const
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::HighlightPoly (TODO)                                        |
-//  |  Highlights a polygon given one of its triangle indices.              LH2'19|
+//  |  NavMeshShader::SelectPoly                                                  |
+//  |  Highlights a polygon given a world position and a navmesh navigator. LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::HighlightPoly(int triangleID)
+void NavMeshShader::SelectPoly(float3 pos, NavMeshNavigator* navmesh)
 {
-
+	Deselect();
+	if (!navmesh) { m_polySelect = 0; return; }
+	dtPolyRef ref;
+	float3 posOnPoly;
+	navmesh->FindNearestPoly(pos, &ref, &posOnPoly);
+	m_polySelect = navmesh->GetPoly(ref);
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::HighlightVert                                               |
+//  |  NavMeshShader::DrawPolyHighlightGL                                         |
+//  |  Draws a highlighted polygon on the screen.                           LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::DrawPolyHighlightGL() const
+{
+	std::vector<float3> world;
+	std::vector<float2> screen(m_polySelect->vertCount);
+	std::vector<float4> colors(m_polySelect->vertCount, m_highLightColor);
+	for (int i = 0; i < m_polySelect->vertCount; i++)
+		world.push_back(verts[m_polySelect->verts[i]].pos);
+	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), world.size());
+
+	DrawShapeOnScreen(screen, colors, GL_TRIANGLE_FAN);
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::SelectVert                                                  |
 //  |  Hightlights a vertex instance.                                       LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::HighlightVert(int instanceID)
+void NavMeshShader::SelectVert(int instanceID)
 {
-	if (instanceID < 0) { m_vertHighlight = Vert(); return; }
+	Deselect();
+	if (instanceID < 0) return;
 	int meshID = m_renderer->GetInstanceMeshID(instanceID);
-	if (!isVert(meshID)) { m_vertHighlight = Vert(); return; }
+	if (!isVert(meshID)) return;
 	for (std::vector<Vert>::iterator i = verts.begin(); i < verts.end(); i++)
-		if (i->instID == instanceID) m_vertHighlight = *i;
+		if (i->instID == instanceID) m_vertSelect = new Vert(*i);
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::DrawVertHighlightGL (TODO)                                  |
+//  |  NavMeshShader::DrawVertHighlightGL                                         |
 //  |  Draws a highlighted vertex on the screen.                            LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::DrawVertHighlightGL() const
 {
+	std::vector<float2> vertices(1);
+	m_renderer->GetCamera()->WorldToScreenPos(&m_vertSelect->pos, vertices.data(), 1);
+	std::vector<float4> colors(1, m_highLightColor);
 
+	DrawShapeOnScreen(vertices, colors, GL_POINTS, m_vertHighlightWidth);
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::HighlightEdge                                               |
+//  |  NavMeshShader::SelectEdge                                                  |
 //  |  Hightlights an edge instance.                                        LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::HighlightEdge(int instanceID)
+void NavMeshShader::SelectEdge(int instanceID)
 {
-	if (instanceID < 0) { m_edgeHighlight = Edge(); return; }
+	Deselect();
+	if (instanceID < 0) return;
 	int meshID = m_renderer->GetInstanceMeshID(instanceID);
-	if (!isEdge(meshID)) { m_edgeHighlight = Edge(); return; }
+	if (!isEdge(meshID)) return;
 	for (std::vector<Edge>::iterator i = edges.begin(); i < edges.end(); i++)
-		if (i->instID == instanceID) m_edgeHighlight = *i;
+		if (i->instID == instanceID) m_edgeSelect = new Edge(*i);
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::DrawEdgeHighlightGL (TODO)                                  |
+//  |  NavMeshShader::DrawEdgeHighlightGL                                         |
 //  |  Draws a highlighted edge on the screen.                              LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::DrawEdgeHighlightGL() const
 {
-
+	std::vector<float2> screen(2);
+	std::vector<float4> colors(2, m_highLightColor);
+	const float3 world[2] = { verts[m_edgeSelect->v1].pos , verts[m_edgeSelect->v2].pos };
+	m_renderer->GetCamera()->WorldToScreenPos(world, screen.data(), 2);
+	DrawShapeOnScreen(screen, colors, GL_LINE_STRIP, m_edgeHighlightWidth);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -236,8 +268,6 @@ void NavMeshShader::DrawEdgeHighlightGL() const
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::PlotPath() const
 {
-	if (!m_path || m_path->empty()) return;
-
 	// Allocating screen position array
 	std::vector<float2> vertices;
 	std::vector<float4> colors;
@@ -249,7 +279,7 @@ void NavMeshShader::PlotPath() const
 	view->WorldToScreenPos(m_path->data(), vertices.data() + 1, (int)m_path->size());
 	view->WorldToScreenPos(&m_pathStart, &vertices[0], 1); // prepend start position
 
-	DrawLineStrip(vertices, colors, m_pathWidth);
+	DrawShapeOnScreen(vertices, colors, GL_LINE_STRIP, m_pathWidth);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -266,18 +296,16 @@ void NavMeshShader::Clean()
 	if (m_endInstID >= 0) m_renderer->RemoveInstance(m_endInstID);
 	m_endInstID = -1;
 
-	RemoveNavMeshFromScene();
+	RemovePolysFromScene();
 	RemoveVertsFromScene();
 	RemoveEdgesFromScene();
 
+	Deselect();
 	verts.clear();
 	edges.clear();
 
 	m_path = 0;
 	m_shadeTris = m_shadeVerts = m_shadeEdges = false;
-
-	m_vertHighlight = Vert();
-	m_edgeHighlight = Edge();
 
 	m_renderer->SynchronizeSceneData();
 }

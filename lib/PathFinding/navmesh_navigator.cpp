@@ -150,6 +150,17 @@ void NavMeshNavigator::Clean()
 	m_filter = dtQueryFilter();
 }
 
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshNavigator::GetPoly                                                  |
+//  |  Returns a polygon pointer given its detour reference.                LH2'19|
+//  +-----------------------------------------------------------------------------+
+const dtPoly* NavMeshNavigator::GetPoly(dtPolyRef ref) const
+{
+	const dtMeshTile* tile; const dtPoly* poly;
+	if (!dtStatusFailed(m_navmesh->getTileAndPolyByRef(ref, &tile, &poly)))
+		return poly;
+}
+
 
 
 // Definitions required for NavMesh serialization

@@ -35,7 +35,7 @@ public:
 		: m_renderer(renderer), m_dir(dir)
 	{
 		// Add meshes
-		m_vertMeshID = m_renderer->AddMesh("vertex.obj", m_dir, .01f);
+		m_vertMeshID = m_renderer->AddMesh("vertex.obj", m_dir, 1.0f);
 		m_agentMeshID = m_renderer->AddMesh("agent.obj", m_dir, 1.0f);
 		m_edgeMeshID = m_renderer->AddMesh("edge.obj", m_dir, 1.0f);
 		m_renderer->GetScene()->meshes[m_vertMeshID]->name = "Vertex";
@@ -48,29 +48,33 @@ public:
 	void DrawGL() const;
 	void PlaceAgent(float3 pos);
 
-	void AddNavMeshToScene(NavMeshBuilder* navmesh);
-	void RemoveNavMeshFromScene();
+	void AddPolysToScene(NavMeshBuilder* navmesh);
 	void AddVertsToScene();
-	void RemoveVertsFromScene();
 	void AddEdgesToScene();
+	void RemovePolysFromScene();
+	void RemoveVertsFromScene();
 	void RemoveEdgesFromScene();
 
-	void AddNavMeshToGL(bool useGL = true) { m_shadeTris = useGL; };
-	void AddVertsToGL(bool useGL = true) { m_shadeVerts = useGL; };
-	void AddEdgesToGL(bool useGL = true) { m_shadeEdges = useGL; };
+	void AddPolysToGL() { m_shadeTris = true; };
+	void AddVertsToGL() { m_shadeVerts = true; };
+	void AddEdgesToGL() { m_shadeEdges = true; };
+	void RemovePolysFromGL() { m_shadeTris = false; };
+	void RemoveVertsFromGL() { m_shadeVerts = false; };
+	void RemoveEdgesFromGL() { m_shadeEdges = false; };
 
-	void HighlightPoly(int triangleID);
-	void HighlightVert(int instanceID);
-	void HighlightEdge(int instanceID);
+	void SelectPoly(float3 pos, NavMeshNavigator* navmesh);
+	void SelectVert(int instanceID);
+	void SelectEdge(int instanceID);
 
 	void SetPath(float3 start, std::vector<float3>* path) { m_path = path; m_pathStart = start; };
 
 	void Clean();
 
-	bool isNavMesh(int meshID) const { return meshID == m_navmeshMeshID; };
 	bool isAgent(int meshID) const { return meshID == m_agentMeshID; };
+	bool isPoly(int meshID) const { return meshID == m_navmeshMeshID; };
 	bool isVert(int meshID) const { return meshID == m_vertMeshID; };
 	bool isEdge(int meshID) const { return meshID == m_edgeMeshID; };
+	bool isNavMesh(int meshID) const { return isVert(meshID) || isEdge(meshID) || isPoly(meshID); };
 
 private:
 	RenderAPI* m_renderer;
@@ -85,39 +89,37 @@ private:
 	int m_agentHeight, m_agentRadius;
 	
 	// Verts and Edges
+	float m_vertWidth = .3f, m_edgeWidth = .1f;
 	struct Vert { float3 pos; int idx = -1, instID = -1; std::vector<const dtPoly*> polys; };
 	struct Edge { int v1 = -1, v2 = -1, instID = -1; const dtPoly *poly1 = 0, *poly2 = 0; };
 	std::vector<Vert> verts;
 	std::vector<Edge> edges;
 	void ExtractVertsAndEdges(const dtNavMesh* navmesh);
 	void AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, const dtPoly* poly);
-	mat4 m_edgeScale = mat4::Scale(make_float3(1.0f, 1.0f, 1.0f)); // TODO
-	float m_edgeWidth = .1f;
 
 	// Highlighting
-	int m_vertHighlightMeshID = -1, m_edgeHighlightMeshID = -1;
-	Vert m_vertHighlight;
-	Edge m_edgeHighlight;
-	//dtPolyRef m_polyHighlight;
+	float4 m_highLightColor = { 1.0f, 1.0f, 0.0f, .5f }; // rgba
+	float m_edgeHighlightWidth = 5.0f, m_vertHighlightWidth = 10.0f; // in pixels
+	const Vert* m_vertSelect = 0;
+	const Edge* m_edgeSelect = 0;
+	const dtPoly* m_polySelect = 0;
+	void Deselect() { m_vertSelect = 0; m_edgeSelect = 0; m_polySelect = 0; };
+	void DrawPolyHighlightGL() const;
 	void DrawVertHighlightGL() const;
 	void DrawEdgeHighlightGL() const;
 
-	float3 m_selectedTriColor = { 1.0f, 1.0f, 0.0f };
-
 	// Path
-	std::vector<float3>* m_path = 0;
-	float3 m_pathStart;
 	float4 m_pathColor = { 1.0f, 0.0f, 0.0f, 0.5f };
 	float m_pathWidth = 3.0f;
+	std::vector<float3>* m_path = 0;
+	float3 m_pathStart;
 	void PlotPath() const;
 
 	// Shading
 	bool m_shadeTris = false, m_shadeVerts = false, m_shadeEdges = false;
-	void ShadeTrianglesGL() const;
+	void ShadePolysGL() const;
 	void ShadeVertsGL() const;
 	void ShadeEdgesGL() const;
-
-	//const std::vector<int>* GetPolyTriangleIndices(dtPolyRef poly, int tileIdx = 0);
 
 	// File writing
 	void WriteMaterialFile();

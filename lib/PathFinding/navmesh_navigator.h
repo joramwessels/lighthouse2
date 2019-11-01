@@ -64,6 +64,8 @@ public:
 	int FindPath(float3 start, float3 end, std::vector<float3>& path, float& distToEnd, int maxCount = 100);
 	void Clean();
 
+	const dtPoly* GetPoly(dtPolyRef ref) const;
+
 protected:
 	int m_errorCode;		 // error code of the last error
 	bool m_owner;			 // owner of the dtNavMesh

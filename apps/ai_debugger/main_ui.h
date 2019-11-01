@@ -22,8 +22,8 @@ namespace AI_UI {
 
 static TwBar* settings = 0, *navmesh = 0, *navigation;
 static NavMeshShader* navMeshShader = 0;
-static bool leftClickLastFrame = false;
-static bool rightClickLastFrame = false;
+static bool leftClickLastFrame = false, rightClickLastFrame = false;
+static bool ctrlClickLastFrame = false, shiftClickLastFrame = false, altClickLastFrame = false;
 
 // Settings bar
 static float mraysincl = 0, mraysexcl = 0;
@@ -53,7 +53,7 @@ void PrintFPS(float deltaTime);
 //  +-----------------------------------------------------------------------------+
 void DrawNavMesh()
 {
-	if (pathStart && pathEnd) navMeshShader->DrawGL();
+	navMeshShader->DrawGL();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -330,55 +330,82 @@ bool HandleInput(float frameTime)
 	// Probing results are one frame delayed due to camera refresh
 	if (leftClickLastFrame || rightClickLastFrame)
 	{
-		// DEBUG: crashes when probed distance is 0.0f
-		if (coreStats.probedDist <= 0.0f)
+
+		// Only calculate probe info when ctrl/shift-clicked
+		if (ctrlClickLastFrame || shiftClickLastFrame)
 		{
-			printf("\tPROBED DIST == 0.0f ");
-			return changed;
+			// Identify probed instance
+			probeInstID = coreStats.probedInstid;
+			probeTriID = coreStats.probedTriid;
+			probMeshID = renderer->GetInstanceMeshID(probeInstID);
+			meshName = renderer->GetMesh(probMeshID)->name;
+
+			// Get 3D probe position
+			ViewPyramid p = camera->GetView();
+			float3 unitRight = (p.p2 - p.p1) / scrwidth;
+			float3 unitDown = (p.p3 - p.p1) / scrheight;
+			float3 pixelLoc = p.p1 + probeCoords.x * unitRight + probeCoords.y * unitDown;
+			probedPos = camera->position + normalize(pixelLoc - camera->position) * coreStats.probedDist;
 		}
 
-		// Identify probed instance
-		probeInstID = coreStats.probedInstid;
-		probeTriID = coreStats.probedTriid;
-		probMeshID = renderer->GetInstanceMeshID(probeInstID);
-		meshName = renderer->GetMesh(probMeshID)->name;
-
-		// Get 3D probe position
-		ViewPyramid p = camera->GetView();
-		float3 unitRight = (p.p2 - p.p1) / scrwidth;
-		float3 unitDown = (p.p3 - p.p1) / scrheight;
-		float3 pixelLoc = p.p1 + probeCoords.x * unitRight + probeCoords.y * unitDown;
-		probedPos = camera->position + normalize(pixelLoc - camera->position) * coreStats.probedDist;
-
-		// Apply new probe position
-		if (leftClickLastFrame && navMeshShader->isNavMesh(probMeshID))
+		// Setting path start/end (CTRL)
+		if (ctrlClickLastFrame && navMeshShader->isNavMesh(probMeshID))
 		{
-			pathStart = new float3(probedPos);
-			if (pathEnd) // if both start and end are set
-				if (!navMeshNavigator->FindPath(*pathStart, *pathEnd, path, distToEnd))
-					navMeshShader->SetPath(*pathStart, &path);
-			//navMeshAssets->PlaceAgent(probedPos); // DEBUG
+			if (leftClickLastFrame)
+			{
+				pathStart = new float3(probedPos);
+				if (pathEnd) // if both start and end are set
+					if (!navMeshNavigator->FindPath(*pathStart, *pathEnd, path, distToEnd))
+						navMeshShader->SetPath(*pathStart, &path);
+			}
+			if (rightClickLastFrame)
+			{
+				pathEnd = new float3(probedPos);
+				if (pathStart) // if both start and end are set
+					if (!navMeshNavigator->FindPath(*pathStart, *pathEnd, path, distToEnd))
+						navMeshShader->SetPath(*pathStart, &path);
+			}
 		}
-		if (rightClickLastFrame && navMeshShader->isNavMesh(probMeshID))
-		{
-			pathEnd = new float3(probedPos);
-			if (pathStart) // if both start and end are set
-				if (!navMeshNavigator->FindPath(*pathStart, *pathEnd, path, distToEnd))
-					navMeshShader->SetPath(*pathStart, &path);
-		}
-		if (coreStats.probedDist < 1000) // prevents scene from going invisible
-			camera->focalDistance = coreStats.probedDist;
 
-		// Reset click delay and update focal distance
+		// Instance selecting (SHIFT) (L-CLICK)
+		if (leftClickLastFrame && shiftClickLastFrame)
+		{
+			if (navMeshShader->isVert(probMeshID))
+				navMeshShader->SelectVert(probeInstID);
+			else if (navMeshShader->isEdge(probMeshID))
+				navMeshShader->SelectEdge(probeInstID);
+			else if (navMeshShader->isPoly(probMeshID))
+				navMeshShader->SelectPoly(probedPos, navMeshNavigator);
+		}
+
+		// Agent placement (SHIFT) (R-CLICK)
+		if (rightClickLastFrame && shiftClickLastFrame)
+		{
+			if (navMeshShader->isPoly(probMeshID))
+				navMeshShader->PlaceAgent(probedPos);
+		}
+
+		// Depth of field (SHIFT)
+		if (shiftClickLastFrame)
+			if (coreStats.probedDist < 1000) // prevents scene from going invisible
+				camera->focalDistance = coreStats.probedDist;
+
+		// Update camera and reset click delay booleans
+		if (shiftClickLastFrame) changed = true;
 		leftClickLastFrame = rightClickLastFrame = false;
-		changed = true;
+		ctrlClickLastFrame = shiftClickLastFrame = altClickLastFrame = false;
 	}
 
 	// process button click
-	if ((leftClicked || rightClicked) && GetAsyncKeyState(VK_LSHIFT))
+	if (leftClicked || rightClicked)
 	{
 		if (leftClicked) leftClickLastFrame = true;
 		if (rightClicked) rightClickLastFrame = true;
+		if (GetAsyncKeyState(VK_LSHIFT)) shiftClickLastFrame = true;
+		if (GetAsyncKeyState(VK_RSHIFT)) shiftClickLastFrame = true;
+		if (GetAsyncKeyState(VK_LCONTROL)) ctrlClickLastFrame = true;
+		if (GetAsyncKeyState(VK_RCONTROL)) ctrlClickLastFrame = true;
+
 		leftClicked = rightClicked = false;
 		changed = true; // probing requires a camera refresh
 	}
