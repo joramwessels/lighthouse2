@@ -156,25 +156,41 @@ void NavMeshShader::RemoveEdgesFromScene()
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::ShadePolysGL() const
 {
-
+	
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::ShadeVertsGL (TODO)                                         |
+//  |  NavMeshShader::ShadeVertsGL                                                |
 //  |  Plots all precomputed navmesh vertices using GL.                     LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::ShadeVertsGL() const
 {
-
+	int count = verts.size();
+	std::vector<float3> world(count);
+	std::vector<float2> screen(count);
+	std::vector<float4> colors(count, m_vertColor);
+	for (int i = 0; i < count; i++) world[i] = verts[i].pos;
+	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), count);
+	DrawShapeOnScreen(screen, colors, GL_POINTS, m_vertWidthGL);
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::ShadeEdgesGL (TODO)                                         |
+//  |  NavMeshShader::ShadeEdgesGL                                                |
 //  |  Plots all precomputed polygon edges using GL.                        LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::ShadeEdgesGL() const
 {
-
+	int count = edges.size();
+	std::vector<float3> world(count * 2);
+	std::vector<float2> screen(count * 2);
+	std::vector<float4> colors(count * 2, m_edgeColor);
+	for (int i = 0; i < count; i++)
+	{
+		world[i * 2]     = verts[edges[i].v1].pos;
+		world[i * 2 + 1] = verts[edges[i].v2].pos;
+	}
+	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), count * 2);
+	DrawShapeOnScreen(screen, colors, GL_LINES, m_edgeWidthGL);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -231,7 +247,7 @@ void NavMeshShader::DrawVertHighlightGL() const
 	m_renderer->GetCamera()->WorldToScreenPos(&m_vertSelect->pos, vertices.data(), 1);
 	std::vector<float4> colors(1, m_highLightColor);
 
-	DrawShapeOnScreen(vertices, colors, GL_POINTS, m_vertHighlightWidth);
+	DrawShapeOnScreen(vertices, colors, GL_POINTS, m_vertWidthGL);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -258,7 +274,7 @@ void NavMeshShader::DrawEdgeHighlightGL() const
 	std::vector<float4> colors(2, m_highLightColor);
 	const float3 world[2] = { verts[m_edgeSelect->v1].pos , verts[m_edgeSelect->v2].pos };
 	m_renderer->GetCamera()->WorldToScreenPos(world, screen.data(), 2);
-	DrawShapeOnScreen(screen, colors, GL_LINE_STRIP, m_edgeHighlightWidth);
+	DrawShapeOnScreen(screen, colors, GL_LINE_STRIP, m_edgeWidthGL);
 }
 
 //  +-----------------------------------------------------------------------------+

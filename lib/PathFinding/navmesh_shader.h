@@ -89,7 +89,11 @@ private:
 	int m_agentHeight, m_agentRadius;
 	
 	// Verts and Edges
-	float m_vertWidth = .3f, m_edgeWidth = .1f;
+	float4 m_polyColor = { 0, 1.0f, 1.0f, 0.2f }; // TODO: make this affect meshes?
+	float4 m_vertColor = { 1.0f, 0, 1.0f, 0.2f };
+	float4 m_edgeColor = { 1.0f, 0, 1.0f, 0.2f };
+	float m_vertWidth = .3f, m_edgeWidth = .1f;			// in world coordinates
+	float m_edgeWidthGL = 5.0f, m_vertWidthGL = 10.0f;	// in pixels
 	struct Vert { float3 pos; int idx = -1, instID = -1; std::vector<const dtPoly*> polys; };
 	struct Edge { int v1 = -1, v2 = -1, instID = -1; const dtPoly *poly1 = 0, *poly2 = 0; };
 	std::vector<Vert> verts;
@@ -99,7 +103,6 @@ private:
 
 	// Highlighting
 	float4 m_highLightColor = { 1.0f, 1.0f, 0.0f, .5f }; // rgba
-	float m_edgeHighlightWidth = 5.0f, m_vertHighlightWidth = 10.0f; // in pixels
 	const Vert* m_vertSelect = 0;
 	const Edge* m_edgeSelect = 0;
 	const dtPoly* m_polySelect = 0;
