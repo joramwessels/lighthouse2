@@ -15,6 +15,7 @@
 
 #include "core_settings.h"
 #include <optix_function_table_definition.h>
+#include <optix_stack_size.h>
 
 namespace lh2core {
 
@@ -55,48 +56,46 @@ using namespace lh2core;
 OptixDeviceContext RenderCore::optixContext = 0;
 struct SBTRecord { __align__( OPTIX_SBT_RECORD_ALIGNMENT ) char header[OPTIX_SBT_RECORD_HEADER_SIZE]; };
 
-char* ParseOptixError( OptixResult r )
+const char *ParseOptixError( OptixResult r )
 {
-	char* t = new char[256];
-	switch (r)
+	switch ( r )
 	{
-	case 0: strcpy_s( t, 256, "NO ERROR" ); break;
-	case 7001: strcpy_s( t, 256, "OPTIX_ERROR_INVALID_VALUE" ); break;
-	case 7002: strcpy_s( t, 256, "OPTIX_ERROR_HOST_OUT_OF_MEMORY" ); break;
-	case 7003: strcpy_s( t, 256, "OPTIX_ERROR_INVALID_OPERATION" ); break;
-	case 7004: strcpy_s( t, 256, "OPTIX_ERROR_FILE_IO_ERROR" ); break;
-	case 7005: strcpy_s( t, 256, "OPTIX_ERROR_INVALID_FILE_FORMAT" ); break;
-	case 7010: strcpy_s( t, 256, "OPTIX_ERROR_DISK_CACHE_INVALID_PATH" ); break;
-	case 7011: strcpy_s( t, 256, "OPTIX_ERROR_DISK_CACHE_PERMISSION_ERROR" ); break;
-	case 7012: strcpy_s( t, 256, "OPTIX_ERROR_DISK_CACHE_DATABASE_ERROR" ); break;
-	case 7013: strcpy_s( t, 256, "OPTIX_ERROR_DISK_CACHE_INVALID_DATA" ); break;
-	case 7050: strcpy_s( t, 256, "OPTIX_ERROR_LAUNCH_FAILURE" ); break;
-	case 7051: strcpy_s( t, 256, "OPTIX_ERROR_INVALID_DEVICE_CONTEXT" ); break;
-	case 7052: strcpy_s( t, 256, "OPTIX_ERROR_CUDA_NOT_INITIALIZED" ); break;
-	case 7200: strcpy_s( t, 256, "OPTIX_ERROR_INVALID_PTX" ); break;
-	case 7201: strcpy_s( t, 256, "OPTIX_ERROR_INVALID_LAUNCH_PARAMETER" ); break;
-	case 7202: strcpy_s( t, 256, "OPTIX_ERROR_INVALID_PAYLOAD_ACCESS" ); break;
-	case 7203: strcpy_s( t, 256, "OPTIX_ERROR_INVALID_ATTRIBUTE_ACCESS" ); break;
-	case 7204: strcpy_s( t, 256, "OPTIX_ERROR_INVALID_FUNCTION_USE" ); break;
-	case 7205: strcpy_s( t, 256, "OPTIX_ERROR_INVALID_FUNCTION_ARGUMENTS" ); break;
-	case 7250: strcpy_s( t, 256, "OPTIX_ERROR_PIPELINE_OUT_OF_CONSTANT_MEMORY" ); break;
-	case 7251: strcpy_s( t, 256, "OPTIX_ERROR_PIPELINE_LINK_ERROR" ); break;
-	case 7299: strcpy_s( t, 256, "OPTIX_ERROR_INTERNAL_COMPILER_ERROR" ); break;
-	case 7300: strcpy_s( t, 256, "OPTIX_ERROR_DENOISER_MODEL_NOT_SET" ); break;
-	case 7301: strcpy_s( t, 256, "OPTIX_ERROR_DENOISER_NOT_INITIALIZED" ); break;
-	case 7400: strcpy_s( t, 256, "OPTIX_ERROR_ACCEL_NOT_COMPATIBLE" ); break;
-	case 7800: strcpy_s( t, 256, "OPTIX_ERROR_NOT_SUPPORTED" ); break;
-	case 7801: strcpy_s( t, 256, "OPTIX_ERROR_UNSUPPORTED_ABI_VERSION" ); break;
-	case 7802: strcpy_s( t, 256, "OPTIX_ERROR_FUNCTION_TABLE_SIZE_MISMATCH" ); break;
-	case 7803: strcpy_s( t, 256, "OPTIX_ERROR_INVALID_ENTRY_FUNCTION_OPTIONS" ); break;
-	case 7804: strcpy_s( t, 256, "OPTIX_ERROR_LIBRARY_NOT_FOUND" ); break;
-	case 7805: strcpy_s( t, 256, "OPTIX_ERROR_ENTRY_SYMBOL_NOT_FOUND" ); break;
-	case 7900: strcpy_s( t, 256, "OPTIX_ERROR_CUDA_ERROR" ); break;
-	case 7990: strcpy_s( t, 256, "OPTIX_ERROR_INTERNAL_ERROR" ); break;
-	case 7999: strcpy_s( t, 256, "OPTIX_ERROR_UNKNOWN" ); break;
-	default: strcpy_s( t, 256, "UNKNOWN ERROR" ); break;
+	case 0: return "NO ERROR";
+	case 7001: return "OPTIX_ERROR_INVALID_VALUE";
+	case 7002: return "OPTIX_ERROR_HOST_OUT_OF_MEMORY";
+	case 7003: return "OPTIX_ERROR_INVALID_OPERATION";
+	case 7004: return "OPTIX_ERROR_FILE_IO_ERROR";
+	case 7005: return "OPTIX_ERROR_INVALID_FILE_FORMAT";
+	case 7010: return "OPTIX_ERROR_DISK_CACHE_INVALID_PATH";
+	case 7011: return "OPTIX_ERROR_DISK_CACHE_PERMISSION_ERROR";
+	case 7012: return "OPTIX_ERROR_DISK_CACHE_DATABASE_ERROR";
+	case 7013: return "OPTIX_ERROR_DISK_CACHE_INVALID_DATA";
+	case 7050: return "OPTIX_ERROR_LAUNCH_FAILURE";
+	case 7051: return "OPTIX_ERROR_INVALID_DEVICE_CONTEXT";
+	case 7052: return "OPTIX_ERROR_CUDA_NOT_INITIALIZED";
+	case 7200: return "OPTIX_ERROR_INVALID_PTX";
+	case 7201: return "OPTIX_ERROR_INVALID_LAUNCH_PARAMETER";
+	case 7202: return "OPTIX_ERROR_INVALID_PAYLOAD_ACCESS";
+	case 7203: return "OPTIX_ERROR_INVALID_ATTRIBUTE_ACCESS";
+	case 7204: return "OPTIX_ERROR_INVALID_FUNCTION_USE";
+	case 7205: return "OPTIX_ERROR_INVALID_FUNCTION_ARGUMENTS";
+	case 7250: return "OPTIX_ERROR_PIPELINE_OUT_OF_CONSTANT_MEMORY";
+	case 7251: return "OPTIX_ERROR_PIPELINE_LINK_ERROR";
+	case 7299: return "OPTIX_ERROR_INTERNAL_COMPILER_ERROR";
+	case 7300: return "OPTIX_ERROR_DENOISER_MODEL_NOT_SET";
+	case 7301: return "OPTIX_ERROR_DENOISER_NOT_INITIALIZED";
+	case 7400: return "OPTIX_ERROR_ACCEL_NOT_COMPATIBLE";
+	case 7800: return "OPTIX_ERROR_NOT_SUPPORTED";
+	case 7801: return "OPTIX_ERROR_UNSUPPORTED_ABI_VERSION";
+	case 7802: return "OPTIX_ERROR_FUNCTION_TABLE_SIZE_MISMATCH";
+	case 7803: return "OPTIX_ERROR_INVALID_ENTRY_FUNCTION_OPTIONS";
+	case 7804: return "OPTIX_ERROR_LIBRARY_NOT_FOUND";
+	case 7805: return "OPTIX_ERROR_ENTRY_SYMBOL_NOT_FOUND";
+	case 7900: return "OPTIX_ERROR_CUDA_ERROR";
+	case 7990: return "OPTIX_ERROR_INTERNAL_ERROR";
+	case 7999: return "OPTIX_ERROR_UNKNOWN";
+	default: return "UNKNOWN ERROR";
 	};
-	return t;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -130,7 +129,7 @@ void RenderCore::CreateOptixContext( int cc )
 
 	// load and compile PTX
 	string ptx;
-	if (NeedsRecompile( "../../lib/RenderCore_Optix7/optix/", ".optix.turing.cu.ptx", ".optix.cu", "../../rendersystem/common_settings.h", "../core_settings.h" ))
+	if (NeedsRecompile( "../../lib/RenderCore_Optix7/optix/", ".optix.turing.cu.ptx", ".optix.cu", "../../RenderSystem/common_settings.h", "../core_settings.h" ))
 	{
 		CUDATools::compileToPTX( ptx, TextFileRead( "../../lib/RenderCore_Optix7/optix/.optix.cu" ).c_str(), "../../lib/RenderCore_Optix7/optix", cc, 7 );
 		if (cc / 10 == 7) TextFileWrite( ptx, "../../lib/RenderCore_Optix7/optix/.optix.turing.cu.ptx" );
@@ -140,10 +139,16 @@ void RenderCore::CreateOptixContext( int cc )
 	}
 	else
 	{
+		const char *file = NULL;
+		if (cc / 10 == 7) file = "../../lib/RenderCore_Optix7/optix/.optix.turing.cu.ptx";
+		else if (cc / 10 == 6) file = "../../lib/RenderCore_Optix7/optix/.optix.pascal.cu.ptx";
+		else if (cc / 10 == 5) file = "../../lib/RenderCore_Optix7/optix/.optix.maxwell.cu.ptx";
 		FILE* f;
-		if (cc / 10 == 7) fopen_s( &f, "../../lib/RenderCore_Optix7/optix/.optix.turing.cu.ptx", "rb" );
-		else if (cc / 10 == 6) fopen_s( &f, "../../lib/RenderCore_Optix7/optix/.optix.pascal.cu.ptx", "rb" );
-		else if (cc / 10 == 5) fopen_s( &f, "../../lib/RenderCore_Optix7/optix/.optix.maxwell.cu.ptx", "rb" );
+#ifdef _MSC_VER
+		fopen_s( &f, file, "rb" );
+#else
+		f = fopen( file, "rb" );
+#endif
 		int len;
 		fread( &len, 1, 4, f );
 		char* t = new char[len];
@@ -309,7 +314,7 @@ void RenderCore::SetTarget( GLTexture* target, const uint spp )
 		delete hitBuffer;
 		delete pathStateBuffer;
 		connectionBuffer = new CoreBuffer<float4>( maxPixels * scrspp * 3 * MAXPATHLENGTH, ON_DEVICE );
-		accumulator = new CoreBuffer<float4>( maxPixels * 2 /* to split direct / indirect */, ON_DEVICE );
+		accumulator = new CoreBuffer<float4>( maxPixels, ON_DEVICE );
 		hitBuffer = new CoreBuffer<float4>( maxPixels * scrspp, ON_DEVICE );
 		pathStateBuffer = new CoreBuffer<float4>( maxPixels * scrspp * 3, ON_DEVICE );
 		params.connectData = connectionBuffer->DevPtr();
@@ -381,7 +386,7 @@ void RenderCore::UpdateToplevel()
 		instanceArray = new CoreBuffer<OptixInstance>( instances.size() + 4, ON_HOST | ON_DEVICE );
 	}
 	// copy instance descriptors to the array, sync with device
-	for (int s = (int)instances.size(), i = 0; i < s; i++) 
+	for (int s = (int)instances.size(), i = 0; i < s; i++)
 	{
 		instances[i]->instance.traversableHandle = meshes[instances[i]->mesh]->gasHandle;
 		instanceArray->HostPtr()[i] = instances[i]->instance;
@@ -431,7 +436,7 @@ void RenderCore::SetTextures( const CoreTexDesc* tex, const int textures )
 	SyncStorageType( TexelStorage::ARGB32 );
 	SyncStorageType( TexelStorage::ARGB128 );
 	SyncStorageType( TexelStorage::NRM32 );
-	// Notes: 
+	// Notes:
 	// - the three types are copied from the original HostTexture pixel data (to which the
 	//   descriptors point) straight to the GPU. There is no pixel storage on the host
 	//   in the RenderCore.
@@ -594,12 +599,14 @@ void RenderCore::Render( const ViewPyramid& view, const Convergence converge, co
 	glFinish();
 	Timer timer;
 	// clean accumulator, if requested
-	if (converge == Restart)
+	if (converge == Restart || firstConvergingFrame)
 	{
 		accumulator->Clear( ON_DEVICE );
 		samplesTaken = 0;
+		firstConvergingFrame = true; // if we switch to converging, it will be the first converging frame.
 		camRNGseed = 0x12345678; // same seed means same noise.
 	}
+	if (converge == Converge) firstConvergingFrame = false;
 	// update instance descriptor array on device
 	// Note: we are not using the built-in OptiX instance system for shading. Instead,
 	// we figure out which triangle we hit, and to what instance it belongs; from there,
@@ -716,7 +723,7 @@ void RenderCore::Render( const ViewPyramid& view, const Convergence converge, co
 	coreStats.traceTime1 = CUDATools::Elapsed( traceStart[1], traceEnd[1] );
 	coreStats.shadowTraceTime = CUDATools::Elapsed( shadowStart, shadowEnd );
 	coreStats.traceTimeX = coreStats.shadeTime = 0;
-	for( int i = 2; i < MAXPATHLENGTH; i++ ) coreStats.traceTimeX += CUDATools::Elapsed( traceStart[i], traceEnd[i] ); 
+	for( int i = 2; i < MAXPATHLENGTH; i++ ) coreStats.traceTimeX += CUDATools::Elapsed( traceStart[i], traceEnd[i] );
 	for( int i = 0; i < MAXPATHLENGTH; i++ ) coreStats.shadeTime += CUDATools::Elapsed( shadeStart[i], shadeEnd[i] );
 	coreStats.probedInstid = counters.probedInstid;
 	coreStats.probedTriid = counters.probedTriid;

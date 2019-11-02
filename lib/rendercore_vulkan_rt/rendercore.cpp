@@ -15,7 +15,8 @@
 
 #include "core_settings.h"
 
-namespace lh2core {
+namespace lh2core
+{
 
 constexpr std::array<const char *, 1> VALIDATION_LAYERS = { "VK_LAYER_LUNARG_standard_validation" };
 const std::vector<const char *> DEVICE_EXTENSIONS = { VK_NV_RAY_TRACING_EXTENSION_NAME };
@@ -80,7 +81,7 @@ void RenderCore::CreateInstance()
 #endif
 
 	m_VkInstance = vk::createInstance( createInfo );
-	if (!m_VkInstance) FATALERROR( "Could not initialize Vulkan." );
+	FATALERROR_IF( !m_VkInstance, "Could not initialize Vulkan." );
 	printf( "Successfully created Vulkan instance.\n" );
 }
 
@@ -151,8 +152,7 @@ void RenderCore::CreateDevice()
 	std::optional<vk::PhysicalDevice> physicalDevice = VulkanDevice::PickDeviceWithExtensions( m_VkInstance, dev_extensions );
 
 	// Sanity check
-	if (!physicalDevice.has_value())
-		FATALERROR( "No supported Vulkan devices available." );
+	FATALERROR_IF( !physicalDevice.has_value(), "No supported Vulkan devices available." );
 
 	// Create device
 	m_Device = VulkanDevice( physicalDevice.value(), dev_extensions );
@@ -909,7 +909,12 @@ void RenderCore::Render( const ViewPyramid &view, const Convergence converge, co
 	Counters &c = m_Counters->GetHostBuffer()[0];
 
 	auto queue = m_Device.GetGraphicsQueue();
-	if (converge == Restart) m_SamplesTaken = 0;
+	if (converge == Restart || m_FirstConvergingFrame)
+	{
+		m_SamplesTaken = 0;
+		m_FirstConvergingFrame = true; // if we switch to converging, it will be the first converging frame.
+	}
+	if (converge == Converge) m_FirstConvergingFrame = false;
 	const bool recordCommandBuffers = rtDescriptorSet->IsDirty() || shadeDescriptorSet->IsDirty() || finalizeDescriptorSet->IsDirty() || m_First; // Before we render we potentially have to update our command buffers
 	m_First = false;
 	if (recordCommandBuffers)
