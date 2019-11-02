@@ -376,6 +376,8 @@ bool HandleInput(float frameTime)
 				navMeshShader->SelectVert(probeInstID);
 			else if (navMeshShader->isEdge(probMeshID))
 				navMeshShader->SelectEdge(probeInstID);
+			else if (navMeshShader->isAgent(probMeshID))
+				navMeshShader->SelectAgent(probeInstID);
 			else if (navMeshShader->isPoly(probMeshID))
 				navMeshShader->SelectPoly(probedPos, navMeshNavigator);
 		}
@@ -384,7 +386,7 @@ bool HandleInput(float frameTime)
 		if (rightClickLastFrame && shiftClickLastFrame)
 		{
 			if (navMeshShader->isPoly(probMeshID))
-				navMeshShader->PlaceAgent(probedPos);
+				navMeshShader->AddAgentToScene(probedPos);
 		}
 
 		// Depth of field (SHIFT)

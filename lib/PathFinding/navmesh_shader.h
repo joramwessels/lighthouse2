@@ -46,8 +46,8 @@ public:
 
 	void UpdateMesh(NavMeshBuilder* navmesh);
 	void DrawGL() const;
-	void PlaceAgent(float3 pos);
 
+	// NavMesh scene shading
 	void AddPolysToScene(NavMeshBuilder* navmesh);
 	void AddVertsToScene();
 	void AddEdgesToScene();
@@ -55,6 +55,7 @@ public:
 	void RemoveVertsFromScene();
 	void RemoveEdgesFromScene();
 
+	// NavMesh GL shading
 	void AddPolysToGL() { m_shadeTris = true; };
 	void AddVertsToGL() { m_shadeVerts = true; };
 	void AddEdgesToGL() { m_shadeEdges = true; };
@@ -62,16 +63,24 @@ public:
 	void RemoveVertsFromGL() { m_shadeVerts = false; };
 	void RemoveEdgesFromGL() { m_shadeEdges = false; };
 
+	// Agents
+	void AddAgentToScene(float3 pos);
+	void RemoveAgent(int instanceID);
+	void RemoveAllAgents();
+
+	// Object selection
 	void SelectPoly(float3 pos, NavMeshNavigator* navmesh);
 	void SelectVert(int instanceID);
 	void SelectEdge(int instanceID);
+	void SelectAgent(int instanceID);
 
-	void SetPath(float3 start, std::vector<float3>* path) { m_path = path; m_pathStart = start; };
+	void SetPath(float3 start, std::vector<float3>* path, bool owner = false)
+		{ m_path = path; m_pathStart = start; m_pathOwner = owner; };
 
 	void Clean();
 
 	bool isAgent(int meshID) const { return meshID == m_agentMeshID; };
-	bool isPoly(int meshID) const { return meshID == m_navmeshMeshID; };
+	bool isPoly(int meshID) const { return meshID == m_polyMeshID; };
 	bool isVert(int meshID) const { return meshID == m_vertMeshID; };
 	bool isEdge(int meshID) const { return meshID == m_edgeMeshID; };
 	bool isNavMesh(int meshID) const { return isVert(meshID) || isEdge(meshID) || isPoly(meshID); };
@@ -79,50 +88,53 @@ public:
 private:
 	RenderAPI* m_renderer;
 	const char* m_dir;
-
-	// Mesh- and instance IDs
-	int m_navmeshInstID = -1, m_startInstID = -1, m_endInstID = -1;
-	int m_vertMeshID = -1, m_edgeMeshID = -1;
-	int m_navmeshMeshID = -1, m_agentMeshID = -1;
-
-	// Agents
-	int m_agentHeight, m_agentRadius;
 	
-	// Verts and Edges
-	float4 m_polyColor = { 0, 1.0f, 1.0f, 0.2f }; // TODO: make this affect meshes?
-	float4 m_vertColor = { 1.0f, 0, 1.0f, 0.2f };
-	float4 m_edgeColor = { 1.0f, 0, 1.0f, 0.2f };
-	float m_vertWidth = .3f, m_edgeWidth = .1f;			// in world coordinates
-	float m_edgeWidthGL = 5.0f, m_vertWidthGL = 10.0f;	// in pixels
+	// NavMesh representation
+	int m_polyMeshID = -1, m_polyInstID = -1;
+	int m_vertMeshID = -1, m_edgeMeshID = -1;
 	struct Vert { float3 pos; int idx = -1, instID = -1; std::vector<const dtPoly*> polys; };
 	struct Edge { int v1 = -1, v2 = -1, instID = -1; const dtPoly *poly1 = 0, *poly2 = 0; };
-	std::vector<Vert> verts;
-	std::vector<Edge> edges;
+	std::vector<Vert> m_verts;
+	std::vector<Edge> m_edges;
 	void ExtractVertsAndEdges(const dtNavMesh* navmesh);
 	void AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, const dtPoly* poly);
+	float4 m_polyColor = { 0, 1.0f, 1.0f, 0.2f };		// rgba   TODO: make this affect meshes?
+	float4 m_vertColor = { 1.0f, 0, 1.0f, 0.2f };		// rgba
+	float4 m_edgeColor = { 1.0f, 0, 1.0f, 0.2f };		// rgba
+	float m_vertWidth = .3f, m_edgeWidth = .1f;			// in world coordinates
+	float m_edgeWidthGL = 5.0f, m_vertWidthGL = 10.0f;	// in pixels
 
-	// Highlighting
-	float4 m_highLightColor = { 1.0f, 1.0f, 0.0f, .5f }; // rgba
-	const Vert* m_vertSelect = 0;
-	const Edge* m_edgeSelect = 0;
-	const dtPoly* m_polySelect = 0;
-	void Deselect() { m_vertSelect = 0; m_edgeSelect = 0; m_polySelect = 0; };
-	void DrawPolyHighlightGL() const;
-	void DrawVertHighlightGL() const;
-	void DrawEdgeHighlightGL() const;
-
-	// Path
-	float4 m_pathColor = { 1.0f, 0.0f, 0.0f, 0.5f };
-	float m_pathWidth = 3.0f;
-	std::vector<float3>* m_path = 0;
-	float3 m_pathStart;
-	void PlotPath() const;
-
-	// Shading
+	// GL shading
 	bool m_shadeTris = false, m_shadeVerts = false, m_shadeEdges = false;
 	void ShadePolysGL() const;
 	void ShadeVertsGL() const;
 	void ShadeEdgesGL() const;
+
+	// Agents
+	float m_agentHeight, m_agentRadius;
+	int m_agentMeshID = -1;
+	struct Agent { int instID = -1; float3 pos, dir; };
+	std::vector<Agent> m_agents;
+
+	// Object selecting / highlighting
+	const Vert* m_vertSelect = 0;
+	const Edge* m_edgeSelect = 0;
+	const dtPoly* m_polySelect = 0;
+	const Agent* m_agentSelect = 0;
+	void Deselect() { m_vertSelect = 0; m_edgeSelect = 0; m_polySelect = 0; m_agentSelect = 0; };
+	void DrawPolyHighlightGL() const;
+	void DrawVertHighlightGL() const;
+	void DrawEdgeHighlightGL() const;
+	void DrawAgentHighlightGL() const;
+	float4 m_highLightColor = { 1.0f, 1.0f, 0.0f, .5f }; // rgba
+
+	// Path drawing
+	std::vector<float3>* m_path = 0;
+	bool m_pathOwner = false;
+	float3 m_pathStart;
+	void PlotPath() const;
+	float4 m_pathColor = { 1.0f, 0.0f, 0.0f, 0.5f }; // rgba
+	float m_pathWidth = 3.0f;
 
 	// File writing
 	void WriteMaterialFile();
