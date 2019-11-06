@@ -18,6 +18,7 @@
 #include "rendersystem.h"
 #include "navmesh_builder.h"
 #include "navmesh_navigator.h"
+#include "agent.h"
 
 static RenderAPI* renderer = 0;
 static GLTexture* renderTarget = 0;
@@ -30,6 +31,13 @@ static CoreStats coreStats;
 
 static NavMeshBuilder* navMeshBuilder = 0;
 static NavMeshNavigator* navMeshNavigator = 0;
+
+static const float agentUpdateInterval = 5.0f;
+static const int maxAgents = 50;
+static const int maxAgentPathSize = 8;
+static PhysicsPlaceholder rigidBodies(maxAgents);
+static NavMeshAgents navMeshAgents(maxAgents, maxAgentPathSize, agentUpdateInterval);
+
 
 #include "main_ui.h"
 #include "main_tools.h"
@@ -109,13 +117,20 @@ int main()
 			renderer->UpdateAnimation( i, deltaTime );
 			camMoved = true; // will remain false if scene has no animations
 		}
-		// render
 		deltaTime = timer.elapsed();
 		timer.reset();
+		// Physics
+		rigidBodies.Update(deltaTime);
+		AI_UI::navMeshShader->UpdateAgentPositions();
+		// render
 		renderer->Render( c );
 		coreStats = renderer->GetCoreStats();
 		AI_UI::mraysincl = coreStats.totalRays / (coreStats.renderTime * 1000);
 		AI_UI::mraysexcl = coreStats.totalRays / (coreStats.traceTime0 * 1000);
+		// AI
+		navMeshAgents.UpdateAgentMovement(deltaTime);
+		navMeshAgents.UpdateAgentBehavior(deltaTime); // only updates at a regular interval
+		// UI
 		if (AI_UI::HandleInput( deltaTime )) camMoved = true;
 		// postprocess
 		shader->Bind();
@@ -124,7 +139,7 @@ int main()
 		DrawQuad();
 		shader->Unbind();
 		// draw ui
-		AI_UI::DrawNavMesh();
+		AI_UI::navMeshShader->DrawGL();
 		TwDraw();
 		AI_UI::PrintFPS(deltaTime);
 		// finalize
