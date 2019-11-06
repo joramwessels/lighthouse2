@@ -45,8 +45,8 @@ void NavMeshShader::UpdateMesh(NavMeshBuilder* navmesh)
 void NavMeshShader::UpdateAgentPositions()
 {
 	return; // DEBUG
-	for (std::vector<ShaderAgent>::iterator it = m_agents.begin(); it != m_agents.end(); it++)
-		m_renderer->SetNodeTranslation(it->instID, *it->agent->GetPos());
+	//for (std::vector<ShaderAgent>::iterator it = m_agents.begin(); it != m_agents.end(); it++)
+	//	m_renderer->SetNodeTranslation(it->instID, *it->agent->GetPos());
 }
 
 //  +-----------------------------------------------------------------------------+
