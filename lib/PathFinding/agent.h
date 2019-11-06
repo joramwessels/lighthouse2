@@ -52,6 +52,7 @@ public:
 	void Kill() { m_alive = false; m_rb->Kill(); };
 	bool isAlive() const { return m_alive; };
 
+	mat4 GetTransform() const { return m_rb->GetTransform(); };
 	const float3* GetPos() const { return &m_rb->m_pos; };
 	const float3* GetDir() const { return &m_moveDir; };
 	float3* GetTarget() const { return m_pathEnd; };
@@ -60,7 +61,7 @@ public:
 protected:
 	RigidBody* m_rb;
 	float3 m_moveDir = { 0.0f, 0.0f, 0.0f };
-	float m_maxLinAcc = .1f;
+	float m_maxLinAcc = 1.0f;
 
 	NavMeshNavigator* m_navmesh;
 	int m_maxPathCount;
@@ -69,6 +70,7 @@ protected:
 	std::vector<float3> m_path; // should NEVER reallocate, invalidates pointers
 	float3* m_pathEnd = 0; // final target, also indicates if it should move at all
 	bool m_alive = true, m_pathEndOwner = false;
+	float m_distToEnd = 0; // distance from final path location to target
 
 private:
 	// Move-only (m_rb reference is killed on Kill())

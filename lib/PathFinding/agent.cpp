@@ -32,7 +32,7 @@ bool Agent::UpdateMovement(float deltaTime)
 	if (length(m_rb->m_pos - m_path[m_targetIdx]) < s_agentTargetReachedDistance) // target reached
 		if (m_targetIdx < m_pathCount - 1) m_targetIdx++; // next path target
 		else return m_pathEnd = 0; // final target reached
-	m_moveDir = normalize(m_rb->m_pos - m_path[m_targetIdx]);
+	m_moveDir = normalize(m_path[m_targetIdx] - m_rb->m_pos);
 	m_rb->AddImpulse(m_moveDir * m_maxLinAcc);
 	return true;
 };
@@ -44,9 +44,10 @@ bool Agent::UpdateMovement(float deltaTime)
 bool Agent::UpdateNavigation(float deltaTime)
 {
 	if (!m_pathEnd) return false;
-	if (m_navmesh->FindPath(m_rb->m_pos, *m_pathEnd, m_path.data(), m_maxPathCount, &m_pathCount))
+	if (m_navmesh->FindPath(m_rb->m_pos, *m_pathEnd, m_path.data(), m_maxPathCount, &m_pathCount, &m_distToEnd))
 		m_targetIdx = 0;
-	for (int i = m_pathCount; i < m_maxPathCount; i++) m_path[i] = *m_pathEnd;
+	float3 lastPos = (m_distToEnd == 0 ? *m_pathEnd : m_path[m_pathCount - 1]);
+	for (int i = m_pathCount; i < m_maxPathCount; i++) m_path[i] = lastPos;
 	return true;
 }
 

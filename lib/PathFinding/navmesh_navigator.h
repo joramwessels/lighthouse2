@@ -39,8 +39,8 @@ class NavMeshNavigator
 public:
 
 	// constructor/destructor
-	NavMeshNavigator(const char* dir, const char* ID) { m_errorCode = Load(dir, ID); };
-	NavMeshNavigator(dtNavMesh* navmesh)
+	NavMeshNavigator(const char* dir, const char* ID) : m_ID(ID) { m_errorCode = Load(dir, ID); };
+	NavMeshNavigator(dtNavMesh* navmesh, const char* ID="NO_ID") : m_ID(ID)
 	{
 		if (!navmesh) m_errorCode = NavMeshError(NMINPUT,
 			"NavMeshNavigator was initialized with a nullpointer navmesh");
@@ -69,8 +69,10 @@ public:
 	void Clean();
 
 	const dtPoly* GetPoly(dtPolyRef ref) const;
+	const char* GetID() const { return m_ID.c_str(); };
 
 protected:
+	std::string m_ID;
 	int m_errorCode;		 // error code of the last error
 	bool m_owner;			 // owner of the dtNavMesh
 	dtNavMesh* m_navmesh = 0;

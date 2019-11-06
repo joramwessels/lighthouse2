@@ -32,10 +32,6 @@ void NavMeshShader::UpdateMesh(NavMeshBuilder* navmesh)
 	AddPolysToScene(navmesh);
 	AddVertsToScene();
 	AddEdgesToScene();
-
-	NavMeshConfig* config = navmesh->GetConfig();
-	m_agentHeight = config->m_walkableHeight * config->m_ch; // voxels to world units
-	m_agentRadius = config->m_walkableRadius * config->m_cs; // voxels to world units
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -44,9 +40,9 @@ void NavMeshShader::UpdateMesh(NavMeshBuilder* navmesh)
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::UpdateAgentPositions()
 {
-	return; // DEBUG
-	//for (std::vector<ShaderAgent>::iterator it = m_agents.begin(); it != m_agents.end(); it++)
-	//	m_renderer->SetNodeTranslation(it->instID, *it->agent->GetPos());
+	for (std::vector<ShaderAgent>::iterator it = m_agents.begin(); it != m_agents.end(); it++)
+		m_renderer->SetNodeTransform(it->instID, it->agent->GetTransform());
+	m_renderer->SynchronizeSceneData();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -209,9 +205,7 @@ void NavMeshShader::ShadeEdgesGL() const
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddAgentToScene(Agent* agent)
 {
-	mat4 move = mat4::Translate(*agent->GetPos() + make_float3(0.0f, m_agentHeight / 2, 0.0f));
-	mat4 scale = mat4::Scale(make_float3(m_agentRadius * 2, m_agentHeight, m_agentRadius * 2));
-	int instID = m_renderer->AddInstance(m_agentMeshID, move * scale);
+	int instID = m_renderer->AddInstance(m_agentMeshID, agent->GetTransform());
 	m_agents.push_back({ instID, agent });
 }
 
@@ -353,24 +347,24 @@ Agent* NavMeshShader::SelectAgent(int instanceID)
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::DrawAgentHighlightGL() const
 {
-	// Highlights the agent's lower circle with a blurry octagon
-	int nverts = 8;
-	float3 xr = { m_agentRadius * 2, 0, 0 };
-	float3 yr = { 0, 0, m_agentRadius * 2 };
-	std::vector<float3> world(nverts + 2, *m_agentSelect->agent->GetPos());
-	std::vector<float4> colors(nverts + 2, m_highLightColor);
-	std::vector<float2> screen(nverts + 2);
-	colors[0].w = 1.0f;
-	float tmp = 2 * PI / nverts;
-	for (int i = 0; i < nverts; i++)
-	{
-		world[i + 1] += xr * cosf(tmp * i) + yr * sinf(tmp * i);
-		colors[i + 1].w = 0.0f;
-	}
-	world[nverts + 1] = world[1];
-	colors[nverts + 1] = colors[1];
-	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), nverts + 2);
-	DrawShapeOnScreen(screen, colors, GL_TRIANGLE_FAN);
+	mat4 transform = m_agentSelect->agent->GetTransform();
+	std::vector<float3> world(11);
+	std::vector<float4> colors(11, m_highLightColor);
+	std::vector<float2> screen(11);
+	world[0] = make_float3(transform * float4{ 0, 0, 0, 1.0f });
+	world[1] = make_float3(transform * float4{  .5f,  .5f, 0, 1.0f });
+	world[2] = make_float3(transform * float4{ -.5f,  .5f, 0, 1.0f });
+	world[3] = make_float3(transform * float4{  .5f, -.5f, 0, 1.0f });
+	world[4] = make_float3(transform * float4{ -.5f, -.5f, 0, 1.0f });
+	world[5] = make_float3(transform * float4{ 0, 0, 0, 1.0f });
+	world[6] = make_float3(transform * float4{ 0,  .5f,  .5f, 1.0f });
+	world[7] = make_float3(transform * float4{ 0,  .5f, -.5f, 1.0f });
+	world[8] = make_float3(transform * float4{ 0, -.5f,  .5f, 1.0f });
+	world[9] = make_float3(transform * float4{ 0, -.5f, -.5f, 1.0f });
+	world[10] = make_float3(transform * float4{ 0, 0, 0, 1.0f });
+
+	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), 11);
+	DrawShapeOnScreen(screen, colors, GL_LINE_LOOP, 5.0f);
 }
 
 
@@ -403,7 +397,6 @@ void NavMeshShader::PlotPath() const
 void NavMeshShader::DrawPathMarkers() const
 {
 	if (!m_pathStart && !m_pathEnd) return;
-	Camera* camera = m_renderer->GetCamera();
 	std::vector<float3> world;
 	std::vector<float4> color;
 	if (m_pathStart)
@@ -421,7 +414,7 @@ void NavMeshShader::DrawPathMarkers() const
 		color.push_back(float4());
 	}
 	std::vector<float2> screen(world.size());
-	camera->WorldToScreenPos(world.data(), screen.data(), world.size());
+	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), (int)world.size());
 	DrawShapeOnScreen(screen, color, GL_LINES, m_beaconWidth);
 }
 
@@ -442,10 +435,10 @@ void NavMeshShader::Clean()
 	Deselect();
 	m_verts.clear();
 	m_edges.clear();
-	m_agents.clear();
 
 	if (m_pathOwner) delete m_path;
 	m_path = 0;
+	m_pathStart = m_pathEnd = 0;
 	m_shadeTris = m_shadeVerts = m_shadeEdges = false;
 }
 

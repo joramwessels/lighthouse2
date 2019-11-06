@@ -48,12 +48,27 @@ static float distToEnd;
 static float3 *pathStart = 0, *pathEnd = 0;
 static Agent* agent;
 static const float3 *agentPos, *agentDir, *agentTarget;
+static mat4 agentScale;
 
 // Forward declarations
 void InitFPSPrinter();
 void PrintFPS(float deltaTime);
-void DrawPathMarkers(float3* start, float3* end, Camera* camera);
+void OnSelectAgent(Agent* agent);
 
+//  +-----------------------------------------------------------------------------+
+//  |  RemoveNavmeshAssets                                                        |
+//  |  Removes all navmesh assets from the scene.                           LH2'19|
+//  +-----------------------------------------------------------------------------+
+void RemoveNavmeshAssets()
+{
+	OnSelectAgent(0);
+	rigidBodies.Clean();
+	navMeshAgents.Clean();
+	navMeshShader->Clean();
+	navMeshBuilder->Cleanup();
+	if (navMeshNavigator) delete navMeshNavigator;
+	navMeshNavigator = 0;
+}
 
 //  +-----------------------------------------------------------------------------+
 //  |  TW_CALL BuildNavMesh                                                       |
@@ -68,18 +83,22 @@ void TW_CALL BuildNavMesh(void *data)
 	config->m_id = ui_nm_id.c_str();
 
 	// Build new mesh
-	rigidBodies.Clean();
-	navMeshAgents.Clean();
-	navMeshBuilder->Cleanup();
+	RemoveNavmeshAssets();
 	navMeshBuilder->Build(renderer->GetScene());
 	navMeshBuilder->DumpLog();
 	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
 	if (ui_nm_errorcode) return;
 	navMeshShader->UpdateMesh(navMeshBuilder);
+	if (navMeshNavigator) delete navMeshNavigator;
 	navMeshNavigator = navMeshBuilder->GetNavigator();
 
+	// Updating new config data
 	ui_nm_config = *config;
 	ui_nm_id = config->m_id;
+	float radius = config->m_walkableRadius * config->m_cs; // voxels to world units
+	float height = config->m_walkableHeight * config->m_ch; // voxels to world units
+	agentScale = mat4::Scale(make_float3(radius * 2, height, radius * 2));
+
 	camMoved = true;
 }
 
@@ -113,15 +132,28 @@ void TW_CALL LoadNavMesh(void *data)
 	config->m_id = ui_nm_id.c_str();
 
 	// Load mesh
+	RemoveNavmeshAssets();
 	navMeshBuilder->Deserialize();
 	navMeshBuilder->DumpLog();
 	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
 	if (ui_nm_errorcode) return;
 	navMeshShader->UpdateMesh(navMeshBuilder);
+	if (navMeshNavigator) delete navMeshNavigator;
 	navMeshNavigator = navMeshBuilder->GetNavigator();
 
 	ui_nm_config = *config;
 	ui_nm_id = config->m_id;
+	camMoved = true;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  TW_CALL CleanNavMesh                                                       |
+//  |  Callback function for AntTweakBar button.                            LH2'19|
+//  +-----------------------------------------------------------------------------+
+void TW_CALL CleanNavMesh(void *data)
+{
+	// Load mesh
+	RemoveNavmeshAssets();
 	camMoved = true;
 }
 
@@ -277,6 +309,8 @@ void RefreshEditBar()
 	TwAddSeparator(editBar, "menuseparator2", "group='output'");
 	TwAddButton(editBar, "Load", LoadNavMesh, NULL, " label='Load' ");
 	TwAddSeparator(editBar, "menuseparator3", "group='output'");
+	TwAddButton(editBar, "Clean", CleanNavMesh, NULL, " label='Clean' ");
+	TwAddSeparator(editBar, "menuseparator4", "group='output'");
 	TwSetParam(editBar, "output", "opened", TW_PARAM_INT32, 1, &opened);
 }
 
@@ -402,7 +436,7 @@ void HandleMouseInputDebugMode()
 	{
 		if (navMeshShader->isPoly(probMeshID))
 		{
-			RigidBody* rb = rigidBodies.AddRB(probedPos);
+			RigidBody* rb = rigidBodies.AddRB(agentScale, mat4::Identity(), mat4::Translate(probedPos));
 			Agent* agent = navMeshAgents.AddAgent(navMeshNavigator, rb);
 			navMeshShader->AddAgentToScene(agent);
 		}

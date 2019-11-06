@@ -20,7 +20,7 @@
 
 namespace lighthouse2 {
 
-static const float s_drag = .2f;
+static const float s_drag = 2.0f;
 
 //  +-----------------------------------------------------------------------------+
 //  |  RigidBody                                                                  |
@@ -30,13 +30,13 @@ class RigidBody
 {
 public:
 	RigidBody() { m_alive = false; };
-	RigidBody(float3 pos) : m_pos(pos), m_vel(make_float3(0)),
-		m_linAcc(make_float3(0)), m_impulse(make_float3(0)) {}
+	RigidBody(mat4 scale, mat4 rotate, mat4 translate) :
+		m_pos(translate.GetTranslation()), m_scale(scale), m_rotate(rotate), m_translate(translate),
+		m_vel(make_float3(0)), m_linAcc(make_float3(0)), m_impulse(make_float3(0)) {}
 
 	void AddImpulse(float3 impulse) { m_impulse += impulse; }
 	void Update(float deltaTime)
 	{
-		return; // DEBUG
 		m_impulse -= m_vel * s_drag;
 		m_linAcc += m_impulse * deltaTime;
 		m_vel += m_linAcc * deltaTime;
@@ -45,10 +45,19 @@ public:
 	void Kill() { m_alive = false; };
 	bool isAlive() const { return m_alive == true; };
 
+	mat4 GetTransform()
+	{
+		m_translate[3] = m_pos.x;
+		m_translate[7] = m_pos.y + 0.5f * m_scale[5];
+		m_translate[11] = m_pos.z;
+		return m_translate * m_rotate * m_scale;
+	}
+
 	float3 m_pos, m_vel, m_linAcc, m_impulse;
 
 private:
 	bool m_alive = true;
+	mat4 m_scale = mat4::Identity(), m_rotate = mat4::Identity(), m_translate = mat4::Identity();
 };
 
 //  +-----------------------------------------------------------------------------+
@@ -69,7 +78,7 @@ public:
 	//  |  RigidBody::AddRB                                                           |
 	//  |  Adds a new rigid body.                                               LH2'19|
 	//  +-----------------------------------------------------------------------------+
-	RigidBody* AddRB(float3 pos)
+	RigidBody* AddRB(mat4 scale, mat4 rotate, mat4 translate)
 	{
 		int idx;
 		if (m_removedIdx.empty()) // no array holes
@@ -91,7 +100,7 @@ public:
 			idx = m_removedIdx.back();
 			m_removedIdx.pop_back();
 		}
-		m_bodies[idx] = RigidBody(pos);
+		m_bodies[idx] = RigidBody(scale, rotate, translate);
 		return &m_bodies[idx];
 	}
 

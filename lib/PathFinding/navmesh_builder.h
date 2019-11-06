@@ -131,7 +131,7 @@ public:
 	NavMeshConfig* GetConfig() { return &m_config; };
 	dtNavMesh* GetMesh() const { return m_navMesh; };
 	int GetError() { int e = m_errorCode; m_errorCode = NMSUCCESS; return e; };
-	NavMeshNavigator* GetNavigator() const { return new NavMeshNavigator(m_navMesh); };
+	NavMeshNavigator* GetNavigator() const { return new NavMeshNavigator(m_navMesh, m_config.m_id); };
 
 protected:
 

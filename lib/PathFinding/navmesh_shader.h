@@ -120,7 +120,6 @@ private:
 	const float4 m_edgeColor = { 1.0f, 0, 1.0f, 0.2f };	// rgba
 
 	// Agents
-	float m_agentHeight, m_agentRadius; // in world coordinates
 	int m_agentMeshID = -1;
 	struct ShaderAgent { int instID = -1; Agent* agent; };
 	std::vector<ShaderAgent> m_agents;
