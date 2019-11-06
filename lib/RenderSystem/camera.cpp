@@ -37,7 +37,7 @@ Camera::~Camera()
 //  |  Camera::CalculateMatrix                                                    |
 //  |  Helper function; constructs camera matrix.                           LH2'19|
 //  +-----------------------------------------------------------------------------+
-void Camera::CalculateMatrix( float3& x, float3& y, float3& z )
+void Camera::CalculateMatrix( float3& x, float3& y, float3& z ) const
 {
 	y = make_float3( 0, 1, 0 );
 	z = direction; // assumed to be normalized at all times
@@ -82,7 +82,7 @@ void Camera::TranslateTarget( float3 T )
 //  |  Camera::GetView                                                            |
 //  |  Create a ViewPyramid for rendering in the RenderCore layer.          LH2'19|
 //  +-----------------------------------------------------------------------------+
-ViewPyramid Camera::GetView()
+ViewPyramid Camera::GetView() const
 {
 	ViewPyramid view;
 	float3 right, up, forward;
@@ -102,7 +102,7 @@ ViewPyramid Camera::GetView()
 //  |  Camera::WorldToScreenPos                                                   |
 //  |  Converts an array of world positions to screen positions.            LH2'19|
 //  +-----------------------------------------------------------------------------+
-void Camera::WorldToScreenPos(const float3* W, float2* S, int count)
+void Camera::WorldToScreenPos(const float3* W, float2* S, int count) const
 {
 	// Calculate camera axis
 	ViewPyramid p = GetView();
