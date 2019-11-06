@@ -21,6 +21,7 @@
 
 #include "rendersystem.h"
 #include "navmesh_builder.h"
+#include "agent.h"
 
 namespace lighthouse2 {
 
@@ -34,7 +35,7 @@ public:
 	NavMeshShader(RenderAPI* renderer, const char* dir)
 		: m_renderer(renderer), m_dir(dir)
 	{
-		// Add meshes
+		// Initialize meshes
 		m_vertMeshID = m_renderer->AddMesh("vertex.obj", m_dir, 1.0f);
 		m_agentMeshID = m_renderer->AddMesh("agent.obj", m_dir, 1.0f);
 		m_edgeMeshID = m_renderer->AddMesh("edge.obj", m_dir, 1.0f);
@@ -45,6 +46,7 @@ public:
 	~NavMeshShader() {};
 
 	void UpdateMesh(NavMeshBuilder* navmesh);
+	void UpdateAgentPositions();
 	void DrawGL() const;
 
 	// NavMesh scene shading
@@ -64,18 +66,23 @@ public:
 	void RemoveEdgesFromGL() { m_shadeEdges = false; };
 
 	// Agents
-	void AddAgentToScene(float3 pos);
+	void AddAgentToScene(Agent* agent);
 	void RemoveAgent(int instanceID);
 	void RemoveAllAgents();
 
 	// Object selection
+	void Deselect() { m_vertSelect = 0; m_edgeSelect = 0; m_polySelect = 0; m_agentSelect = 0; };
 	void SelectPoly(float3 pos, NavMeshNavigator* navmesh);
 	void SelectVert(int instanceID);
 	void SelectEdge(int instanceID);
-	void SelectAgent(int instanceID);
+	Agent* SelectAgent(int instanceID);
+	Agent* GetSelectedAgent() const { return m_agentSelect->agent; };
 
-	void SetPath(float3 start, std::vector<float3>* path, bool owner = false)
+	// Path drawing
+	void SetPath(const float3* start, const std::vector<float3>* path, bool owner = false)
 		{ m_path = path; m_pathStart = start; m_pathOwner = owner; };
+	void SetPathStart(const float3* start) { m_pathStart = start; };
+	void SetPathEnd(const float3* end) { m_pathEnd = end; };
 
 	void Clean();
 
@@ -90,51 +97,56 @@ private:
 	const char* m_dir;
 	
 	// NavMesh representation
-	int m_polyMeshID = -1, m_polyInstID = -1;
-	int m_vertMeshID = -1, m_edgeMeshID = -1;
-	struct Vert { float3 pos; int idx = -1, instID = -1; std::vector<const dtPoly*> polys; };
-	struct Edge { int v1 = -1, v2 = -1, instID = -1; const dtPoly *poly1 = 0, *poly2 = 0; };
-	std::vector<Vert> m_verts;
-	std::vector<Edge> m_edges;
+	struct ShaderVert { float3* const pos; int idx = -1, instID = -1; std::vector<const dtPoly*> polys; };
+	struct ShaderEdge { int v1 = -1, v2 = -1, instID = -1; const dtPoly *poly1 = 0, *poly2 = 0; };
+	std::vector<ShaderVert> m_verts;
+	std::vector<ShaderEdge> m_edges;
 	void ExtractVertsAndEdges(const dtNavMesh* navmesh);
 	void AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, const dtPoly* poly);
-	float4 m_polyColor = { 0, 1.0f, 1.0f, 0.2f };		// rgba   TODO: make this affect meshes?
-	float4 m_vertColor = { 1.0f, 0, 1.0f, 0.2f };		// rgba
-	float4 m_edgeColor = { 1.0f, 0, 1.0f, 0.2f };		// rgba
-	float m_vertWidth = .3f, m_edgeWidth = .1f;			// in world coordinates
-	float m_edgeWidthGL = 5.0f, m_vertWidthGL = 10.0f;	// in pixels
+
+	// Scene shading
+	int m_polyMeshID = -1, m_polyInstID = -1;
+	int m_vertMeshID = -1, m_edgeMeshID = -1;
+	const float m_vertWidth = .3f, m_edgeWidth = .1f; // in world coordinates
 
 	// GL shading
 	bool m_shadeTris = false, m_shadeVerts = false, m_shadeEdges = false;
 	void ShadePolysGL() const;
 	void ShadeVertsGL() const;
 	void ShadeEdgesGL() const;
+	const float m_edgeWidthGL = 5.0f, m_vertWidthGL = 20.0f; // in pixels
+	const float4 m_polyColor = { 0, 1.0f, 1.0f, 0.2f };	// rgba   TODO: make this affect meshes?
+	const float4 m_vertColor = { 1.0f, 0, 1.0f, 0.2f };	// rgba
+	const float4 m_edgeColor = { 1.0f, 0, 1.0f, 0.2f };	// rgba
 
 	// Agents
-	float m_agentHeight, m_agentRadius;
+	float m_agentHeight, m_agentRadius; // in world coordinates
 	int m_agentMeshID = -1;
-	struct Agent { int instID = -1; float3 pos, dir; };
-	std::vector<Agent> m_agents;
+	struct ShaderAgent { int instID = -1; Agent* agent; };
+	std::vector<ShaderAgent> m_agents;
 
 	// Object selecting / highlighting
-	const Vert* m_vertSelect = 0;
-	const Edge* m_edgeSelect = 0;
 	const dtPoly* m_polySelect = 0;
-	const Agent* m_agentSelect = 0;
-	void Deselect() { m_vertSelect = 0; m_edgeSelect = 0; m_polySelect = 0; m_agentSelect = 0; };
+	const ShaderVert* m_vertSelect = 0;
+	const ShaderEdge* m_edgeSelect = 0;
+	const ShaderAgent* m_agentSelect = 0;
 	void DrawPolyHighlightGL() const;
 	void DrawVertHighlightGL() const;
 	void DrawEdgeHighlightGL() const;
 	void DrawAgentHighlightGL() const;
-	float4 m_highLightColor = { 1.0f, 1.0f, 0.0f, .5f }; // rgba
+	const float4 m_highLightColor = { 1.0f, 1.0f, 0.0f, .5f }; // rgba
 
 	// Path drawing
-	std::vector<float3>* m_path = 0;
 	bool m_pathOwner = false;
-	float3 m_pathStart;
+	const std::vector<float3>* m_path = 0;
+	const float3 *m_pathStart = 0, *m_pathEnd = 0; // used for path beacon drawing only
 	void PlotPath() const;
-	float4 m_pathColor = { 1.0f, 0.0f, 0.0f, 0.5f }; // rgba
-	float m_pathWidth = 3.0f;
+	void DrawPathMarkers() const;
+	const float m_pathWidth = 3.0f, m_beaconWidth = 10.0f;
+	const float3 m_beaconLen = make_float3(0.0f, 4.0f, 0.0f);
+	const float4 m_pathColor = { 1.0f, 0.0f, 0.0f, 0.5f }; // rgba
+	const float4 m_beaconStColor = { 0, 1.0f, 0, 1.0f };   // rgba
+	const float4 m_beaconEnColor = { 1.0f, 0, 0, 1.0f };   // rgba
 
 	// File writing
 	void WriteMaterialFile();

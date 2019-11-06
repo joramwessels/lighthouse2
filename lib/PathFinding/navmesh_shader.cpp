@@ -39,6 +39,17 @@ void NavMeshShader::UpdateMesh(NavMeshBuilder* navmesh)
 }
 
 //  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::UpdateAgentPositions                                        |
+//  |  Informs the renderer of the agent's new positions.                   LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::UpdateAgentPositions()
+{
+	return; // DEBUG
+	for (std::vector<ShaderAgent>::iterator it = m_agents.begin(); it != m_agents.end(); it++)
+		m_renderer->SetNodeTranslation(it->instID, *it->agent->GetPos());
+}
+
+//  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::DrawGL                                                      |
 //  |  Draws all applicable GL shapes on the window.                        LH2'19|
 //  +-----------------------------------------------------------------------------+
@@ -53,7 +64,8 @@ void NavMeshShader::DrawGL() const
 	if (m_edgeSelect) DrawEdgeHighlightGL();
 	if (m_agentSelect) DrawAgentHighlightGL();
 
-	if (m_path && ! m_path->empty()) PlotPath();
+	if (m_path && !m_path->empty()) PlotPath();
+	if (m_pathStart || m_pathEnd) DrawPathMarkers();
 }
 
 
@@ -84,6 +96,7 @@ void NavMeshShader::RemovePolysFromScene()
 	// TODO: Remove the old navmesh mesh to prevent memory leaks
 	//if (m_navmeshMeshID >= 0) m_renderer->RemoveMesh(m_navmeshMeshID);
 	//m_navmeshMeshID = -1;
+	m_renderer->SynchronizeSceneData();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -92,8 +105,8 @@ void NavMeshShader::RemovePolysFromScene()
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddVertsToScene()
 {
-	for (std::vector<Vert>::iterator i = m_verts.begin(); i != m_verts.end(); i++)
-		i->instID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(i->pos) * mat4::Scale(m_vertWidth));
+	for (std::vector<ShaderVert>::iterator i = m_verts.begin(); i != m_verts.end(); i++)
+		i->instID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(*i->pos) * mat4::Scale(m_vertWidth));
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -102,11 +115,12 @@ void NavMeshShader::AddVertsToScene()
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::RemoveVertsFromScene()
 {
-	for (std::vector<Vert>::iterator i = m_verts.begin(); i != m_verts.end(); i++)
+	for (std::vector<ShaderVert>::iterator i = m_verts.begin(); i != m_verts.end(); i++)
 	{
 		m_renderer->RemoveInstance(i->instID);
 		i->instID = -1;
 	}
+	m_renderer->SynchronizeSceneData();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -115,9 +129,9 @@ void NavMeshShader::RemoveVertsFromScene()
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddEdgesToScene()
 {
-	for (std::vector<Edge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
+	for (std::vector<ShaderEdge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
 	{
-		float3 v1 = m_verts[i->v1].pos, v2 = m_verts[i->v2].pos;
+		float3 v1 = *m_verts[i->v1].pos, v2 = *m_verts[i->v2].pos;
 		float3 v1v2 = v2 - v1; float len = length(v1v2); v1v2 /= len;
 		mat4 sca = mat4::Scale(make_float3(m_edgeWidth, len, m_edgeWidth));
 		mat4 rot = mat4::Rotate(cross({ 0, 1, 0 }, v1v2), -acosf(v1v2.y));
@@ -132,11 +146,12 @@ void NavMeshShader::AddEdgesToScene()
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::RemoveEdgesFromScene()
 {
-	for (std::vector<Edge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
+	for (std::vector<ShaderEdge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
 	{
 		m_renderer->RemoveInstance(i->instID);
 		i->instID = -1;
 	}
+	m_renderer->SynchronizeSceneData();
 }
 
 
@@ -157,11 +172,11 @@ void NavMeshShader::ShadePolysGL() const
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::ShadeVertsGL() const
 {
-	int count = m_verts.size();
+	int count = (int)m_verts.size();
 	std::vector<float3> world(count);
 	std::vector<float2> screen(count);
 	std::vector<float4> colors(count, m_vertColor);
-	for (int i = 0; i < count; i++) world[i] = m_verts[i].pos;
+	for (int i = 0; i < count; i++) world[i] = *m_verts[i].pos;
 	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), count);
 	DrawShapeOnScreen(screen, colors, GL_POINTS, m_vertWidthGL);
 }
@@ -172,14 +187,14 @@ void NavMeshShader::ShadeVertsGL() const
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::ShadeEdgesGL() const
 {
-	int count = m_edges.size();
+	int count = (int)m_edges.size();
 	std::vector<float3> world(count * 2);
 	std::vector<float2> screen(count * 2);
 	std::vector<float4> colors(count * 2, m_edgeColor);
 	for (int i = 0; i < count; i++)
 	{
-		world[i * 2]     = m_verts[m_edges[i].v1].pos;
-		world[i * 2 + 1] = m_verts[m_edges[i].v2].pos;
+		world[i * 2]     = *m_verts[m_edges[i].v1].pos;
+		world[i * 2 + 1] = *m_verts[m_edges[i].v2].pos;
 	}
 	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), count * 2);
 	DrawShapeOnScreen(screen, colors, GL_LINES, m_edgeWidthGL);
@@ -192,12 +207,12 @@ void NavMeshShader::ShadeEdgesGL() const
 //  |  NavMeshShader::AddAgentToScene                                             |
 //  |  Places an agent at the given position.                               LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::AddAgentToScene(float3 pos)
+void NavMeshShader::AddAgentToScene(Agent* agent)
 {
-	mat4 move = mat4::Translate(pos + make_float3(0.0f, m_agentHeight / 2, 0.0f));
+	mat4 move = mat4::Translate(*agent->GetPos() + make_float3(0.0f, m_agentHeight / 2, 0.0f));
 	mat4 scale = mat4::Scale(make_float3(m_agentRadius * 2, m_agentHeight, m_agentRadius * 2));
 	int instID = m_renderer->AddInstance(m_agentMeshID, move * scale);
-	m_agents.push_back({ instID, pos });
+	m_agents.push_back({ instID, agent });
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -206,11 +221,11 @@ void NavMeshShader::AddAgentToScene(float3 pos)
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::RemoveAgent(int instID)
 {
-	for (std::vector<Agent>::iterator i = m_agents.end(); i != m_agents.end(); i++)
+	for (std::vector<ShaderAgent>::iterator i = m_agents.end(); i != m_agents.end(); i++)
 		if (i->instID == instID)
 		{
 			m_renderer->RemoveInstance(instID);
-			i->instID == -1;
+			i->instID = -1;
 		}
 	m_renderer->SynchronizeSceneData();
 }
@@ -221,11 +236,13 @@ void NavMeshShader::RemoveAgent(int instID)
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::RemoveAllAgents()
 {
-	for (std::vector<Agent>::iterator i = m_agents.end(); i != m_agents.end(); ++i)
+	for (std::vector<ShaderAgent>::iterator i = m_agents.begin(); i != m_agents.end(); i++)
 	{
 		m_renderer->RemoveInstance(i->instID);
 		i->instID = -1;
 	}
+	m_agents.clear();
+	m_renderer->SynchronizeSceneData();
 }
 
 
@@ -255,8 +272,8 @@ void NavMeshShader::DrawPolyHighlightGL() const
 	std::vector<float2> screen(m_polySelect->vertCount);
 	std::vector<float4> colors(m_polySelect->vertCount, m_highLightColor);
 	for (int i = 0; i < m_polySelect->vertCount; i++)
-		world.push_back(m_verts[m_polySelect->verts[i]].pos);
-	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), world.size());
+		world.push_back(*m_verts[m_polySelect->verts[i]].pos);
+	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), (int)world.size());
 
 	DrawShapeOnScreen(screen, colors, GL_TRIANGLE_FAN);
 }
@@ -271,8 +288,8 @@ void NavMeshShader::SelectVert(int instanceID)
 	if (instanceID < 0) return;
 	int meshID = m_renderer->GetInstanceMeshID(instanceID);
 	if (!isVert(meshID)) return;
-	for (std::vector<Vert>::iterator i = m_verts.begin(); i != m_verts.end(); i++)
-		if (i->instID == instanceID) m_vertSelect = new Vert(*i);
+	for (std::vector<ShaderVert>::iterator i = m_verts.begin(); i != m_verts.end(); i++)
+		if (i->instID == instanceID) m_vertSelect = new ShaderVert(*i);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -282,7 +299,7 @@ void NavMeshShader::SelectVert(int instanceID)
 void NavMeshShader::DrawVertHighlightGL() const
 {
 	std::vector<float2> vertices(1);
-	m_renderer->GetCamera()->WorldToScreenPos(&m_vertSelect->pos, vertices.data(), 1);
+	m_renderer->GetCamera()->WorldToScreenPos(m_vertSelect->pos, vertices.data(), 1);
 	std::vector<float4> colors(1, m_highLightColor);
 
 	DrawShapeOnScreen(vertices, colors, GL_POINTS, m_vertWidthGL);
@@ -298,8 +315,8 @@ void NavMeshShader::SelectEdge(int instanceID)
 	if (instanceID < 0) return;
 	int meshID = m_renderer->GetInstanceMeshID(instanceID);
 	if (!isEdge(meshID)) return;
-	for (std::vector<Edge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
-		if (i->instID == instanceID) m_edgeSelect = new Edge(*i);
+	for (std::vector<ShaderEdge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
+		if (i->instID == instanceID) m_edgeSelect = new ShaderEdge(*i);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -310,7 +327,7 @@ void NavMeshShader::DrawEdgeHighlightGL() const
 {
 	std::vector<float2> screen(2);
 	std::vector<float4> colors(2, m_highLightColor);
-	const float3 world[2] = { m_verts[m_edgeSelect->v1].pos , m_verts[m_edgeSelect->v2].pos };
+	const float3 world[2] = { *m_verts[m_edgeSelect->v1].pos , *m_verts[m_edgeSelect->v2].pos };
 	m_renderer->GetCamera()->WorldToScreenPos(world, screen.data(), 2);
 	DrawShapeOnScreen(screen, colors, GL_LINE_STRIP, m_edgeWidthGL);
 }
@@ -319,18 +336,19 @@ void NavMeshShader::DrawEdgeHighlightGL() const
 //  |  NavMeshShader::SelectAgent                                                 |
 //  |  Hightlights an agent instance.                                       LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::SelectAgent(int instanceID)
+Agent* NavMeshShader::SelectAgent(int instanceID)
 {
 	Deselect();
-	if (instanceID < 0) return;
+	if (instanceID < 0) return 0;
 	int meshID = m_renderer->GetInstanceMeshID(instanceID);
-	if (!isAgent(meshID)) return;
-	for (std::vector<Agent>::iterator i = m_agents.begin(); i != m_agents.end(); i++)
-		if (i->instID == instanceID) m_agentSelect = new Agent(*i);
+	if (!isAgent(meshID)) return 0;
+	for (std::vector<ShaderAgent>::iterator i = m_agents.begin(); i != m_agents.end(); i++)
+		if (i->instID == instanceID) m_agentSelect = new ShaderAgent(*i);
+	return m_agentSelect->agent;
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::DrawAgentHighlightGL       (TODO: doesn't work yet)         |
+//  |  NavMeshShader::DrawAgentHighlightGL                                        |
 //  |  Draws a highlighted agent on the screen.                             LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::DrawAgentHighlightGL() const
@@ -339,16 +357,19 @@ void NavMeshShader::DrawAgentHighlightGL() const
 	int nverts = 8;
 	float3 xr = { m_agentRadius * 2, 0, 0 };
 	float3 yr = { 0, 0, m_agentRadius * 2 };
-	std::vector<float3> world(nverts + 1, m_agentSelect->pos);
-	std::vector<float4> colors(nverts + 1, float4());
-	std::vector<float2> screen(nverts + 1);
-	colors[0] = m_highLightColor;
+	std::vector<float3> world(nverts + 2, *m_agentSelect->agent->GetPos());
+	std::vector<float4> colors(nverts + 2, m_highLightColor);
+	std::vector<float2> screen(nverts + 2);
+	colors[0].w = 1.0f;
 	float tmp = 2 * PI / nverts;
 	for (int i = 0; i < nverts; i++)
 	{
-		world[i+1] += xr * cosf(tmp * i) + yr * sinf(tmp * i);
+		world[i + 1] += xr * cosf(tmp * i) + yr * sinf(tmp * i);
+		colors[i + 1].w = 0.0f;
 	}
-	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), nverts + 1);
+	world[nverts + 1] = world[1];
+	colors[nverts + 1] = colors[1];
+	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), nverts + 2);
 	DrawShapeOnScreen(screen, colors, GL_TRIANGLE_FAN);
 }
 
@@ -370,10 +391,42 @@ void NavMeshShader::PlotPath() const
 	// Converting world positions to screen positions
 	Camera* view = m_renderer->GetCamera();
 	view->WorldToScreenPos(m_path->data(), vertices.data() + 1, (int)m_path->size());
-	view->WorldToScreenPos(&m_pathStart, &vertices[0], 1); // prepend start position
+	view->WorldToScreenPos(m_pathStart, &vertices[0], 1); // prepend start position
 
 	DrawShapeOnScreen(vertices, colors, GL_LINE_STRIP, m_pathWidth);
 }
+
+//  +-----------------------------------------------------------------------------+
+//  |  DrawPathMarkers                                                            |
+//  |  Draws the start and end of the path as beacons.                      LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::DrawPathMarkers() const
+{
+	if (!m_pathStart && !m_pathEnd) return;
+	Camera* camera = m_renderer->GetCamera();
+	std::vector<float3> world;
+	std::vector<float4> color;
+	if (m_pathStart)
+	{
+		world.push_back(*m_pathStart);
+		world.push_back(*m_pathStart + m_beaconLen);
+		color.push_back(m_beaconStColor);
+		color.push_back(float4());
+	}
+	if (m_pathEnd)
+	{
+		world.push_back(*m_pathEnd);
+		world.push_back(*m_pathEnd + m_beaconLen);
+		color.push_back(m_beaconEnColor);
+		color.push_back(float4());
+	}
+	std::vector<float2> screen(world.size());
+	camera->WorldToScreenPos(world.data(), screen.data(), world.size());
+	DrawShapeOnScreen(screen, color, GL_LINES, m_beaconWidth);
+}
+
+
+
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::Clean                                                       |
@@ -391,11 +444,9 @@ void NavMeshShader::Clean()
 	m_edges.clear();
 	m_agents.clear();
 
-	if (m_pathOwner) delete[] m_path;
+	if (m_pathOwner) delete m_path;
 	m_path = 0;
 	m_shadeTris = m_shadeVerts = m_shadeEdges = false;
-
-	m_renderer->SynchronizeSceneData();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -404,7 +455,7 @@ void NavMeshShader::Clean()
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, const dtPoly* poly)
 {
-	for (std::vector<Edge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
+	for (std::vector<ShaderEdge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
 		if ((i->v1 == v1 && i->v2 == v2) || (i->v1 == v2 && i->v2 == v1))
 		{
 			i->poly2 = poly; // edge already exists, so add the second poly
@@ -427,12 +478,12 @@ void NavMeshShader::ExtractVertsAndEdges(const dtNavMesh* mesh)
 		for (int i = 0; i < tile->header->vertCount; ++i)
 		{
 			const float* v = &tile->verts[i * 3];
-			m_verts.push_back({ { v[0], v[1], v[2] }, i });
+			m_verts.push_back({ (float3*)v, i });
 		}
 		for (int i = 0; i < tile->header->detailVertCount; ++i)
 		{
 			const float* v = &tile->detailVerts[i * 3];
-			m_verts.push_back({ { v[0], v[1], v[2] }, i + tile->header->vertCount });
+			m_verts.push_back({ (float3*)v, i + tile->header->vertCount });
 		}
 
 		// Adding Vert polygon associations and Edges

@@ -15,10 +15,13 @@
 
 #pragma once
 
+#include <vector>
+
 //#ifdef PATHFINDINGBUILD
 	#include "DetourNavMeshQuery.h" // dtNavMesh, dtNavMeshQuery, dtQueryFilter
 //#endif
 
+#include "system.h" // float3
 #include "navmesh_common.h"
 
 namespace lighthouse2 {
@@ -60,8 +63,9 @@ public:
 	}
 	int FindNearestPoly(float3 pos, dtPolyRef* polyID, float3* polyPos = 0) const;
 	int FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float3* nearestPoint, bool* posOverPoly=0);
-	int FindPath(float3 start, float3 end, dtPolyRef* path, int* pathCount, int maxCount=100);
-	int FindPath(float3 start, float3 end, std::vector<float3>& path, float& distToEnd, int maxCount = 100);
+	int FindPath(float3 start, float3 end, dtPolyRef* path, int& pathCount, bool& reachable, int maxCount=64);
+	int FindPath(float3 start, float3 end, float3* path, int maxCount, int* count=0, float* distToEnd=0);
+	int FindPath(float3 start, float3 end, std::vector<float3>& path, float* distToEnd=0, int maxCount=64);
 	void Clean();
 
 	const dtPoly* GetPoly(dtPolyRef ref) const;
