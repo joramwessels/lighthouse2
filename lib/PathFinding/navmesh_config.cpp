@@ -167,7 +167,7 @@ void NavMeshConfig::Save(const char* filename) const
 	((tinyxml2::XMLElement*)root->InsertEndChild(doc.NewElement("filterWalkableLowHeightSpans")))->SetText(m_filterWalkableLowHeightSpans);
 
 	((tinyxml2::XMLElement*)root->InsertEndChild(doc.NewElement("printBuildStats")))->SetText(m_printBuildStats);
-	((tinyxml2::XMLElement*)root->InsertEndChild(doc.NewElement("ID")))->SetText(m_id);
+	((tinyxml2::XMLElement*)root->InsertEndChild(doc.NewElement("ID")))->SetText(m_id.c_str());
 
 	doc.SaveFile(filename);
 }

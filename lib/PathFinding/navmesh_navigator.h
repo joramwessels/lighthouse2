@@ -27,7 +27,7 @@
 namespace lighthouse2 {
 
 int SerializeNavMesh(const char* dir, const char* ID, dtNavMesh* navmesh);
-int DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh* navmesh);
+int DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh*& navmesh);
 int GetNavMeshQuery(dtNavMesh* navmesh, dtNavMeshQuery** query);
 
 //  +-----------------------------------------------------------------------------+
@@ -68,6 +68,7 @@ public:
 	int FindPath(float3 start, float3 end, std::vector<float3>& path, float* distToEnd=0, int maxCount=64);
 	void Clean();
 
+	const dtNavMesh* GetDetourMesh() const { return m_navmesh; };
 	const dtPoly* GetPoly(dtPolyRef ref) const;
 	const char* GetID() const { return m_ID.c_str(); };
 

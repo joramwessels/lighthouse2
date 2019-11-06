@@ -19,9 +19,9 @@
 	#include "DetourNavMesh.h"
 //#endif
 
-#include "rendersystem.h"
-#include "navmesh_builder.h"
-#include "agent.h"
+#include "rendersystem.h"		// RenderAPI
+#include "navmesh_navigator.h"  // NavMeshNavigator
+#include "agent.h"				// Agent
 
 namespace lighthouse2 {
 
@@ -45,12 +45,12 @@ public:
 	};
 	~NavMeshShader() {};
 
-	void UpdateMesh(NavMeshBuilder* navmesh);
+	void UpdateMesh(NavMeshNavigator* navmesh);
 	void UpdateAgentPositions();
 	void DrawGL() const;
 
 	// NavMesh scene shading
-	void AddPolysToScene(NavMeshBuilder* navmesh);
+	void AddPolysToScene(NavMeshNavigator* navmesh);
 	void AddVertsToScene();
 	void AddEdgesToScene();
 	void RemovePolysFromScene();
@@ -150,7 +150,7 @@ private:
 	// File writing
 	void WriteMaterialFile();
 	void WriteTileToMesh(const dtMeshTile* tile, FILE* file);
-	void SaveAsMesh(NavMeshBuilder* navmesh);
+	void SaveAsMesh(NavMeshNavigator* navmesh);
 	std::string GetObjFileName(const char* ID) const
 		{ return ".tmp." + std::string(ID) + ".obj"; };
 	std::string GetMatFileName() const { return "navmesh.mtl"; };

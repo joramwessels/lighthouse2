@@ -83,7 +83,7 @@ struct NavMeshConfig
 	bool m_filterLedgeSpans;			 // Filtering for ledges
 	bool m_filterWalkableLowHeightSpans; // Filtering for low ceilings
 	bool m_printBuildStats;				 // Printing detailed build time statistics
-	const char* m_id;					 // Name of the navmesh instance
+	std::string m_id;					 // Name of the navmesh instance
 
 	NavMeshConfig();
 
@@ -119,8 +119,8 @@ public:
 	~NavMeshBuilder() { Cleanup(); };
 
 	int Build(HostScene* scene);
-	int Serialize() { return Serialize(m_dir, m_config.m_id); };
-	int Deserialize() { return Deserialize(m_dir, m_config.m_id); };
+	int Serialize() { return Serialize(m_dir, m_config.m_id.c_str()); };
+	int Deserialize() { return Deserialize(m_dir, m_config.m_id.c_str()); };
 	void Cleanup();
 	void DumpLog() const;
 
@@ -131,7 +131,7 @@ public:
 	NavMeshConfig* GetConfig() { return &m_config; };
 	dtNavMesh* GetMesh() const { return m_navMesh; };
 	int GetError() { int e = m_errorCode; m_errorCode = NMSUCCESS; return e; };
-	NavMeshNavigator* GetNavigator() const { return new NavMeshNavigator(m_navMesh, m_config.m_id); };
+	NavMeshNavigator* GetNavigator() const { return new NavMeshNavigator(m_navMesh, m_config.m_id.c_str()); };
 
 protected:
 

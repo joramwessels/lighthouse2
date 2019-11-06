@@ -88,13 +88,15 @@ void TW_CALL BuildNavMesh(void *data)
 	navMeshBuilder->DumpLog();
 	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
 	if (ui_nm_errorcode) return;
-	navMeshShader->UpdateMesh(navMeshBuilder);
+
+	// Get navigator
 	if (navMeshNavigator) delete navMeshNavigator;
 	navMeshNavigator = navMeshBuilder->GetNavigator();
+	navMeshShader->UpdateMesh(navMeshNavigator);
 
 	// Updating new config data
 	ui_nm_config = *config;
-	ui_nm_id = config->m_id;
+	//ui_nm_id = config->m_id;
 	float radius = config->m_walkableRadius * config->m_cs; // voxels to world units
 	float height = config->m_walkableHeight * config->m_ch; // voxels to world units
 	agentScale = mat4::Scale(make_float3(radius * 2, height, radius * 2));
@@ -137,12 +139,19 @@ void TW_CALL LoadNavMesh(void *data)
 	navMeshBuilder->DumpLog();
 	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
 	if (ui_nm_errorcode) return;
-	navMeshShader->UpdateMesh(navMeshBuilder);
+
+	// Get navigator
 	if (navMeshNavigator) delete navMeshNavigator;
 	navMeshNavigator = navMeshBuilder->GetNavigator();
+	navMeshShader->UpdateMesh(navMeshNavigator);
 
+	// Updating new config data
 	ui_nm_config = *config;
-	ui_nm_id = config->m_id;
+	//ui_nm_id = config->m_id;
+	float radius = config->m_walkableRadius * config->m_cs; // voxels to world units
+	float height = config->m_walkableHeight * config->m_ch; // voxels to world units
+	agentScale = mat4::Scale(make_float3(radius * 2, height, radius * 2));
+
 	camMoved = true;
 }
 
@@ -182,6 +191,12 @@ void TW_CALL SwitchGUIMode(void *data)
 	navMeshShader->SetPathStart(0);
 	navMeshShader->SetPathEnd(0);
 	pathStart = pathEnd = 0;
+}
+
+void TW_CALL CopyStdStringToClient(std::string& dststr, const std::string& srcstr)
+{
+	// Copy the content of souceString handled by the AntTweakBar library to destinationClientString handled by your application
+	dststr = srcstr;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -247,6 +262,7 @@ void RefreshEditBar()
 	TwDefine(" NavMesh help='NavMesh generation options' ");
 	TwDefine(" NavMesh resizable=true movable=true iconifiable=true refresh=0.05 ");
 	TwDefine(" NavMesh position='1300 20' ");
+	TwCopyStdStringToClientFunc(CopyStdStringToClient);
 	int opened = 1, closed = 0;
 	TwEnumVal partitionEV[] = {
 		{ NavMeshConfig::SAMPLE_PARTITION_WATERSHED, "Watershed" },

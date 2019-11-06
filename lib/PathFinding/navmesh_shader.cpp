@@ -24,10 +24,10 @@ namespace lighthouse2 {
 //  |  NavMeshShader::UpdateMesh                                                  |
 //  |  Removes the old navmesh assets and adds the new one.                 LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::UpdateMesh(NavMeshBuilder* navmesh)
+void NavMeshShader::UpdateMesh(NavMeshNavigator* navmesh)
 {
 	Clean();
-	ExtractVertsAndEdges(navmesh->GetMesh());
+	ExtractVertsAndEdges(navmesh->GetDetourMesh());
 	
 	AddPolysToScene(navmesh);
 	AddVertsToScene();
@@ -71,10 +71,10 @@ void NavMeshShader::DrawGL() const
 //  |  NavMeshShader::AddNavMeshToScene                                           |
 //  |  Adds the navmesh triangles to the scene as a single mesh.            LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::AddPolysToScene(NavMeshBuilder* navmesh)
+void NavMeshShader::AddPolysToScene(NavMeshNavigator* navmesh)
 {
 	SaveAsMesh(navmesh);
-	std::string filename = GetObjFileName(navmesh->GetConfig()->m_id);
+	std::string filename = GetObjFileName(navmesh->GetID());
 	m_polyMeshID = m_renderer->AddMesh(filename.c_str(), m_dir, 1.0f);
 	m_renderer->GetMesh(m_polyMeshID)->name = "NavMesh";
 	m_polyInstID = m_renderer->AddInstance(m_polyMeshID, mat4::Identity());
@@ -647,16 +647,16 @@ void NavMeshShader::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 //  |  NavMeshShader::SaveAsMesh                                                  |
 //  |  Saves the navmesh as an .obj file.                                   LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::SaveAsMesh(NavMeshBuilder* navmesh)
+void NavMeshShader::SaveAsMesh(NavMeshNavigator* navmesh)
 {
 	// Opening file
-	const char* ID = navmesh->GetConfig()->m_id;
+	const char* ID = navmesh->GetID();
 	std::string filename = m_dir + GetObjFileName(ID);
 	FILE* f;
 	fopen_s(&f, filename.c_str(), "w");
 	if (!f) printf("File '%s' could not be opened", filename.c_str());
-	const dtNavMesh* mesh = navmesh->GetMesh();
-	if (!mesh) printf("Navmesh '%s' can't be saved as mesh, m_navMesh is null", ID);
+	const dtNavMesh* mesh = navmesh->GetDetourMesh();
+	if (!mesh) printf("Navmesh '%s' can't be saved as mesh, navmesh is null", ID);
 	if (!FileExists((m_dir + GetMatFileName()).c_str())) WriteMaterialFile();
 
 	// Writing header

@@ -112,7 +112,7 @@ int NavMeshBuilder::Build(HostScene* scene)
 	m_ctx->startTimer(RC_TIMER_TOTAL);
 	if (m_config.m_printBuildStats)
 	{
-		m_ctx->log(RC_LOG_PROGRESS, "===   NavMesh build stats for   %s", m_config.m_id);
+		m_ctx->log(RC_LOG_PROGRESS, "===   NavMesh build stats for   %s", m_config.m_id.c_str());
 		m_ctx->log(RC_LOG_PROGRESS, " - Voxel grid: %d x %d cells", m_config.m_width, m_config.m_height);
 		m_ctx->log(RC_LOG_PROGRESS, " - Input mesh: %.1fK verts, %.1fK tris",
 			vertices.size() / 1000.0f, triangles.size() / 1000.0f);
@@ -147,7 +147,7 @@ int NavMeshBuilder::Build(HostScene* scene)
 		duLogBuildTimes(*m_ctx, m_ctx->getAccumulatedTime(RC_TIMER_TOTAL));
 	if (!m_errorCode) // single-line mesh info
 		m_ctx->log(RC_LOG_PROGRESS, "   '%s' polymesh: %d vertices  %d polygons",
-		m_config.m_id, m_pmesh->nverts, m_pmesh->npolys);
+		m_config.m_id.c_str(), m_pmesh->nverts, m_pmesh->npolys);
 	if (m_errorCode) Cleanup();
 
 	return NMSUCCESS;
@@ -405,11 +405,6 @@ int NavMeshBuilder::CreateDetourData()
 			dtFree(navData);
 			RECAST_ERROR(NMDETOUR & NMCREATION, "Could not init Detour navmesh");
 		}
-
-		//m_navQuery = dtAllocNavMeshQuery();
-		//status = m_navQuery->init(m_navMesh, DETOUR_MAX_NAVMESH_NODES);
-		//if (dtStatusFailed(status))
-		//	RECAST_ERROR(NMDETOUR & NMCREATION, "Could not init Detour navmesh query");
 	}
 
 	return NMSUCCESS;
@@ -450,11 +445,9 @@ int NavMeshBuilder::Deserialize(const char* dir, const char* ID)
 	m_config.Load(configfile);
 	m_config.m_id = ID; // strings aren't loaded correctly
 
-	// Loading dtNavMesh and dtNavMeshQuery
+	// Loading dtNavMesh
 	m_errorCode = DeserializeNavMesh(dir, ID, m_navMesh);
 	if (m_errorCode) return m_errorCode;
-	//m_errorCode = GetNavMeshQuery(m_navMesh, m_navQuery);
-	//if (m_errorCode) return m_errorCode;
 
 	return RECAST_LOG("NavMesh build '%s' successfully loaded", ID);
 }

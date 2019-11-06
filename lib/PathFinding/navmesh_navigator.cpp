@@ -248,7 +248,7 @@ int SerializeNavMesh(const char* dir, const char* ID, dtNavMesh* navmesh)
 //  |  DeserializeNavMesh                                                         |
 //  |  Loads a serialized NavMesh from storage and checks for errors.       LH2'19|
 //  +-----------------------------------------------------------------------------+
-int DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh* navmesh)
+int DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh*& navmesh)
 {
 	// Opening file
 	char filename[128];
