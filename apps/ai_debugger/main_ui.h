@@ -41,10 +41,11 @@ static float3 probedPos;
 static NavMeshConfig ui_nm_config;
 static std::string ui_nm_id;
 static bool ui_nm_errorcode = false;
+static float3 *offMeshStart = 0, *offMeshEnd = 0;
 
 // Debug bar
-static std::vector<float3> path;
-static float distToEnd;
+static std::vector<NavMeshNavigator::PathNode> path;
+static bool reachable;
 static float3 *pathStart = 0, *pathEnd = 0;
 static Agent* agent;
 static const float3 *agentPos, *agentDir, *agentTarget;
@@ -187,7 +188,7 @@ void TW_CALL SwitchGUIMode(void *data)
 	navMeshAgents.Clean();
 	navMeshShader->Deselect();
 	agent = 0;
-	navMeshShader->SetPath(0, 0);
+	navMeshShader->SetPath(0);
 	navMeshShader->SetPathStart(0);
 	navMeshShader->SetPathEnd(0);
 	pathStart = pathEnd = 0;
@@ -354,7 +355,7 @@ void RefreshDebugBar()
 	// create path block
 	TwAddVarRO(debugBar, "Start", float3Type, &pathStart, "group='path'");
 	TwAddVarRO(debugBar, "End", float3Type, &pathEnd, "group='path'");
-	TwAddVarRO(debugBar, "Distance to end", TW_TYPE_FLOAT, &distToEnd, "group='path'");
+	TwAddVarRO(debugBar, "Reachable", TW_TYPE_BOOL32, &reachable, "group='path'");
 	TwSetParam(debugBar, "path", "opened", TW_PARAM_INT32, 1, &opened);
 
 	// create agent block
@@ -400,25 +401,43 @@ void InitGUI()
 //  +-----------------------------------------------------------------------------+
 void OnSelectAgent(Agent* a_agent)
 {
+	if (!agent && !a_agent) return;
 	agent = a_agent;
-	pathStart = 0;
-	if (agent) // select
+
+	if (agent) // selecting
 	{
-		pathEnd = agent->GetTarget();
-		navMeshShader->SetPathStart(0);
-		navMeshShader->SetPathEnd(pathEnd);
-		navMeshShader->SetPath(agent->GetPos(), agent->GetPath());
+		// link GUI info directly to agent
 		agentPos = agent->GetPos();
 		agentDir = agent->GetDir();
 		agentTarget = agent->GetTarget();
+
+		// keep pathStart/pathEnd local
+		if (agent->GetTarget())
+		{
+			if (!pathStart) pathStart = new float3();
+			if (!pathEnd) pathEnd = new float3();
+			*pathStart = *agentPos;
+			*pathEnd = *agent->GetTarget();
+			navMeshShader->SetPath(agent->GetPath());
+		}
+		else // stop shading previous path
+		{
+			delete pathStart; pathStart = 0;
+			delete pathEnd; pathEnd = 0;
+			navMeshShader->SetPath(0);
+		}
 	}
-	else // deselect
+	else // deselecting
 	{
-		pathEnd = 0;
-		navMeshShader->SetPath(0, 0);
-		navMeshShader->SetPathStart(0);
-		navMeshShader->SetPathEnd(0);
+		delete pathStart; pathStart = 0;
+		delete pathEnd; pathEnd = 0;
+		navMeshShader->SetPath(0);
+		navMeshShader->Deselect();
 	}
+
+	// sync beacon pointers with shader
+	navMeshShader->SetPathStart(pathStart);
+	navMeshShader->SetPathEnd(pathEnd);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -430,14 +449,18 @@ void HandleMouseInputEditMode()
 	// Instance selecting (SHIFT) (L-CLICK)
 	if (leftClickLastFrame && shiftClickLastFrame)
 	{
-		if (navMeshShader->isNavMesh(probMeshID))
-			OnSelectAgent(0); // Deselect the agent
 		if (navMeshShader->isVert(probMeshID))
 			navMeshShader->SelectVert(probeInstID);
 		else if (navMeshShader->isEdge(probMeshID))
 			navMeshShader->SelectEdge(probeInstID);
 		else if (navMeshShader->isPoly(probMeshID))
 			navMeshShader->SelectPoly(probedPos, navMeshNavigator);
+	}
+
+	// Adding off-mesh connections (CTRL)
+	if (ctrlClickLastFrame)
+	{
+
 	}
 }
 
@@ -459,8 +482,13 @@ void HandleMouseInputDebugMode()
 	}
 
 	// Agent selecting (SHIFT) (L-CLICK)
-	if (leftClickLastFrame && shiftClickLastFrame && navMeshShader->isAgent(probMeshID))
-		OnSelectAgent(navMeshShader->SelectAgent(probeInstID));
+	if (leftClickLastFrame && shiftClickLastFrame)
+	{
+		if (navMeshShader->isAgent(probMeshID))
+			OnSelectAgent(navMeshShader->SelectAgent(probeInstID));
+		else if (agent)
+			OnSelectAgent(0);
+	}
 
 	// Setting path start/end (CTRL)
 	if (ctrlClickLastFrame && navMeshShader->isNavMesh(probMeshID))
@@ -469,33 +497,32 @@ void HandleMouseInputDebugMode()
 		{
 			if (leftClickLastFrame)
 			{
-				if (!pathStart) pathStart = new float3(probedPos);
-				else *pathStart = probedPos;
+				if (!pathStart) pathStart = new float3(probedPos); else *pathStart = probedPos;
 				navMeshShader->SetPathStart(pathStart);
 				if (pathEnd) // if both start and end are set
-					if (!navMeshNavigator->FindPath(*pathStart, *pathEnd, path, &distToEnd))
-						navMeshShader->SetPath(pathStart, &path);
+					if (!navMeshNavigator->FindPath(*pathStart, *pathEnd, path, reachable))
+						navMeshShader->SetPath(&path);
 			}
 			if (rightClickLastFrame)
 			{
-				if (!pathEnd) pathEnd = new float3(probedPos);
-				else *pathEnd = probedPos;
+				if (!pathEnd) pathEnd = new float3(probedPos); else *pathEnd = probedPos;
 				navMeshShader->SetPathEnd(pathEnd);
 				if (pathStart) // if both start and end are set
-					if (!navMeshNavigator->FindPath(*pathStart, *pathEnd, path, &distToEnd))
-						navMeshShader->SetPath(pathStart, &path);
+					if (!navMeshNavigator->FindPath(*pathStart, *pathEnd, path, reachable))
+						navMeshShader->SetPath(&path);
 			}
 		}
 		else // When an agent is selected
 		{
 			if (rightClickLastFrame)
 			{
-				if (!pathEnd) pathEnd = new float3(probedPos);
-				else *pathEnd = probedPos;
+				if (!pathStart) pathStart = new float3(*agentPos); else *pathStart = *agentPos;
+				navMeshShader->SetPathStart(pathStart);
+				if (!pathEnd) pathEnd = new float3(probedPos); else *pathEnd = probedPos;
 				navMeshShader->SetPathEnd(pathEnd);
 				agent->SetTarget(*pathEnd);
 				agent->UpdateNavigation(0);
-				navMeshShader->SetPath(agent->GetPos(), agent->GetPath());
+				navMeshShader->SetPath(agent->GetPath());
 			}
 		}
 	}
@@ -554,21 +581,23 @@ bool HandleInput(float frameTime)
 			if (coreStats.probedDist < 1000) // prevents scene from going invisible
 				camera->focalDistance = coreStats.probedDist;
 
-		// Update camera and reset click delay booleans
+		// Update camera
 		if (shiftClickLastFrame) changed = true;
-		leftClickLastFrame = rightClickLastFrame = false;
-		ctrlClickLastFrame = shiftClickLastFrame = altClickLastFrame = false;
 	}
+
+	// reset click delay booleans
+	leftClickLastFrame = rightClickLastFrame = false;
+	ctrlClickLastFrame = shiftClickLastFrame = altClickLastFrame = false;
 
 	// process button click
 	if (leftClicked || rightClicked)
 	{
 		if (leftClicked) leftClickLastFrame = true;
 		if (rightClicked) rightClickLastFrame = true;
-		if (GetAsyncKeyState(VK_LSHIFT)) shiftClickLastFrame = true;
-		if (GetAsyncKeyState(VK_RSHIFT)) shiftClickLastFrame = true;
-		if (GetAsyncKeyState(VK_LCONTROL)) ctrlClickLastFrame = true;
-		if (GetAsyncKeyState(VK_RCONTROL)) ctrlClickLastFrame = true;
+		if (GetAsyncKeyState(VK_LSHIFT) < 0) shiftClickLastFrame = true;
+		if (GetAsyncKeyState(VK_RSHIFT) < 0) shiftClickLastFrame = true;
+		if (GetAsyncKeyState(VK_LCONTROL) < 0) ctrlClickLastFrame = true;
+		if (GetAsyncKeyState(VK_RCONTROL) < 0) ctrlClickLastFrame = true;
 
 		leftClicked = rightClicked = false;
 		changed = true; // probing requires a camera refresh

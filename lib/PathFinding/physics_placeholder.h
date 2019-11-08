@@ -20,7 +20,7 @@
 
 namespace lighthouse2 {
 
-static const float s_drag = 2.0f;
+static const float s_drag = .2f;
 
 //  +-----------------------------------------------------------------------------+
 //  |  RigidBody                                                                  |
@@ -37,9 +37,9 @@ public:
 	void AddImpulse(float3 impulse) { m_impulse += impulse; }
 	void Update(float deltaTime)
 	{
-		m_impulse -= m_vel * s_drag;
-		m_linAcc += m_impulse * deltaTime;
-		m_vel += m_linAcc * deltaTime;
+		m_vel += m_impulse / m_mass;
+		m_impulse = { 0, 0, 0 };
+		m_vel -= m_vel * s_drag * deltaTime;
 		m_pos += m_vel * deltaTime;
 	}
 	void Kill() { m_alive = false; };
@@ -54,6 +54,7 @@ public:
 	}
 
 	float3 m_pos, m_vel, m_linAcc, m_impulse;
+	float m_mass = 1.0f;
 
 private:
 	bool m_alive = true;

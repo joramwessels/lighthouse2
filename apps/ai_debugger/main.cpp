@@ -32,7 +32,7 @@ static CoreStats coreStats;
 static NavMeshBuilder* navMeshBuilder = 0;
 static NavMeshNavigator* navMeshNavigator = 0;
 
-static const float agentUpdateInterval = 5.0f;
+static const float agentUpdateInterval = 2.0f;
 static const int maxAgents = 50;
 static const int maxAgentPathSize = 8;
 static PhysicsPlaceholder rigidBodies(maxAgents);

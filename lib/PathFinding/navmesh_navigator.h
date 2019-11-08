@@ -61,16 +61,18 @@ public:
 		m_owner = true;
 		return m_errorCode;
 	}
-	int FindNearestPoly(float3 pos, dtPolyRef* polyID, float3* polyPos = 0) const;
-	int FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float3* nearestPoint, bool* posOverPoly=0);
-	int FindPath(float3 start, float3 end, dtPolyRef* path, int& pathCount, bool& reachable, int maxCount=64);
-	int FindPath(float3 start, float3 end, float3* path, int maxCount, int* count=0, float* distToEnd=0);
-	int FindPath(float3 start, float3 end, std::vector<float3>& path, float* distToEnd=0, int maxCount=64);
+
+	struct PathNode { float3 pos; const dtPoly* poly; }; // poly is nullptr if not on a poly
+
+	int FindNearestPoly(float3 pos, dtPolyRef& polyID, float3& polyPos) const;
+	int FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float3& nearestPoint, bool* posOverPoly=0);
+	int FindPathConstSize(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount=64);
+	int FindPath(float3 start, float3 end, std::vector<PathNode>& path, bool& reachable, int maxCount=64);
 	void Clean();
 
-	const dtNavMesh* GetDetourMesh() const { return m_navmesh; };
-	const dtPoly* GetPoly(dtPolyRef ref) const;
-	const char* GetID() const { return m_ID.c_str(); };
+	inline const dtNavMesh* GetDetourMesh() const { return m_navmesh; };
+	inline const dtPoly* GetPoly(dtPolyRef ref) const;
+	inline const char* GetID() const { return m_ID.c_str(); };
 
 protected:
 	std::string m_ID;

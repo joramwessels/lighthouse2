@@ -79,8 +79,7 @@ public:
 	Agent* GetSelectedAgent() const { return m_agentSelect->agent; };
 
 	// Path drawing
-	void SetPath(const float3* start, const std::vector<float3>* path, bool owner = false)
-		{ m_path = path; m_pathStart = start; m_pathOwner = owner; };
+	void SetPath(const std::vector<NavMeshNavigator::PathNode>* path) { m_path = path; };
 	void SetPathStart(const float3* start) { m_pathStart = start; };
 	void SetPathEnd(const float3* end) { m_pathEnd = end; };
 
@@ -123,6 +122,7 @@ private:
 	int m_agentMeshID = -1;
 	struct ShaderAgent { int instID = -1; Agent* agent; };
 	std::vector<ShaderAgent> m_agents;
+	void DrawAgentImpulse();
 
 	// Object selecting / highlighting
 	const dtPoly* m_polySelect = 0;
@@ -136,9 +136,8 @@ private:
 	const float4 m_highLightColor = { 1.0f, 1.0f, 0.0f, .5f }; // rgba
 
 	// Path drawing
-	bool m_pathOwner = false;
-	const std::vector<float3>* m_path = 0;
-	const float3 *m_pathStart = 0, *m_pathEnd = 0; // used for path beacon drawing only
+	const std::vector<NavMeshNavigator::PathNode>* m_path = 0;
+	const float3 *m_pathStart = 0, *m_pathEnd = 0; // only used for beacon drawing
 	void PlotPath() const;
 	void DrawPathMarkers() const;
 	const float m_pathWidth = 3.0f, m_beaconWidth = 10.0f;

@@ -40,6 +40,7 @@ void NavMeshShader::UpdateMesh(NavMeshNavigator* navmesh)
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::UpdateAgentPositions()
 {
+	DrawAgentImpulse();
 	for (std::vector<ShaderAgent>::iterator it = m_agents.begin(); it != m_agents.end(); it++)
 		m_renderer->SetNodeTransform(it->instID, it->agent->GetTransform());
 	m_renderer->SynchronizeSceneData();
@@ -239,6 +240,22 @@ void NavMeshShader::RemoveAllAgents()
 	m_renderer->SynchronizeSceneData();
 }
 
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::DrawAgentImpulse                                            |
+//  |  Draws a line indicating the agent's movement.                        LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::DrawAgentImpulse()
+{
+	if (!m_agentSelect) return;
+	const float4 col = { .1f, .9f, .1f, 1.0f };
+	const RigidBody* rb = m_agentSelect->agent->GetRB();
+	float3 world[2] = { rb->m_pos, rb->m_pos + rb->m_impulse * 10.0f };
+	std::vector<float4> colors{ col, col };
+	std::vector<float2> screen(2);
+	m_renderer->GetCamera()->WorldToScreenPos(world, screen.data(), 2);
+	DrawShapeOnScreen(screen, colors, GL_LINES, 5.0f);
+}
+
 
 
 
@@ -252,7 +269,7 @@ void NavMeshShader::SelectPoly(float3 pos, NavMeshNavigator* navmesh)
 	if (!navmesh) { m_polySelect = 0; return; }
 	dtPolyRef ref;
 	float3 posOnPoly;
-	navmesh->FindNearestPoly(pos, &ref, &posOnPoly);
+	navmesh->FindNearestPoly(pos, ref, posOnPoly);
 	m_polySelect = navmesh->GetPoly(ref);
 }
 
@@ -371,23 +388,18 @@ void NavMeshShader::DrawAgentHighlightGL() const
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::PlotPath                                                    |
-//  |  Plots the path calculated before as a series of lines                      |
-//  |  using the renderer's viewpyramid to convert 3D to 2D.                LH2'19|
+//  |  Plots the path calculated before as a series of lines                LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::PlotPath() const
 {
-	// Allocating screen position array
-	std::vector<float2> vertices;
-	std::vector<float4> colors;
-	vertices.resize(m_path->size() + 1);
-	colors.resize(m_path->size() + 1, m_pathColor);
+	std::vector<float3> world(m_path->size());
+	std::vector<float2> screen(m_path->size());
+	std::vector<float4> colors(m_path->size(), m_pathColor);
+	for (size_t i = 0; i < m_path->size(); i++)
+		world[i] = m_path->at(i).pos;
 
-	// Converting world positions to screen positions
-	Camera* view = m_renderer->GetCamera();
-	view->WorldToScreenPos(m_path->data(), vertices.data() + 1, (int)m_path->size());
-	view->WorldToScreenPos(m_pathStart, &vertices[0], 1); // prepend start position
-
-	DrawShapeOnScreen(vertices, colors, GL_LINE_STRIP, m_pathWidth);
+	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), (int)m_path->size());
+	DrawShapeOnScreen(screen, colors, GL_LINE_STRIP, m_pathWidth);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -436,7 +448,6 @@ void NavMeshShader::Clean()
 	m_verts.clear();
 	m_edges.clear();
 
-	if (m_pathOwner) delete m_path;
 	m_path = 0;
 	m_pathStart = m_pathEnd = 0;
 	m_shadeTris = m_shadeVerts = m_shadeEdges = false;

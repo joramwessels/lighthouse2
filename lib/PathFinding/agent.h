@@ -56,21 +56,29 @@ public:
 	const float3* GetPos() const { return &m_rb->m_pos; };
 	const float3* GetDir() const { return &m_moveDir; };
 	float3* GetTarget() const { return m_pathEnd; };
-	const std::vector<float3>* GetPath() const { if (m_pathEnd) return &m_path; else return 0; };
+	const std::vector<NavMeshNavigator::PathNode>* GetPath() const { if (m_pathEnd) return &m_path; else return 0; };
+
+	const RigidBody* GetRB() const { return m_rb; };
 
 protected:
 	RigidBody* m_rb;
 	float3 m_moveDir = { 0.0f, 0.0f, 0.0f };
-	float m_maxLinAcc = 1.0f;
+	float m_nextTarDist = 0.0f; // distance to the next target
+	float m_maxLinVel = 6.0f, m_maxLinAcc = 1.0f;
+	float m_arrival = 2.5f; // distance at which to slow down
 
 	NavMeshNavigator* m_navmesh;
 	int m_maxPathCount;
 	int m_pathCount; // number of calculated targets in path array
 	int m_targetIdx; // path array index of current target
-	std::vector<float3> m_path; // should NEVER reallocate, invalidates pointers
+	std::vector<NavMeshNavigator::PathNode> m_path; // should NEVER reallocate, invalidates pointers
 	float3* m_pathEnd = 0; // final target, also indicates if it should move at all
 	bool m_alive = true, m_pathEndOwner = false;
-	float m_distToEnd = 0; // distance from final path location to target
+	bool m_reachable = false; // whether a path to the given end target seems possible at this point
+
+	inline float3 SteeringSeek() const { return m_moveDir * m_maxLinVel; };
+	inline float3 SteeringArrival() const { return m_moveDir * m_maxLinVel * (m_nextTarDist / m_arrival); };
+	inline float3 SteeringStop() const { return float3{ 0, 0, 0 }; };
 
 private:
 	// Move-only (m_rb reference is killed on Kill())

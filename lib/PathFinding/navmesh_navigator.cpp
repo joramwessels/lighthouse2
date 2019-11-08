@@ -25,87 +25,84 @@ namespace lighthouse2 {
 #define DETOUR_LOG(...) NavMeshError(NMSUCCESS, __VA_ARGS__)
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshNavigator::FindPath                                                 |
-//  |  Wrapper for the Detour findPath function.						          |
-//  |  *path* and *pathCount* are the output (both preallocated).				  |
-//  |  *maxCount* specifies the maximum path length in nodes.                     |
-//  |  *reachable* specifies if the end poly matches the last path poly.    LH2'19|
+//  |  NavMeshNavigator::FindPathConstSize                                        |
+//  |  Wrapper for the Detour findPath function. Finds a path of PathNodes.       |
+//  |  *path* and *count* are the output (both preallocated).		     		  |
+//  |  *reachable* specifies whether the end poly matches the last path poly.     |
+//  |  *maxCount* specifies the maximum path length in nodes.               LH2'19|
 //  +-----------------------------------------------------------------------------+
-int NavMeshNavigator::FindPath(float3 start, float3 end, dtPolyRef* path, int& pathCount, bool& reachable, int maxCount)
+int NavMeshNavigator::FindPathConstSize(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount)
 {
 	if (!path) DETOUR_ERROR(NMDETOUR & NMINPUT, "Pathfinding failed: *path* is a nullpointer");
 
 	// Resolve positions into navmesh polygons
 	dtPolyRef startRef, endRef;
-	m_errorCode = FindNearestPoly(start, &startRef);
-	m_errorCode = FindNearestPoly(end, &endRef);
+	float3 firstPos, endPos; // first/last pos on poly
+	m_errorCode = FindNearestPoly(start, startRef, firstPos);
+	m_errorCode = FindNearestPoly(end, endRef, endPos);
 	if (m_errorCode) return m_errorCode;
 
-	// When start & end are on the same poly, there is no poly path
+	// Add the start pos
+	maxCount--;
+	m_errorCode = FindClosestPointOnPoly(startRef, start, firstPos);
+	if (m_errorCode) return m_errorCode;
+	path[0] = PathNode{ firstPos, GetPoly(startRef) };
+
+	// When start & end are on the same poly
 	if (startRef == endRef)
 	{
-		pathCount = 0;
+		m_errorCode = FindClosestPointOnPoly(endRef, end, endPos);
+		if (m_errorCode) return m_errorCode;
+		path[1] = PathNode{ endPos, GetPoly(endRef) };
+		count = 2;
 		reachable = true;
 		return NMSUCCESS;
 	}
 
 	// Calculate path
-	float startl[3] = { start.x, start.y, start.z };
-	float endl[3] = { end.x, end.y, end.z };
-	dtStatus err = m_query->findPath(startRef, endRef, startl, endl, &m_filter, path, &pathCount, maxCount);
+	dtPolyRef* polyPath = (dtPolyRef*)malloc(sizeof(dtPolyRef)*maxCount);
+	dtStatus err = m_query->findPath(startRef, endRef, (float*)&start, (float*)&end, &m_filter, polyPath, &count, maxCount);
 	if (dtStatusFailed(err))
+	{
+		free(polyPath);
 		DETOUR_ERROR(NMDETOUR, "Couldn't find a path from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)",
 			start.x, start.y, start.z, end.x, end.y, end.z);
-
-	reachable = (endRef == path[pathCount - 1]);
-
-	return NMSUCCESS;
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  NavMeshNavigator::FindPath                                                 |
-//  |  Finds the shortest path from start to end.                                 |
-//  |  *path* is a preallocated array of world positions to be filled.            |
-//  |  *maxCount* specifies the number of allocated elements.                     |
-//  |  *count* specifies the actual number of path elements filled.               |
-//  |  *distToEnd* is the error between the last position and the target.   LH2'19|
-//  +-----------------------------------------------------------------------------+
-int NavMeshNavigator::FindPath(float3 start, float3 end, float3* path, int maxCount, int* count, float* distToEnd)
-{
-	if (!path) DETOUR_ERROR(NMDETOUR & NMINPUT, "Pathfinding failed: *path* is a nullpointer");
-
-	// Calculate polygon path
-	int polyPathCount;
-	bool reachable;
-	dtPolyRef* polyPath = (dtPolyRef*)malloc(sizeof(dtPolyRef)*maxCount);
-	m_errorCode = FindPath(start, end, polyPath, polyPathCount, reachable, maxCount);
-	if (m_errorCode) return m_errorCode;
-
-	// Convert polygons to positions
-	float3 iterPos = start;
-	for (int i = 0; i < polyPathCount; i++)
-	{
-		m_errorCode = FindClosestPointOnPoly(polyPath[i], iterPos, &iterPos);
-		if (m_errorCode) return m_errorCode;
-		path[i] = iterPos;
 	}
 
-	// Compute last position
-	float3 lastPos;
-	if (reachable)
+	// Converting to PathNodes
+	float3 iterPos = firstPos;
+	for (int i = 0; i < count; i++)
 	{
-		lastPos = end;
-		if (distToEnd) *distToEnd = 0;
-	}
-	else
-	{
-		m_errorCode = FindClosestPointOnPoly(polyPath[polyPathCount - 1], end, &lastPos);
-		if (m_errorCode) return m_errorCode;
-		if (distToEnd) *distToEnd = length(end - lastPos);
+		m_errorCode = FindClosestPointOnPoly(polyPath[i], iterPos, iterPos);
+		if (m_errorCode) { free(polyPath); return m_errorCode; }
+		path[i + 1] = PathNode{ iterPos, GetPoly(polyPath[i]) };
 	}
 
-	if (polyPathCount < maxCount) path[polyPathCount] = lastPos;
-	if (count) *count = min(polyPathCount + 1, maxCount);
+	// Finding the closest valid point to the target
+	bool pathComplete = (count < maxCount); // means there's room for endPos
+	if (pathComplete && (endRef == polyPath[count - 1])) // complete & reachable
+	{
+		m_errorCode = FindClosestPointOnPoly(endRef, end, endPos);
+		if (m_errorCode) { free(polyPath); return m_errorCode; }
+		path[count + 1] = PathNode{ endPos, GetPoly(endRef) };
+		count++;
+		reachable = true;
+	}
+	else if (pathComplete) // path ended, poly unreachable
+	{
+		m_errorCode = FindClosestPointOnPoly(polyPath[count - 1], end, endPos);
+		if (m_errorCode) { free(polyPath); return m_errorCode; }
+		path[count + 1] = PathNode{ endPos, GetPoly(polyPath[count - 1]) };
+		count++;
+		reachable = false;
+	}
+	else // path incomplete, reachability possible
+	{
+		reachable = true;
+	}
+	free(polyPath);
+
+	count++; // to include firstPos
 
 	return NMSUCCESS;
 }
@@ -117,12 +114,11 @@ int NavMeshNavigator::FindPath(float3 start, float3 end, float3* path, int maxCo
 //  |  *distToEnd* is the error between the last position and the target.         |
 //  |  *maxCount* specifies the number of allocated elements.               LH2'19|
 //  +-----------------------------------------------------------------------------+
-int NavMeshNavigator::FindPath(float3 start, float3 end, std::vector<float3>& path, float* distToEnd, int maxCount)
+int NavMeshNavigator::FindPath(float3 start, float3 end, std::vector<PathNode>& path, bool& reachable, int maxCount)
 {
-	path.reserve(maxCount);
 	path.resize(maxCount);
 	int pathCount;
-	m_errorCode = FindPath(start, end, path.data(), maxCount, &pathCount, distToEnd);
+	m_errorCode = FindPathConstSize(start, end, path.data(), pathCount, reachable, maxCount);
 	if (m_errorCode) return m_errorCode;
 	path.resize(pathCount);
 	path.shrink_to_fit();
@@ -134,16 +130,12 @@ int NavMeshNavigator::FindPath(float3 start, float3 end, std::vector<float3>& pa
 //  |  Finds the nearest pos on the specified *polyID* from the given position.   |
 //  |  *closest* is the output.                                             LH2'19|
 //  +-----------------------------------------------------------------------------+
-int NavMeshNavigator::FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float3* closest, bool* posOverPoly)
+int NavMeshNavigator::FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float3& closest, bool* posOverPoly)
 {
-	float posl[3] = { pos.x, pos.y, pos.z }, closestl[3];
-	dtStatus err = m_query->closestPointOnPoly(polyID, posl, closestl, posOverPoly);
+	dtStatus err = m_query->closestPointOnPoly(polyID, (float*)&pos, (float*)&closest, posOverPoly);
 	if (dtStatusFailed(err))
 		DETOUR_ERROR(NMDETOUR, "Closest point on poly '%i' to (%.2f, %.2f, %.2f) could not be found",
 			polyID, pos.x, pos.y, pos.z);
-	closest->x = closestl[0];
-	closest->y = closestl[1];
-	closest->z = closestl[2];
 	return NMSUCCESS;
 }
 
@@ -152,14 +144,11 @@ int NavMeshNavigator::FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float
 //  |  Finds the polygon closest to the specified position. *polyID* and          |
 //  |  *polyPos* are the ouput. The position on the polygon is optional.    LH2'19|
 //  +-----------------------------------------------------------------------------+
-int NavMeshNavigator::FindNearestPoly(float3 pos, dtPolyRef* polyID, float3* polyPos) const
+int NavMeshNavigator::FindNearestPoly(float3 pos, dtPolyRef& polyID, float3& polyPos) const
 {
-	float posl[3] = { pos.x, pos.y, pos.z };
-	float polyPosl[3];
-	dtStatus status = m_query->findNearestPoly(posl, m_polyFindExtention, &m_filter, polyID, polyPosl);
+	dtStatus status = m_query->findNearestPoly((float*)&pos, m_polyFindExtention, &m_filter, &polyID, (float*)&polyPos);
 	if (dtStatusFailed(status))
 		DETOUR_ERROR(NMDETOUR, "Couldn't find the nearest poly to (%.2f, %.2f, %.2f)", pos.x, pos.y, pos.z);
-	polyPos = &make_float3(polyPosl[0], polyPosl[1], polyPosl[2]);
 	return NMSUCCESS;
 }
 
@@ -186,6 +175,7 @@ const dtPoly* NavMeshNavigator::GetPoly(dtPolyRef ref) const
 	const dtMeshTile* tile; const dtPoly* poly;
 	if (!dtStatusFailed(m_navmesh->getTileAndPolyByRef(ref, &tile, &poly)))
 		return poly;
+	else return 0;
 }
 
 

@@ -20,7 +20,7 @@
 
 namespace lighthouse2 {
 
-static const float s_agentTargetReachedDistance = 0.1f;
+static const float s_agentTargetReachedDistance = 1.0f;
 
 //  +-----------------------------------------------------------------------------+
 //  |  Agent::UpdateMovement                                                      |
@@ -28,12 +28,48 @@ static const float s_agentTargetReachedDistance = 0.1f;
 //  +-----------------------------------------------------------------------------+
 bool Agent::UpdateMovement(float deltaTime)
 {
-	if (!m_pathEnd) return false;
-	if (length(m_rb->m_pos - m_path[m_targetIdx]) < s_agentTargetReachedDistance) // target reached
-		if (m_targetIdx < m_pathCount - 1) m_targetIdx++; // next path target
-		else return m_pathEnd = 0; // final target reached
-	m_moveDir = normalize(m_path[m_targetIdx] - m_rb->m_pos);
-	m_rb->AddImpulse(m_moveDir * m_maxLinAcc);
+	if (!m_pathEnd || !m_pathCount)
+	{
+		// If the path ends, come to a halt
+		float3 steering = SteeringStop() - m_rb->m_vel;
+		float steerLen = length(steering);
+		if (steerLen > m_maxLinAcc) steering *= m_maxLinAcc / steerLen;
+		m_rb->AddImpulse(steering);
+		return false;
+	}
+
+	// Check distance to target
+	m_moveDir = m_path[m_targetIdx].pos - m_rb->m_pos;
+	m_nextTarDist = length(m_moveDir);
+	if (m_nextTarDist < s_agentTargetReachedDistance) // target reached
+	{
+		if (m_targetIdx < m_pathCount - 1)
+		{
+			m_targetIdx++; // next path target
+			m_moveDir = m_path[m_targetIdx].pos - m_rb->m_pos;
+			m_nextTarDist = length(m_moveDir);
+		}
+		else
+		{
+			// out of targets
+			for (int i = 0; i < m_pathCount-1; i++) m_path[i] = m_path[m_pathCount-1];
+			if (length(m_path[m_pathCount-1].pos - *m_pathEnd) < s_agentTargetReachedDistance)
+				m_pathEnd = 0; // final target reached
+		}
+	}
+	m_moveDir = m_moveDir / m_nextTarDist;
+
+	// Determine the desired velocity
+	float3 desiredVelocity;
+	if (m_nextTarDist <= m_arrival) desiredVelocity = SteeringArrival();
+	else desiredVelocity = SteeringSeek();
+
+	// Determine best feasible impulse
+	float3 steering = desiredVelocity - m_rb->m_vel;
+	float steerLen = length(steering);
+	if (steerLen > m_maxLinAcc) steering *= m_maxLinAcc / steerLen;
+	m_rb->AddImpulse(steering);
+
 	return true;
 };
 
@@ -44,10 +80,9 @@ bool Agent::UpdateMovement(float deltaTime)
 bool Agent::UpdateNavigation(float deltaTime)
 {
 	if (!m_pathEnd) return false;
-	if (m_navmesh->FindPath(m_rb->m_pos, *m_pathEnd, m_path.data(), m_maxPathCount, &m_pathCount, &m_distToEnd))
+	if (!m_navmesh->FindPathConstSize(m_rb->m_pos, *m_pathEnd, m_path.data(), m_pathCount, m_reachable, m_maxPathCount))
 		m_targetIdx = 0;
-	float3 lastPos = (m_distToEnd == 0 ? *m_pathEnd : m_path[m_pathCount - 1]);
-	for (int i = m_pathCount; i < m_maxPathCount; i++) m_path[i] = lastPos;
+	for (int i = m_pathCount; i < m_maxPathCount; i++) m_path[i] = m_path[m_pathCount-1];
 	return true;
 }
 
