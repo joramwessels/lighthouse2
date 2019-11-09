@@ -16,28 +16,31 @@
 #include "platform.h"
 #include "system.h"
 #include "rendersystem.h"
+
 #include "navmesh_builder.h"
 #include "navmesh_navigator.h"
+#include "navmesh_shader.h"
+#include "physics_placeholder.h"
 #include "agent.h"
 
 static RenderAPI* renderer = 0;
 static GLTexture* renderTarget = 0;
 static Shader* shader = 0;
+static NavMeshBuilder* navMeshBuilder = 0;
+static NavMeshNavigator* navMeshNavigator = 0;
+static NavMeshShader* navMeshShader = 0;
+static PhysicsPlaceholder* rigidBodies = 0;
+static NavMeshAgents* navMeshAgents = 0;
+
 static uint scrwidth = 0, scrheight = 0, scrspp = 1;
 static bool camMoved = false, hasFocus = true, running = true;
 static bool leftClicked = false, rightClicked = false;
 static int2 probeCoords;
 static CoreStats coreStats;
 
-static NavMeshBuilder* navMeshBuilder = 0;
-static NavMeshNavigator* navMeshNavigator = 0;
-
 static const float agentUpdateInterval = 2.0f;
 static const int maxAgents = 50;
 static const int maxAgentPathSize = 8;
-static PhysicsPlaceholder rigidBodies(maxAgents);
-static NavMeshAgents navMeshAgents(maxAgents, maxAgentPathSize, agentUpdateInterval);
-
 
 #include "main_ui.h"
 #include "main_tools.h"
@@ -73,6 +76,9 @@ void PrepareScene()
 
 	AI_UI::ui_nm_config = *navMeshBuilder->GetConfig();
 	AI_UI::ui_nm_id = navMeshBuilder->GetConfig()->m_id;
+
+	rigidBodies = new PhysicsPlaceholder(maxAgents);
+	navMeshAgents = new NavMeshAgents(maxAgents, maxAgentPathSize, agentUpdateInterval);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -120,16 +126,16 @@ int main()
 		deltaTime = timer.elapsed();
 		timer.reset();
 		// Physics
-		rigidBodies.Update(deltaTime);
-		AI_UI::navMeshShader->UpdateAgentPositions();
+		rigidBodies->Update(deltaTime);
+		navMeshShader->UpdateAgentPositions();
 		// render
 		renderer->Render( c );
 		coreStats = renderer->GetCoreStats();
 		AI_UI::mraysincl = coreStats.totalRays / (coreStats.renderTime * 1000);
 		AI_UI::mraysexcl = coreStats.totalRays / (coreStats.traceTime0 * 1000);
 		// AI
-		navMeshAgents.UpdateAgentMovement(deltaTime);
-		navMeshAgents.UpdateAgentBehavior(deltaTime); // only updates at a regular interval
+		navMeshAgents->UpdateAgentMovement(deltaTime);
+		navMeshAgents->UpdateAgentBehavior(deltaTime); // only updates at a regular interval
 		// UI
 		if (AI_UI::HandleInput( deltaTime )) camMoved = true;
 		// postprocess
@@ -139,9 +145,7 @@ int main()
 		DrawQuad();
 		shader->Unbind();
 		// draw ui
-		AI_UI::navMeshShader->DrawGL();
-		TwDraw();
-		AI_UI::PrintFPS(deltaTime);
+		AI_UI::DrawGUI(deltaTime);
 		// finalize
 		glfwSwapBuffers( window );
 		// terminate

@@ -13,20 +13,25 @@
    limitations under the License.
 */
 
+#pragma once
+
 #include "anttweakbar.h"
+
+#include "rendersystem.h"
 #include "navmesh_builder.h"
 #include "navmesh_navigator.h"
 #include "navmesh_shader.h"
+#include "physics_placeholder.h"
+#include "agent.h"
 
 namespace AI_UI {
 
-static NavMeshShader* navMeshShader = 0;
-static TwBar* settingsBar = 0, *editBar = 0, *debugBar;
+static TwBar* settingsBar = 0, *buildBar = 0, *editBar = 0, *debugBar = 0;
 static bool leftClickLastFrame = false, rightClickLastFrame = false;
 static bool ctrlClickLastFrame = false, shiftClickLastFrame = false, altClickLastFrame = false;
 
 // GUI mode
-enum GUIMODE {EDIT, DEBUG};
+enum GUIMODE { EDIT, DEBUG };
 static GUIMODE guiMode = EDIT;
 static GUIMODE editMode = EDIT, debugMode = DEBUG; // AntTweakBar callback needs smth to point to
 int alphaActive = 220, alphaPassive = 80;
@@ -37,11 +42,22 @@ static std::string meshName;
 static int probMeshID = -1, probeInstID = -1, probeTriID = -1;
 static float3 probedPos;
 
-// Edit bar
+// Build bar
 static NavMeshConfig ui_nm_config;
 static std::string ui_nm_id;
 static bool ui_nm_errorcode = false;
 static float3 *offMeshStart = 0, *offMeshEnd = 0;
+
+// Edit bar
+enum SELECTIONTYPE { NONE, POLY, EDGE, VERT, AGENT };
+static SELECTIONTYPE selectionType = NONE;
+static int selectionID = -1, polygonArea = -1, polygonType = -1;
+static float3* origin = new float3{ 0, 0, 0 };
+static float3* selectionVerts[6] = { origin, origin, origin, origin, origin, origin };
+static bool isOffMesh = false, isDetail = false;
+static const dtPoly* selectedPoly;
+static NavMeshShader::Vert* selectedVert;
+static NavMeshShader::Edge* selectedEdge;
 
 // Debug bar
 static std::vector<NavMeshNavigator::PathNode> path;
@@ -55,6 +71,7 @@ static mat4 agentScale;
 void InitFPSPrinter();
 void PrintFPS(float deltaTime);
 void OnSelectAgent(Agent* agent);
+void OnSelectNavMesh(int InstID);
 
 //  +-----------------------------------------------------------------------------+
 //  |  RemoveNavmeshAssets                                                        |
@@ -63,8 +80,8 @@ void OnSelectAgent(Agent* agent);
 void RemoveNavmeshAssets()
 {
 	OnSelectAgent(0);
-	rigidBodies.Clean();
-	navMeshAgents.Clean();
+	rigidBodies->Clean();
+	navMeshAgents->Clean();
 	navMeshShader->Clean();
 	navMeshBuilder->Cleanup();
 	if (navMeshNavigator) delete navMeshNavigator;
@@ -176,16 +193,16 @@ void TW_CALL SwitchGUIMode(void *data)
 	guiMode = *((GUIMODE*)data);
 	if (guiMode == EDIT)
 	{
-		TwSetParam(editBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaActive);
+		TwSetParam(buildBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaActive);
 		TwSetParam(debugBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
 	}
 	else if (guiMode == DEBUG)
 	{
-		TwSetParam(editBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
+		TwSetParam(buildBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
 		TwSetParam(debugBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaActive);
 	}
 	navMeshShader->RemoveAllAgents();
-	navMeshAgents.Clean();
+	navMeshAgents->Clean();
 	navMeshShader->Deselect();
 	agent = 0;
 	navMeshShader->SetPath(0);
@@ -209,7 +226,7 @@ void RefreshSettingsBar()
 	TwDefine(" Settings size='200 400' color='50 120 50' alpha=220");
 	TwDefine(" Settings help='LightHouse2 data' ");
 	TwDefine(" Settings resizable=true movable=true iconifiable=true refresh=0.05 ");
-	TwDefine(" Settings position='20 20' ");
+	TwDefine(" Settings position='20 440' ");
 	int opened = 1, closed = 0;
 	TwStructMember float3Members[] = {
 		{ "x", TW_TYPE_FLOAT, offsetof(float3, x), "" },
@@ -255,14 +272,14 @@ void RefreshSettingsBar()
 
 //  +-----------------------------------------------------------------------------+
 //  |  RefreshMenu                                                                |
-//  |  Defines the layout of the 'NavMesh' bar.                             LH2'19|
+//  |  Defines the layout of the 'Building' bar.                             LH2'19|
 //  +-----------------------------------------------------------------------------+
-void RefreshEditBar()
+void RefreshBuildBar()
 {
-	TwDefine(" NavMesh size='280 400' color='50 120 50' alpha=220");
-	TwDefine(" NavMesh help='NavMesh generation options' ");
-	TwDefine(" NavMesh resizable=true movable=true iconifiable=true refresh=0.05 ");
-	TwDefine(" NavMesh position='1300 20' ");
+	TwDefine(" Building size='280 400' color='50 120 50' alpha=220");
+	TwDefine(" Building help='NavMesh generation options' ");
+	TwDefine(" Building resizable=true movable=true iconifiable=true refresh=0.05 ");
+	TwDefine(" Building position='1300 20' ");
 	TwCopyStdStringToClientFunc(CopyStdStringToClient);
 	int opened = 1, closed = 0;
 	TwEnumVal partitionEV[] = {
@@ -278,69 +295,110 @@ void RefreshEditBar()
 	};
 	TwType float3Type = TwDefineStruct("AABB", float3Members, 3, sizeof(float3), NULL, NULL);
 
-	TwAddButton(editBar, "Activate EDIT mode", SwitchGUIMode, &editMode, " label='Switch to EDIT mode' ");
-	TwAddSeparator(editBar, "editactivateseparator", "");
+	TwAddButton(buildBar, "Activate EDIT mode", SwitchGUIMode, &editMode, " label='Switch to EDIT mode' ");
+	TwAddSeparator(buildBar, "editactivateseparator", "");
 
 	// create voxelgrid block
-	TwAddVarRW(editBar, "AABB min", float3Type, &ui_nm_config.m_bmin, " group='voxelgrid'");
-	TwAddVarRW(editBar, "AABB max", float3Type, &ui_nm_config.m_bmax, " group='voxelgrid'");
-	TwAddVarRW(editBar, "cell size", TW_TYPE_FLOAT, &ui_nm_config.m_cs, " group='voxelgrid' min=0");
-	TwAddVarRW(editBar, "cell height", TW_TYPE_FLOAT, &ui_nm_config.m_ch, " group='voxelgrid' min=0");
-	TwSetParam(editBar, "voxelgrid", "opened", TW_PARAM_INT32, 1, &closed);
+	TwAddVarRW(buildBar, "AABB min", float3Type, &ui_nm_config.m_bmin, " group='voxelgrid'");
+	TwAddVarRW(buildBar, "AABB max", float3Type, &ui_nm_config.m_bmax, " group='voxelgrid'");
+	TwAddVarRW(buildBar, "cell size", TW_TYPE_FLOAT, &ui_nm_config.m_cs, " group='voxelgrid' min=0");
+	TwAddVarRW(buildBar, "cell height", TW_TYPE_FLOAT, &ui_nm_config.m_ch, " group='voxelgrid' min=0");
+	TwSetParam(buildBar, "voxelgrid", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create agent block
-	TwAddVarRW(editBar, "max slope", TW_TYPE_FLOAT, &ui_nm_config.m_walkableSlopeAngle, " group='agent' min=0 max=90");
-	TwAddVarRW(editBar, "min height", TW_TYPE_INT32, &ui_nm_config.m_walkableHeight, " group='agent' min=1");
-	TwAddVarRW(editBar, "max climb", TW_TYPE_INT32, &ui_nm_config.m_walkableClimb, " group='agent' min=0");
-	TwAddVarRW(editBar, "min radius", TW_TYPE_INT32, &ui_nm_config.m_walkableRadius, " group='agent' min=1");
-	TwSetParam(editBar, "agent", "opened", TW_PARAM_INT32, 1, &closed);
+	TwAddVarRW(buildBar, "max slope", TW_TYPE_FLOAT, &ui_nm_config.m_walkableSlopeAngle, " group='agent' min=0 max=90");
+	TwAddVarRW(buildBar, "min height", TW_TYPE_INT32, &ui_nm_config.m_walkableHeight, " group='agent' min=1");
+	TwAddVarRW(buildBar, "max climb", TW_TYPE_INT32, &ui_nm_config.m_walkableClimb, " group='agent' min=0");
+	TwAddVarRW(buildBar, "min radius", TW_TYPE_INT32, &ui_nm_config.m_walkableRadius, " group='agent' min=1");
+	TwSetParam(buildBar, "agent", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create filtering block
-	TwAddVarRW(editBar, "low hanging obstacles", TW_TYPE_BOOL8, &ui_nm_config.m_filterLowHangingObstacles, " group='filtering'");
-	TwAddVarRW(editBar, "ledge spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterLedgeSpans, " group='filtering'");
-	TwAddVarRW(editBar, "low height spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterWalkableLowHeightSpans, " group='filtering'");
-	TwSetParam(editBar, "filtering", "opened", TW_PARAM_INT32, 1, &closed);
+	TwAddVarRW(buildBar, "low hanging obstacles", TW_TYPE_BOOL8, &ui_nm_config.m_filterLowHangingObstacles, " group='filtering'");
+	TwAddVarRW(buildBar, "ledge spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterLedgeSpans, " group='filtering'");
+	TwAddVarRW(buildBar, "low height spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterWalkableLowHeightSpans, " group='filtering'");
+	TwSetParam(buildBar, "filtering", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create partitioning block
-	TwAddVarRW(editBar, "partition type", PartitionType, &ui_nm_config.m_partitionType, " group='partitioning'");
-	TwAddVarRW(editBar, "min region area", TW_TYPE_INT32, &ui_nm_config.m_minRegionArea, " group='partitioning' min=0");
-	TwAddVarRW(editBar, "min merged region", TW_TYPE_INT32, &ui_nm_config.m_mergeRegionArea, " group='partitioning' min=0");
-	TwSetParam(editBar, "partitioning", "opened", TW_PARAM_INT32, 1, &closed);
+	TwAddVarRW(buildBar, "partition type", PartitionType, &ui_nm_config.m_partitionType, " group='partitioning'");
+	TwAddVarRW(buildBar, "min region area", TW_TYPE_INT32, &ui_nm_config.m_minRegionArea, " group='partitioning' min=0");
+	TwAddVarRW(buildBar, "min merged region", TW_TYPE_INT32, &ui_nm_config.m_mergeRegionArea, " group='partitioning' min=0");
+	TwSetParam(buildBar, "partitioning", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create rasterization block
-	TwAddVarRW(editBar, "max edge length", TW_TYPE_INT32, &ui_nm_config.m_maxEdgeLen, " group='poly mesh' min=0");
-	TwAddVarRW(editBar, "max simpl err", TW_TYPE_FLOAT, &ui_nm_config.m_maxSimplificationError, " group='poly mesh' min=0");
-	TwAddVarRW(editBar, "max verts per poly", TW_TYPE_INT32, &ui_nm_config.m_maxVertsPerPoly, " group='poly mesh' min=3 max=6");
-	TwAddVarRW(editBar, "detail sample dist", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleDist, " group='poly mesh'");
-	TwAddVarRW(editBar, "detail max err", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleMaxError, " group='poly mesh' min=0 help='een heleboelnie tinterresa nteinformatie'");
-	TwSetParam(editBar, "poly mesh", "opened", TW_PARAM_INT32, 1, &closed);
+	TwAddVarRW(buildBar, "max edge length", TW_TYPE_INT32, &ui_nm_config.m_maxEdgeLen, " group='poly mesh' min=0");
+	TwAddVarRW(buildBar, "max simpl err", TW_TYPE_FLOAT, &ui_nm_config.m_maxSimplificationError, " group='poly mesh' min=0");
+	TwAddVarRW(buildBar, "max verts per poly", TW_TYPE_INT32, &ui_nm_config.m_maxVertsPerPoly, " group='poly mesh' min=3 max=6");
+	TwAddVarRW(buildBar, "detail sample dist", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleDist, " group='poly mesh'");
+	TwAddVarRW(buildBar, "detail max err", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleMaxError, " group='poly mesh' min=0 help='een heleboelnie tinterresa nteinformatie'");
+	TwSetParam(buildBar, "poly mesh", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create output block
-	TwAddVarRW(editBar, "NavMesh ID", TW_TYPE_STDSTRING, &ui_nm_id, " group='output'");
-	TwAddVarRW(editBar, "Print build stats", TW_TYPE_BOOL8, &ui_nm_config.m_printBuildStats, " group='output'");
-	TwAddSeparator(editBar, "menuseparator0", "group='output'");
-	TwAddVarRO(editBar, "error code", TW_TYPE_BOOL8, &ui_nm_errorcode, " group='output' true='ERROR' false=''");
-	TwAddSeparator(editBar, "menuseparator1", "group='output'");
-	TwAddButton(editBar, "Build", BuildNavMesh, NULL, " label='Build' ");
-	TwAddButton(editBar, "Save", SaveNavMesh, NULL, " label='Save' ");
-	TwAddSeparator(editBar, "menuseparator2", "group='output'");
-	TwAddButton(editBar, "Load", LoadNavMesh, NULL, " label='Load' ");
-	TwAddSeparator(editBar, "menuseparator3", "group='output'");
-	TwAddButton(editBar, "Clean", CleanNavMesh, NULL, " label='Clean' ");
-	TwAddSeparator(editBar, "menuseparator4", "group='output'");
-	TwSetParam(editBar, "output", "opened", TW_PARAM_INT32, 1, &opened);
+	TwAddVarRW(buildBar, "NavMesh ID", TW_TYPE_STDSTRING, &ui_nm_id, " group='output'");
+	TwAddVarRW(buildBar, "Print build stats", TW_TYPE_BOOL8, &ui_nm_config.m_printBuildStats, " group='output'");
+	TwAddSeparator(buildBar, "menuseparator0", "group='output'");
+	TwAddVarRO(buildBar, "error code", TW_TYPE_BOOL8, &ui_nm_errorcode, " group='output' true='ERROR' false=''");
+	TwAddSeparator(buildBar, "menuseparator1", "group='output'");
+	TwAddButton(buildBar, "Build", BuildNavMesh, NULL, " label='Build' ");
+	TwAddButton(buildBar, "Save", SaveNavMesh, NULL, " label='Save' ");
+	TwAddSeparator(buildBar, "menuseparator2", "group='output'");
+	TwAddButton(buildBar, "Load", LoadNavMesh, NULL, " label='Load' ");
+	TwAddSeparator(buildBar, "menuseparator3", "group='output'");
+	TwAddButton(buildBar, "Clean", CleanNavMesh, NULL, " label='Clean' ");
+	TwAddSeparator(buildBar, "menuseparator4", "group='output'");
+	TwSetParam(buildBar, "output", "opened", TW_PARAM_INT32, 1, &opened);
 }
 
 //  +-----------------------------------------------------------------------------+
 //  |  RefreshMenu                                                                |
-//  |  Defines the layout of the 'NavMesh' bar.                             LH2'19|
+//  |  Defines the layout of the 'Editing' bar.                             LH2'19|
+//  +-----------------------------------------------------------------------------+
+void RefreshEditBar()
+{
+	TwDefine(" Editing size='280 400' color='50 120 50' alpha=80");
+	TwDefine(" Editing help='Pathfinding options' ");
+	TwDefine(" Editing resizable=true movable=true iconifiable=true refresh=0.05 ");
+	TwDefine(" Editing position='1300 440' ");
+	int opened = 1, closed = 0;
+	TwStructMember float3Members[] = {
+		{ "x", TW_TYPE_FLOAT, offsetof(float3, x), "" },
+		{ "y", TW_TYPE_FLOAT, offsetof(float3, y), "" },
+		{ "z", TW_TYPE_FLOAT, offsetof(float3, z), "" }
+	};
+	TwType float3Type = TwDefineStruct("vert", float3Members, 3, sizeof(float3), NULL, NULL);
+	TwEnumVal objectSelectionType[] = {
+		{ NONE, "-" },
+		{ VERT, "Vert" },
+		{ EDGE, "Edge" },
+		{ POLY, "Poly" },
+		{ AGENT, "Agent" }
+	};
+	TwType objectSelectionTypeType = TwDefineEnum("SelectionType", objectSelectionType, 5);
+
+	// create selection block
+	TwAddVarRO(editBar, "Type", objectSelectionTypeType, &selectionType, "");
+	TwAddVarRO(editBar, "ID", TW_TYPE_INT32, &selectionID, "");
+	TwAddVarRO(editBar, "OffMesh", TW_TYPE_BOOL32, &isOffMesh, "");
+
+	// create verts block
+	TwAddVarRO(editBar, "v0", float3Type, selectionVerts[0], "group='Verts' visible=false ");
+	TwAddVarRO(editBar, "v1", float3Type, selectionVerts[1], "group='Verts' visible=false ");
+	TwAddVarRO(editBar, "v2", float3Type, selectionVerts[2], "group='Verts' visible=false ");
+	TwAddVarRO(editBar, "v3", float3Type, selectionVerts[3], "group='Verts' visible=false ");
+	TwAddVarRO(editBar, "v4", float3Type, selectionVerts[4], "group='Verts' visible=false ");
+	TwAddVarRO(editBar, "v5", float3Type, selectionVerts[5], "group='Verts' visible=false ");
+	TwSetParam(editBar, "Verts", "opened", TW_PARAM_INT32, 1, &opened);
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  RefreshMenu                                                                |
+//  |  Defines the layout of the 'Debugging' bar.                             LH2'19|
 //  +-----------------------------------------------------------------------------+
 void RefreshDebugBar()
 {
-	TwDefine(" Navigation size='280 400' color='50 120 50' alpha=80");
-	TwDefine(" Navigation help='Pathfinding options' ");
-	TwDefine(" Navigation resizable=true movable=true iconifiable=true refresh=0.05 ");
-	TwDefine(" Navigation position='1300 440' ");
+	TwDefine(" Debugging size='200 400' color='50 120 50' alpha=80");
+	TwDefine(" Debugging help='Pathfinding options' ");
+	TwDefine(" Debugging resizable=true movable=true iconifiable=true refresh=0.05 ");
+	TwDefine(" Debugging position='20 20' ");
 	int opened = 1, closed = 0;
 	TwStructMember float3Members[] = {
 		{ "x", TW_TYPE_FLOAT, offsetof(float3, x), "" },
@@ -373,8 +431,24 @@ void RefreshDebugBar()
 void RefreshUI()
 {
 	RefreshSettingsBar();
+	RefreshBuildBar();
 	RefreshEditBar();
 	RefreshDebugBar();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  InitGUI                                                                    |
+//  |  Prepares a basic user interface.                                     LH2'19|
+//  +-----------------------------------------------------------------------------+
+void InitAntTweakBars()
+{
+	// Init AntTweakBar
+	TwInit(TW_OPENGL_CORE, NULL);
+	settingsBar = TwNewBar("Settings");
+	buildBar = TwNewBar("Building");
+	editBar = TwNewBar("Editing");
+	debugBar = TwNewBar("Debugging");
+	RefreshUI();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -384,15 +458,85 @@ void RefreshUI()
 void InitGUI()
 {
 	// Init AntTweakBar
-	TwInit(TW_OPENGL_CORE, NULL);
-	settingsBar = TwNewBar("Settings");
-	editBar = TwNewBar("NavMesh");
-	debugBar = TwNewBar("Navigation");
-	RefreshUI();
+	InitAntTweakBars();
 
 	navMeshShader = new NavMeshShader(renderer, "data\\ai\\");
 
 	InitFPSPrinter();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  DrawGUI                                                                    |
+//  |  Performs all GUI GL drawing.                                         LH2'19|
+//  +-----------------------------------------------------------------------------+
+void DrawGUI(float deltaTime)
+{
+	navMeshShader->DrawGL();
+	TwDraw();
+	PrintFPS(deltaTime);
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  OnSelectNavMesh                                                            |
+//  |  Handles selecting/deselecting navmesh objects. nullptr to deselect.  LH2'19|
+//  +-----------------------------------------------------------------------------+
+void OnSelectNavMesh(int instID)
+{
+	selectionType = NONE;
+	navMeshShader->Deselect();
+	selectionID = polygonArea = polygonType = -1;
+	for (int i = 0; i < 6; i++) selectionVerts[i] = origin;
+	isOffMesh = false; // TODO: can't get this info yet
+
+	if (instID)
+	{
+		if (navMeshShader->isVert(probMeshID))
+		{
+			selectionType = VERT;
+			selectedVert = navMeshShader->SelectVert(instID);
+			selectionID = selectedVert->idx;
+			selectionVerts[0] = selectedVert->pos;
+			TwDefine(" editBar/v0 visible=true ");
+		}
+		else if (navMeshShader->isEdge(probMeshID))
+		{
+			selectionType = EDGE;
+			selectedEdge = navMeshShader->SelectEdge(instID);
+			selectionID = selectedEdge->idx;
+			selectionVerts[0] = navMeshShader->GetVertPos(selectedEdge->v1);
+			selectionVerts[1] = navMeshShader->GetVertPos(selectedEdge->v2);
+		}
+		else if (navMeshShader->isPoly(probMeshID))
+		{
+			selectionType = POLY;
+			selectedPoly = navMeshShader->SelectPoly(probedPos, navMeshNavigator);
+			selectionID = -1; // TODO
+			for (size_t i = 0; i < selectedPoly->vertCount; i++)
+				selectionVerts[i] = navMeshShader->GetVertPos(selectedPoly->verts[i]);
+			polygonArea = selectedPoly->getArea();
+			polygonType = selectedPoly->getType();
+		}
+	}
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  HandleMouseInputEditMode                                                   |
+//  |  Process mouse input when in EDIT mode.                               LH2'19|
+//  +-----------------------------------------------------------------------------+
+void HandleMouseInputEditMode()
+{
+	// Instance selecting (SHIFT) (L-CLICK)
+	if (leftClickLastFrame && shiftClickLastFrame)
+	{
+		if (navMeshShader->isNavMesh(probMeshID)) OnSelectNavMesh(probeInstID);
+		else OnSelectNavMesh(0);
+	}
+
+	// Adding off-mesh connections (CTRL)
+	if (ctrlClickLastFrame)
+	{
+
+	}
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -441,30 +585,6 @@ void OnSelectAgent(Agent* a_agent)
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  HandleMouseInputEditMode                                                   |
-//  |  Process mouse input when in EDIT mode.                               LH2'19|
-//  +-----------------------------------------------------------------------------+
-void HandleMouseInputEditMode()
-{
-	// Instance selecting (SHIFT) (L-CLICK)
-	if (leftClickLastFrame && shiftClickLastFrame)
-	{
-		if (navMeshShader->isVert(probMeshID))
-			navMeshShader->SelectVert(probeInstID);
-		else if (navMeshShader->isEdge(probMeshID))
-			navMeshShader->SelectEdge(probeInstID);
-		else if (navMeshShader->isPoly(probMeshID))
-			navMeshShader->SelectPoly(probedPos, navMeshNavigator);
-	}
-
-	// Adding off-mesh connections (CTRL)
-	if (ctrlClickLastFrame)
-	{
-
-	}
-}
-
-//  +-----------------------------------------------------------------------------+
 //  |  HandleMouseInputDebugMode                                                  |
 //  |  Process mouse input when in DEBUG mode.                              LH2'19|
 //  +-----------------------------------------------------------------------------+
@@ -475,8 +595,8 @@ void HandleMouseInputDebugMode()
 	{
 		if (navMeshShader->isPoly(probMeshID))
 		{
-			RigidBody* rb = rigidBodies.AddRB(agentScale, mat4::Identity(), mat4::Translate(probedPos));
-			Agent* agent = navMeshAgents.AddAgent(navMeshNavigator, rb);
+			RigidBody* rb = rigidBodies->AddRB(agentScale, mat4::Identity(), mat4::Translate(probedPos));
+			Agent* agent = navMeshAgents->AddAgent(navMeshNavigator, rb);
 			navMeshShader->AddAgentToScene(agent);
 		}
 	}
