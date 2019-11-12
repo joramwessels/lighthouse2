@@ -23,6 +23,7 @@ namespace lighthouse2 {
 
 #define DETOUR_ERROR(X, ...) return NavMeshError(X, __VA_ARGS__)
 #define DETOUR_LOG(...) NavMeshError(NMSUCCESS, __VA_ARGS__)
+#define POLYPATH_SIZE 128
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshNavigator::FindPathConstSize                                        |
@@ -32,6 +33,75 @@ namespace lighthouse2 {
 //  |  *maxCount* specifies the maximum path length in nodes.               LH2'19|
 //  +-----------------------------------------------------------------------------+
 int NavMeshNavigator::FindPathConstSize(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount)
+{
+
+	if (!path) DETOUR_ERROR(NMDETOUR & NMINPUT, "Pathfinding failed: *path* is a nullpointer");
+
+	// Resolve positions into navmesh polygons
+	dtPolyRef startRef, endRef;
+	float3 firstPos, endPos; // tmp
+	m_errorCode = FindNearestPoly(start, startRef, firstPos);
+	m_errorCode = FindNearestPoly(end, endRef, endPos);
+	if (m_errorCode) return m_errorCode;
+
+	// When start & end are on the same poly
+	if (startRef == endRef)
+	{
+		path[0] = PathNode{ start, GetPoly(startRef) };
+		path[1] = PathNode{ end, GetPoly(endRef) };
+		count = 2;
+		reachable = true;
+		return NMSUCCESS;
+	}
+
+	// Calculate path
+	dtPolyRef* polyPath = (dtPolyRef*)malloc(sizeof(dtPolyRef)*POLYPATH_SIZE);
+	dtStatus err = m_query->findPath(startRef, endRef, (float*)&start, (float*)&end, &m_filter, polyPath, &count, POLYPATH_SIZE);
+	if (dtStatusFailed(err))
+	{
+		free(polyPath);
+		DETOUR_ERROR(NMDETOUR, "Couldn't find a path from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)",
+			start.x, start.y, start.z, end.x, end.y, end.z);
+	}
+	reachable = (polyPath[count - 1] == endRef);
+
+	// String pulling
+	float3* straightPath = (float3*)malloc(sizeof(float3) * maxCount);
+	dtPolyRef* spPolys = (dtPolyRef*)malloc(sizeof(dtPolyRef) * maxCount);
+	unsigned char* spFlags = (unsigned char*)malloc(sizeof(unsigned char) * maxCount);
+	err = m_query->findStraightPath((float*)&start, (float*)&end, polyPath, count, (float*)straightPath, spFlags, spPolys, &count, maxCount);
+	if (dtStatusFailed(err))
+	{
+		free(polyPath);
+		free(straightPath);
+		free(spPolys);
+		free(spFlags);
+		DETOUR_ERROR(NMDETOUR, "Couldn't find a straight path from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)",
+			start.x, start.y, start.z, end.x, end.y, end.z);
+	}
+
+	// Converting to PathNodes
+	for (int i = 0; i < count; i++)
+	{
+		path[i] = PathNode{ straightPath[i], GetPoly(spPolys[i]) };
+	}
+
+	free(polyPath);
+	free(straightPath);
+	free(spPolys);
+	free(spFlags);
+
+	return NMSUCCESS;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshNavigator::FindPathConstSize                                        |
+//  |  Wrapper for the Detour findPath function. Finds a path of PathNodes.       |
+//  |  *path* and *count* are the output (both preallocated).		     		  |
+//  |  *reachable* specifies whether the end poly matches the last path poly.     |
+//  |  *maxCount* specifies the maximum path length in nodes.               LH2'19|
+//  +-----------------------------------------------------------------------------+
+int NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount)
 {
 	if (!path) DETOUR_ERROR(NMDETOUR & NMINPUT, "Pathfinding failed: *path* is a nullpointer");
 

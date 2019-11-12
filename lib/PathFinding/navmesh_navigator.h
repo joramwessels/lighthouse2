@@ -67,6 +67,7 @@ public:
 	int FindNearestPoly(float3 pos, dtPolyRef& polyID, float3& polyPos) const;
 	int FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float3& nearestPoint, bool* posOverPoly=0);
 	int FindPathConstSize(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount=64);
+	int FindPathConstSize_Legacy(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount = 64);
 	int FindPath(float3 start, float3 end, std::vector<PathNode>& path, bool& reachable, int maxCount=64);
 	void Clean();
 
