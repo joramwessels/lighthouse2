@@ -21,7 +21,7 @@
 
 #include "rendersystem.h"	   // HostScene, HostMesh, HostTri, float3, int3, FileExists
 #include "navmesh_navigator.h" // NavMeshNavigator, SerializeNavMesh, DeserializeNavMesh
-#include "navmesh_common.h"    // error handling
+#include "navmesh_common.h"    // NMSUCCESS, NavMeshError
 
 namespace lighthouse2 {
 
@@ -124,6 +124,9 @@ public:
 	void Cleanup();
 	void DumpLog() const;
 
+	void AddOffMeshConnection(float3 v0, float3 v1, float radius, bool unidirectional);
+	void ApplyChanges() { if (m_pmesh && m_dmesh) CreateDetourData(); };
+
 	void SetConfig(NavMeshConfig config) { m_config = config; };
 	void SetID(const char* id) { m_config.m_id = id; };
 
@@ -149,6 +152,14 @@ protected:
 	rcPolyMeshDetail* m_dmesh;		// The detailed polygon mesh
 	dtNavMesh* m_navMesh;			// The final navmesh as used by Detour
 	int m_errorCode;
+
+	// Runtime additions
+	std::vector<float3> m_offMeshVerts; // (v0, v1) * nConnections
+	std::vector<float> m_offMeshRadii;
+	std::vector<unsigned short> m_offMeshFlags;
+	std::vector<unsigned char> m_offMeshAreas;
+	std::vector<unsigned int> m_offMeshUserIDs;
+	std::vector<unsigned char> m_offMeshDirection;
 
 	// Build functions
 	int RasterizePolygonSoup(const int vert_count, const float* verts, const int tri_count, const int* tris);

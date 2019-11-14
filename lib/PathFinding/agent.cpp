@@ -138,9 +138,10 @@ void NavMeshAgents::RemoveAgent(Agent* agent)
 //  +-----------------------------------------------------------------------------+
 bool NavMeshAgents::UpdateAgentMovement(float deltaTime)
 {
+	bool changed = false;
 	for (std::vector<Agent>::iterator it = m_agents.begin(); it != m_agents.end(); it++)
-		if (it->isAlive()) it->UpdateMovement(deltaTime);
-	return true;
+		if (it->isAlive()) changed |= it->UpdateMovement(deltaTime);
+	return changed;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -150,12 +151,13 @@ bool NavMeshAgents::UpdateAgentMovement(float deltaTime)
 //  +-----------------------------------------------------------------------------+
 bool NavMeshAgents::UpdateAgentBehavior(float deltaTime)
 {
+	bool changed = false;
 	m_timeCounter += deltaTime;
 	if (m_timeCounter < m_updateTimeInterval) return false;
 	for (std::vector<Agent>::iterator it = m_agents.begin(); it != m_agents.end(); it++)
-		if (it->isAlive()) it->UpdateNavigation(m_timeCounter);
-	m_timeCounter = 0;
-	return true;
+		if (it->isAlive()) changed |= it->UpdateNavigation(m_timeCounter);
+	m_timeCounter -= m_updateTimeInterval;
+	return changed;
 }
 
 //  +-----------------------------------------------------------------------------+

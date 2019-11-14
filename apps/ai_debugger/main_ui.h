@@ -17,6 +17,7 @@
 
 #include "anttweakbar.h"
 
+#include "platform.h" // GLFW
 #include "rendersystem.h"
 #include "navmesh_builder.h"
 #include "navmesh_navigator.h"
@@ -24,33 +25,52 @@
 #include "physics_placeholder.h"
 #include "agent.h"
 
+#include "edit_ui.h"
+#include "debug_ui.h"
+
 namespace AI_UI {
 
-static TwBar* settingsBar = 0, *buildBar = 0, *editBar = 0, *debugBar = 0;
-static bool leftClickLastFrame = false, rightClickLastFrame = false;
-static bool ctrlClickLastFrame = false, shiftClickLastFrame = false, altClickLastFrame = false;
+// Shared objects
+static RenderAPI* renderer = 0;
+static NavMeshBuilder* navMeshBuilder = 0;
+static PhysicsPlaceholder* rigidBodies = 0;
+static NavMeshAgents* navMeshAgents = 0;
 
-// GUI mode
+// Shared variables
+static bool *camMoved, *hasFocus, *leftClicked, *rightClicked;
+static int2 *probeCoords = 0;
+static uint *scrwidth = 0, *scrheight = 0;
+
+// UI objects
+static NavMeshNavigator* navMeshNavigator = 0;
+static NavMeshShader* navMeshShader = 0;
+static OffMeshConnectionTool* s_omcTool = 0;
+static AgentNavigationTool* s_agentTool = 0;
+static PathDrawingTool* s_pathTool = 0;
+static TwBar* settingsBar = 0, *buildBar = 0, *editBar = 0, *debugBar = 0;
+
+// GUI state
 enum GUIMODE { EDIT, DEBUG };
 static GUIMODE guiMode = EDIT;
 static GUIMODE editMode = EDIT, debugMode = DEBUG; // AntTweakBar callback needs smth to point to
-int alphaActive = 220, alphaPassive = 80;
+static int alphaActive = 220, alphaPassive = 80;
+enum SELECTIONTYPE { NONE, POLY, EDGE, VERT, AGENT };
+static SELECTIONTYPE selectionType = NONE;
+static bool leftClickLastFrame = false, rightClickLastFrame = false;
+static bool ctrlClickLastFrame = false, shiftClickLastFrame = false, altClickLastFrame = false;
 
 // Settings bar
+static CoreStats coreStats;
 static float mraysincl = 0, mraysexcl = 0;
 static std::string meshName;
 static int probMeshID = -1, probeInstID = -1, probeTriID = -1;
 static float3 probedPos;
 
 // Build bar
-static NavMeshConfig ui_nm_config;
-static std::string ui_nm_id;
-static bool ui_nm_errorcode = false;
-static float3 *offMeshStart = 0, *offMeshEnd = 0;
+static NavMeshConfig* config;
+static bool builderErrorStatus = false;
 
 // Edit bar
-enum SELECTIONTYPE { NONE, POLY, EDGE, VERT, AGENT };
-static SELECTIONTYPE selectionType = NONE;
 static int selectionID = -1, polygonArea = -1, polygonType = -1;
 static float3* origin = new float3{ 0, 0, 0 };
 static float3* selectionVerts[6] = { origin, origin, origin, origin, origin, origin };
@@ -62,31 +82,384 @@ static NavMeshShader::Edge* selectedEdge;
 // Debug bar
 static std::vector<NavMeshNavigator::PathNode> path;
 static bool reachable;
-static float3 *pathStart = 0, *pathEnd = 0;
-static Agent* agent;
+static float3 pathStart, pathEnd;
 static const float3 *agentPos, *agentDir, *agentTarget;
 static mat4 agentScale;
 
 // Forward declarations
 void InitFPSPrinter();
 void PrintFPS(float deltaTime);
-void OnSelectAgent(Agent* agent);
 void OnSelectNavMesh(int InstID);
+void InitAntTweakBars();
+
 
 //  +-----------------------------------------------------------------------------+
-//  |  RemoveNavmeshAssets                                                        |
-//  |  Removes all navmesh assets from the scene.                           LH2'19|
+//  |  InitGUI                                                                    |
+//  |  Prepares a basic user interface.                                     LH2'19|
 //  +-----------------------------------------------------------------------------+
-void RemoveNavmeshAssets()
+static void InitGUI(RenderAPI *a_renderer, NavMeshBuilder *a_builder, PhysicsPlaceholder *a_physics, NavMeshAgents *a_agents,
+	bool &a_camMoved, bool &a_hasFocus, bool &a_leftClicked, bool &a_rightClicked, int2 &a_probeCoords, uint &a_scrwidth, uint &a_scrheight)
 {
-	OnSelectAgent(0);
+	// init pointers to main
+	renderer = a_renderer;
+	navMeshBuilder = a_builder;
+	rigidBodies = a_physics;
+	navMeshAgents = a_agents;
+	camMoved = &a_camMoved;
+	hasFocus = &a_hasFocus;
+	leftClicked = &a_leftClicked;
+	rightClicked = &a_rightClicked;
+	probeCoords = &a_probeCoords;
+	scrwidth = &a_scrwidth;
+	scrheight = &a_scrheight;
+	config = a_builder->GetConfig();
+
+	// Init AntTweakBar
+	InitAntTweakBars();
+
+	navMeshShader = new NavMeshShader(renderer, "data\\ai\\");
+	s_omcTool = new OffMeshConnectionTool(navMeshBuilder, navMeshShader);
+	s_agentTool = new AgentNavigationTool(navMeshShader);
+	s_pathTool = new PathDrawingTool(navMeshShader, navMeshNavigator);
+
+	InitFPSPrinter();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  PreRenderUpdate                                                            |
+//  |  Updates the GUI after physics, and before rendering.                 LH2'19|
+//  +-----------------------------------------------------------------------------+
+static void PreRenderUpdate(float deltaTime)
+{
+	navMeshShader->UpdateAgentPositions();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  PostRenderUpdate                                                           |
+//  |  Updates the GUI after rendering has taken place.                     LH2'19|
+//  +-----------------------------------------------------------------------------+
+static void PostRenderUpdate(float deltaTime)
+{
+	coreStats = renderer->GetCoreStats();
+	mraysincl = coreStats.totalRays / (coreStats.renderTime * 1000);
+	mraysexcl = coreStats.totalRays / (coreStats.traceTime0 * 1000);
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  RemoveEditAssets                                                           |
+//  |  Returns all settings related to DEBUG mode to their defaults.        LH2'19|
+//  +-----------------------------------------------------------------------------+
+static void RemoveDebugAssets()
+{
+	if (selectionType == AGENT)
+	{
+		selectionType = NONE;
+		s_agentTool->Clear(); // deselects the shader
+	}
+	s_pathTool->Clear();
+
+	navMeshShader->RemoveAllAgents();
 	rigidBodies->Clean();
 	navMeshAgents->Clean();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  RemoveEditAssets                                                           |
+//  |  Returns all settings related to EDIT mode to their defaults.         LH2'19|
+//  +-----------------------------------------------------------------------------+
+static void RemoveEditAssets()
+{
+	s_omcTool->Clear();
+	if (selectionType == VERT || selectionType == EDGE || selectionType == POLY)
+	{
+		navMeshShader->Deselect();
+		selectionType = NONE;
+	}
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  ClearNavMesh                                                               |
+//  |  Removes all navmesh assets from the scene.                           LH2'19|
+//  +-----------------------------------------------------------------------------+
+static void ClearNavMesh()
+{
+	RemoveDebugAssets();
+	RemoveEditAssets();
+
 	navMeshShader->Clean();
 	navMeshBuilder->Cleanup();
+
 	if (navMeshNavigator) delete navMeshNavigator;
 	navMeshNavigator = 0;
 }
+
+//  +-----------------------------------------------------------------------------+
+//  |  RefreshNavigator                                                           |
+//  |  Refreshes the NavMeshNavigator and updates the agent size.           LH2'19|
+//  +-----------------------------------------------------------------------------+
+static void RefreshNavigator()
+{
+	// Get navigator
+	if (navMeshNavigator) delete navMeshNavigator;
+	navMeshNavigator = navMeshBuilder->GetNavigator();
+	navMeshShader->UpdateMesh(navMeshNavigator);
+
+	// Updating new config data
+	float radius = config->m_walkableRadius * config->m_cs; // voxels to world units
+	float height = config->m_walkableHeight * config->m_ch; // voxels to world units
+	agentScale = mat4::Scale(make_float3(radius * 2, height, radius * 2));
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  DrawGUI                                                                    |
+//  |  Performs all GUI GL drawing.                                         LH2'19|
+//  +-----------------------------------------------------------------------------+
+static void DrawGUI(float deltaTime)
+{
+	navMeshShader->DrawGL();
+	TwDraw();
+	PrintFPS(deltaTime);
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  OnSelectNavMesh                                                            |
+//  |  Handles selecting/deselecting navmesh objects. nullptr to deselect.  LH2'19|
+//  +-----------------------------------------------------------------------------+
+static void OnSelectNavMesh(int instID)
+{
+	selectionType = NONE;
+	navMeshShader->Deselect();
+	selectionID = polygonArea = polygonType = -1;
+	for (int i = 0; i < 6; i++) selectionVerts[i] = origin;
+	isOffMesh = false; // TODO: can't get this info yet
+
+	if (instID)
+	{
+		if (navMeshShader->isVert(probMeshID))
+		{
+			selectionType = VERT;
+			selectedVert = navMeshShader->SelectVert(instID);
+			selectionID = selectedVert->idx;
+			selectionVerts[0] = selectedVert->pos;
+			TwDefine(" editBar/v0 visible=true ");
+		}
+		else if (navMeshShader->isEdge(probMeshID))
+		{
+			selectionType = EDGE;
+			selectedEdge = navMeshShader->SelectEdge(instID);
+			selectionID = selectedEdge->idx;
+			selectionVerts[0] = navMeshShader->GetVertPos(selectedEdge->v1);
+			selectionVerts[1] = navMeshShader->GetVertPos(selectedEdge->v2);
+		}
+		else if (navMeshShader->isPoly(probMeshID))
+		{
+			selectionType = POLY;
+			selectedPoly = navMeshShader->SelectPoly(probedPos, navMeshNavigator);
+			selectionID = -1; // TODO
+			for (size_t i = 0; i < selectedPoly->vertCount; i++)
+				selectionVerts[i] = navMeshShader->GetVertPos(selectedPoly->verts[i]);
+			polygonArea = selectedPoly->getArea();
+			polygonType = selectedPoly->getType();
+		}
+	}
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  HandleMouseInputEditMode                                                   |
+//  |  Process mouse input when in EDIT mode.                               LH2'19|
+//  +-----------------------------------------------------------------------------+
+static void HandleMouseInputEditMode()
+{
+	// Instance selecting (SHIFT) (L-CLICK)
+	if (leftClickLastFrame && shiftClickLastFrame)
+	{
+		if (navMeshShader->isNavMesh(probMeshID)) OnSelectNavMesh(probeInstID);
+		else OnSelectNavMesh(0);
+	}
+
+	// Adding off-mesh connections (CTRL)
+	if (ctrlClickLastFrame)
+	{
+		if (leftClickLastFrame) s_omcTool->SetStart(probedPos);
+		else if (rightClickLastFrame) s_omcTool->SetEnd(probedPos);
+	}
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  HandleMouseInputDebugMode                                                  |
+//  |  Process mouse input when in DEBUG mode.                              LH2'19|
+//  +-----------------------------------------------------------------------------+
+static void HandleMouseInputDebugMode()
+{
+	// Agent placement (SHIFT) (R-CLICK)
+	if (rightClickLastFrame && shiftClickLastFrame)
+	{
+		if (navMeshShader->isPoly(probMeshID))
+		{
+			RigidBody* rb = rigidBodies->AddRB(agentScale, mat4::Identity(), mat4::Translate(probedPos));
+			Agent* agent = navMeshAgents->AddAgent(navMeshNavigator, rb);
+			navMeshShader->AddAgentToScene(agent);
+		}
+	}
+
+	// Agent selecting (SHIFT) (L-CLICK)
+	if (leftClickLastFrame && shiftClickLastFrame)
+	{
+		if (navMeshShader->isAgent(probMeshID)) // selecting
+		{
+			s_pathTool->Clear();
+			selectionType = NONE;
+
+			Agent* agent = navMeshShader->SelectAgent(probeInstID);
+			if (agent)
+			{
+				// link GUI info directly to agent
+				agentPos = agent->GetPos();
+				agentDir = agent->GetDir();
+				agentTarget = agent->GetTarget();
+				selectionType = AGENT;
+			}
+			else
+			{
+				agentPos = origin;
+				agentDir = origin;
+				agentTarget = origin;
+			}
+			s_agentTool->SelectAgent(agent);
+		}
+		else if (selectionType == AGENT) // deselecting
+		{
+			s_agentTool->Clear();
+			selectionType = NONE;
+			agentPos = origin;
+			agentDir = origin;
+			agentTarget = origin;
+		}
+	}
+
+	// Setting path start/end (CTRL)
+	if (ctrlClickLastFrame && navMeshShader->isNavMesh(probMeshID))
+	{
+		if (selectionType == AGENT)
+		{
+			if (rightClickLastFrame) s_agentTool->SetTarget(probedPos);
+		}
+		else if (selectionType != AGENT)
+		{
+			if (leftClickLastFrame)
+			{
+				s_pathTool->SetStart(probedPos);
+				pathStart = probedPos;
+			}
+			if (rightClickLastFrame)
+			{
+				s_pathTool->SetEnd(probedPos);
+				pathEnd = probedPos;
+			}
+		}
+	}
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  HandleInput                                                                |
+//  |  Process user input.                                                  LH2'19|
+//  +-----------------------------------------------------------------------------+
+static bool HandleInput(float frameTime)
+{
+	if (!*hasFocus) return false;
+
+	// handle keyboard input
+	float translateSpeed = (GetAsyncKeyState(VK_SHIFT) ? 15.0f : 5.0f) * frameTime, rotateSpeed = 2.5f * frameTime;
+	bool changed = false;
+	Camera* camera = renderer->GetCamera();
+	if (GetAsyncKeyState('A')) { changed = true; camera->TranslateRelative(make_float3(-translateSpeed, 0, 0)); }
+	if (GetAsyncKeyState('D')) { changed = true; camera->TranslateRelative(make_float3(translateSpeed, 0, 0)); }
+	if (GetAsyncKeyState('W')) { changed = true; camera->TranslateRelative(make_float3(0, 0, translateSpeed)); }
+	if (GetAsyncKeyState('S')) { changed = true; camera->TranslateRelative(make_float3(0, 0, -translateSpeed)); }
+	if (GetAsyncKeyState('R')) { changed = true; camera->TranslateRelative(make_float3(0, translateSpeed, 0)); }
+	if (GetAsyncKeyState('F')) { changed = true; camera->TranslateRelative(make_float3(0, -translateSpeed, 0)); }
+	if (GetAsyncKeyState('B')) changed = true; // force restart
+	if (GetAsyncKeyState(VK_UP)) { changed = true; camera->TranslateTarget(make_float3(0, -rotateSpeed, 0)); }
+	if (GetAsyncKeyState(VK_DOWN)) { changed = true; camera->TranslateTarget(make_float3(0, rotateSpeed, 0)); }
+	if (GetAsyncKeyState(VK_LEFT)) { changed = true; camera->TranslateTarget(make_float3(-rotateSpeed, 0, 0)); }
+	if (GetAsyncKeyState(VK_RIGHT)) { changed = true; camera->TranslateTarget(make_float3(rotateSpeed, 0, 0)); }
+
+	// Probing results are one frame delayed due to camera refresh
+	if (leftClickLastFrame || rightClickLastFrame)
+	{
+
+		// Only calculate probe info when ctrl/shift-clicked
+		if (ctrlClickLastFrame || shiftClickLastFrame)
+		{
+			// Identify probed instance
+			probeInstID = coreStats.probedInstid;
+			probeTriID = coreStats.probedTriid;
+			probMeshID = renderer->GetInstanceMeshID(probeInstID);
+			meshName = renderer->GetMesh(probMeshID)->name;
+
+			// Get 3D probe position
+			ViewPyramid p = camera->GetView();
+			float3 unitRight = (p.p2 - p.p1) / *scrwidth;
+			float3 unitDown = (p.p3 - p.p1) / *scrheight;
+			float3 pixelLoc = p.p1 + probeCoords->x * unitRight + probeCoords->y * unitDown;
+			probedPos = camera->position + normalize(pixelLoc - camera->position) * coreStats.probedDist;
+		}
+
+		if (guiMode == EDIT) HandleMouseInputEditMode();
+		else if (guiMode == DEBUG) HandleMouseInputDebugMode();
+
+		// Depth of field (SHIFT)
+		if (shiftClickLastFrame)
+			if (coreStats.probedDist < 1000) // prevents scene from going invisible
+				camera->focalDistance = coreStats.probedDist;
+
+		// Update camera
+		if (shiftClickLastFrame) changed = true;
+	}
+
+	// reset click delay booleans
+	leftClickLastFrame = rightClickLastFrame = false;
+	ctrlClickLastFrame = shiftClickLastFrame = altClickLastFrame = false;
+
+	// process button click
+	if (*leftClicked || *rightClicked)
+	{
+		if (*leftClicked) leftClickLastFrame = true;
+		if (*rightClicked) rightClickLastFrame = true;
+		if (GetAsyncKeyState(VK_LSHIFT) < 0) shiftClickLastFrame = true;
+		if (GetAsyncKeyState(VK_RSHIFT) < 0) shiftClickLastFrame = true;
+		if (GetAsyncKeyState(VK_LCONTROL) < 0) ctrlClickLastFrame = true;
+		if (GetAsyncKeyState(VK_RCONTROL) < 0) ctrlClickLastFrame = true;
+
+		*leftClicked = *rightClicked = false;
+		changed = true; // probing requires a camera refresh
+	}
+
+	// let the main loop know if the camera should update
+	return changed;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 //  +-----------------------------------------------------------------------------+
 //  |  TW_CALL BuildNavMesh                                                       |
@@ -95,31 +468,18 @@ void RemoveNavmeshAssets()
 void TW_CALL BuildNavMesh(void *data)
 {
 	// Set configurations
-	ui_nm_errorcode = NMSUCCESS;
-	NavMeshConfig* config = navMeshBuilder->GetConfig();
-	*config = ui_nm_config;
-	config->m_id = ui_nm_id.c_str();
+	builderErrorStatus = NMSUCCESS;
 
 	// Build new mesh
-	RemoveNavmeshAssets();
+	ClearNavMesh();
 	navMeshBuilder->Build(renderer->GetScene());
 	navMeshBuilder->DumpLog();
-	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
-	if (ui_nm_errorcode) return;
+	builderErrorStatus = (bool)navMeshBuilder->GetError();
+	if (builderErrorStatus) return;
 
-	// Get navigator
-	if (navMeshNavigator) delete navMeshNavigator;
-	navMeshNavigator = navMeshBuilder->GetNavigator();
-	navMeshShader->UpdateMesh(navMeshNavigator);
+	RefreshNavigator();
 
-	// Updating new config data
-	ui_nm_config = *config;
-	//ui_nm_id = config->m_id;
-	float radius = config->m_walkableRadius * config->m_cs; // voxels to world units
-	float height = config->m_walkableHeight * config->m_ch; // voxels to world units
-	agentScale = mat4::Scale(make_float3(radius * 2, height, radius * 2));
-
-	camMoved = true;
+	*camMoved = true;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -129,14 +489,11 @@ void TW_CALL BuildNavMesh(void *data)
 void TW_CALL SaveNavMesh(void *data)
 {
 	// Set configurations
-	ui_nm_errorcode = NMSUCCESS;
-	NavMeshConfig* config = navMeshBuilder->GetConfig();
-	*config = ui_nm_config;
-	config->m_id = ui_nm_id.c_str();
+	builderErrorStatus = NMSUCCESS;
 
 	navMeshBuilder->Serialize();
 	navMeshBuilder->DumpLog();
-	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
+	builderErrorStatus = (bool)navMeshBuilder->GetError();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -146,31 +503,18 @@ void TW_CALL SaveNavMesh(void *data)
 void TW_CALL LoadNavMesh(void *data)
 {
 	// Set configurations
-	ui_nm_errorcode = NMSUCCESS;
-	NavMeshConfig* config = navMeshBuilder->GetConfig();
-	*config = ui_nm_config;
-	config->m_id = ui_nm_id.c_str();
+	builderErrorStatus = NMSUCCESS;
 
 	// Load mesh
-	RemoveNavmeshAssets();
+	ClearNavMesh();
 	navMeshBuilder->Deserialize();
 	navMeshBuilder->DumpLog();
-	ui_nm_errorcode = (bool)navMeshBuilder->GetError();
-	if (ui_nm_errorcode) return;
+	builderErrorStatus = (bool)navMeshBuilder->GetError();
+	if (builderErrorStatus) return;
 
-	// Get navigator
-	if (navMeshNavigator) delete navMeshNavigator;
-	navMeshNavigator = navMeshBuilder->GetNavigator();
-	navMeshShader->UpdateMesh(navMeshNavigator);
+	RefreshNavigator();
 
-	// Updating new config data
-	ui_nm_config = *config;
-	//ui_nm_id = config->m_id;
-	float radius = config->m_walkableRadius * config->m_cs; // voxels to world units
-	float height = config->m_walkableHeight * config->m_ch; // voxels to world units
-	agentScale = mat4::Scale(make_float3(radius * 2, height, radius * 2));
-
-	camMoved = true;
+	*camMoved = true;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -179,9 +523,8 @@ void TW_CALL LoadNavMesh(void *data)
 //  +-----------------------------------------------------------------------------+
 void TW_CALL CleanNavMesh(void *data)
 {
-	// Load mesh
-	RemoveNavmeshAssets();
-	camMoved = true;
+	ClearNavMesh();
+	*camMoved = true;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -190,25 +533,23 @@ void TW_CALL CleanNavMesh(void *data)
 //  +-----------------------------------------------------------------------------+
 void TW_CALL SwitchGUIMode(void *data)
 {
+	if (guiMode == *((GUIMODE*)data)) return; // nothing changed
 	guiMode = *((GUIMODE*)data);
+
 	if (guiMode == EDIT)
 	{
 		TwSetParam(buildBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaActive);
 		TwSetParam(debugBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
+		RemoveDebugAssets();
 	}
 	else if (guiMode == DEBUG)
 	{
 		TwSetParam(buildBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
 		TwSetParam(debugBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaActive);
+		RemoveEditAssets();
+		RefreshNavigator();
 	}
-	navMeshShader->RemoveAllAgents();
-	navMeshAgents->Clean();
-	navMeshShader->Deselect();
-	agent = 0;
-	navMeshShader->SetPath(0);
-	navMeshShader->SetPathStart(0);
-	navMeshShader->SetPathEnd(0);
-	pathStart = pathEnd = 0;
+	*camMoved = true;
 }
 
 void TW_CALL CopyStdStringToClient(std::string& dststr, const std::string& srcstr)
@@ -299,44 +640,44 @@ void RefreshBuildBar()
 	TwAddSeparator(buildBar, "editactivateseparator", "");
 
 	// create voxelgrid block
-	TwAddVarRW(buildBar, "AABB min", float3Type, &ui_nm_config.m_bmin, " group='voxelgrid'");
-	TwAddVarRW(buildBar, "AABB max", float3Type, &ui_nm_config.m_bmax, " group='voxelgrid'");
-	TwAddVarRW(buildBar, "cell size", TW_TYPE_FLOAT, &ui_nm_config.m_cs, " group='voxelgrid' min=0");
-	TwAddVarRW(buildBar, "cell height", TW_TYPE_FLOAT, &ui_nm_config.m_ch, " group='voxelgrid' min=0");
+	TwAddVarRW(buildBar, "AABB min", float3Type, &config->m_bmin, " group='voxelgrid'");
+	TwAddVarRW(buildBar, "AABB max", float3Type, &config->m_bmax, " group='voxelgrid'");
+	TwAddVarRW(buildBar, "cell size", TW_TYPE_FLOAT, &config->m_cs, " group='voxelgrid' min=0");
+	TwAddVarRW(buildBar, "cell height", TW_TYPE_FLOAT, &config->m_ch, " group='voxelgrid' min=0");
 	TwSetParam(buildBar, "voxelgrid", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create agent block
-	TwAddVarRW(buildBar, "max slope", TW_TYPE_FLOAT, &ui_nm_config.m_walkableSlopeAngle, " group='agent' min=0 max=90");
-	TwAddVarRW(buildBar, "min height", TW_TYPE_INT32, &ui_nm_config.m_walkableHeight, " group='agent' min=1");
-	TwAddVarRW(buildBar, "max climb", TW_TYPE_INT32, &ui_nm_config.m_walkableClimb, " group='agent' min=0");
-	TwAddVarRW(buildBar, "min radius", TW_TYPE_INT32, &ui_nm_config.m_walkableRadius, " group='agent' min=1");
+	TwAddVarRW(buildBar, "max slope", TW_TYPE_FLOAT, &config->m_walkableSlopeAngle, " group='agent' min=0 max=90");
+	TwAddVarRW(buildBar, "min height", TW_TYPE_INT32, &config->m_walkableHeight, " group='agent' min=1");
+	TwAddVarRW(buildBar, "max climb", TW_TYPE_INT32, &config->m_walkableClimb, " group='agent' min=0");
+	TwAddVarRW(buildBar, "min radius", TW_TYPE_INT32, &config->m_walkableRadius, " group='agent' min=1");
 	TwSetParam(buildBar, "agent", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create filtering block
-	TwAddVarRW(buildBar, "low hanging obstacles", TW_TYPE_BOOL8, &ui_nm_config.m_filterLowHangingObstacles, " group='filtering'");
-	TwAddVarRW(buildBar, "ledge spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterLedgeSpans, " group='filtering'");
-	TwAddVarRW(buildBar, "low height spans", TW_TYPE_BOOL8, &ui_nm_config.m_filterWalkableLowHeightSpans, " group='filtering'");
+	TwAddVarRW(buildBar, "low hanging obstacles", TW_TYPE_BOOL8, &config->m_filterLowHangingObstacles, " group='filtering'");
+	TwAddVarRW(buildBar, "ledge spans", TW_TYPE_BOOL8, &config->m_filterLedgeSpans, " group='filtering'");
+	TwAddVarRW(buildBar, "low height spans", TW_TYPE_BOOL8, &config->m_filterWalkableLowHeightSpans, " group='filtering'");
 	TwSetParam(buildBar, "filtering", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create partitioning block
-	TwAddVarRW(buildBar, "partition type", PartitionType, &ui_nm_config.m_partitionType, " group='partitioning'");
-	TwAddVarRW(buildBar, "min region area", TW_TYPE_INT32, &ui_nm_config.m_minRegionArea, " group='partitioning' min=0");
-	TwAddVarRW(buildBar, "min merged region", TW_TYPE_INT32, &ui_nm_config.m_mergeRegionArea, " group='partitioning' min=0");
+	TwAddVarRW(buildBar, "partition type", PartitionType, &config->m_partitionType, " group='partitioning'");
+	TwAddVarRW(buildBar, "min region area", TW_TYPE_INT32, &config->m_minRegionArea, " group='partitioning' min=0");
+	TwAddVarRW(buildBar, "min merged region", TW_TYPE_INT32, &config->m_mergeRegionArea, " group='partitioning' min=0");
 	TwSetParam(buildBar, "partitioning", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create rasterization block
-	TwAddVarRW(buildBar, "max edge length", TW_TYPE_INT32, &ui_nm_config.m_maxEdgeLen, " group='poly mesh' min=0");
-	TwAddVarRW(buildBar, "max simpl err", TW_TYPE_FLOAT, &ui_nm_config.m_maxSimplificationError, " group='poly mesh' min=0");
-	TwAddVarRW(buildBar, "max verts per poly", TW_TYPE_INT32, &ui_nm_config.m_maxVertsPerPoly, " group='poly mesh' min=3 max=6");
-	TwAddVarRW(buildBar, "detail sample dist", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleDist, " group='poly mesh'");
-	TwAddVarRW(buildBar, "detail max err", TW_TYPE_FLOAT, &ui_nm_config.m_detailSampleMaxError, " group='poly mesh' min=0 help='een heleboelnie tinterresa nteinformatie'");
+	TwAddVarRW(buildBar, "max edge length", TW_TYPE_INT32, &config->m_maxEdgeLen, " group='poly mesh' min=0");
+	TwAddVarRW(buildBar, "max simpl err", TW_TYPE_FLOAT, &config->m_maxSimplificationError, " group='poly mesh' min=0");
+	TwAddVarRW(buildBar, "max verts per poly", TW_TYPE_INT32, &config->m_maxVertsPerPoly, " group='poly mesh' min=3 max=6");
+	TwAddVarRW(buildBar, "detail sample dist", TW_TYPE_FLOAT, &config->m_detailSampleDist, " group='poly mesh'");
+	TwAddVarRW(buildBar, "detail max err", TW_TYPE_FLOAT, &config->m_detailSampleMaxError, " group='poly mesh' min=0 help='een heleboelnie tinterresa nteinformatie'");
 	TwSetParam(buildBar, "poly mesh", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create output block
-	TwAddVarRW(buildBar, "NavMesh ID", TW_TYPE_STDSTRING, &ui_nm_id, " group='output'");
-	TwAddVarRW(buildBar, "Print build stats", TW_TYPE_BOOL8, &ui_nm_config.m_printBuildStats, " group='output'");
+	TwAddVarRW(buildBar, "NavMesh ID", TW_TYPE_STDSTRING, &config->m_id, " group='output'");
+	TwAddVarRW(buildBar, "Print build stats", TW_TYPE_BOOL8, &config->m_printBuildStats, " group='output'");
 	TwAddSeparator(buildBar, "menuseparator0", "group='output'");
-	TwAddVarRO(buildBar, "error code", TW_TYPE_BOOL8, &ui_nm_errorcode, " group='output' true='ERROR' false=''");
+	TwAddVarRO(buildBar, "error code", TW_TYPE_BOOL8, &builderErrorStatus, " group='output' true='ERROR' false=''");
 	TwAddSeparator(buildBar, "menuseparator1", "group='output'");
 	TwAddButton(buildBar, "Build", BuildNavMesh, NULL, " label='Build' ");
 	TwAddButton(buildBar, "Save", SaveNavMesh, NULL, " label='Save' ");
@@ -417,23 +758,10 @@ void RefreshDebugBar()
 	TwSetParam(debugBar, "path", "opened", TW_PARAM_INT32, 1, &opened);
 
 	// create agent block
-	TwAddVarRO(debugBar, "Selected", TW_TYPE_BOOL32, &agent, "group='agent'");
 	TwAddVarRO(debugBar, "Pos", float3Type, &agentPos, "group='agent'");
 	TwAddVarRO(debugBar, "Dir", float3Type, &agentDir, "group='agent'");
 	TwAddVarRO(debugBar, "Target", TW_TYPE_FLOAT, &agentTarget, "group='agent'");
 	TwSetParam(debugBar, "agent", "opened", TW_PARAM_INT32, 1, &opened);
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  RefreshUI                                                                  |
-//  |  AntTweakBar.                                                         LH2'19|
-//  +-----------------------------------------------------------------------------+
-void RefreshUI()
-{
-	RefreshSettingsBar();
-	RefreshBuildBar();
-	RefreshEditBar();
-	RefreshDebugBar();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -448,283 +776,10 @@ void InitAntTweakBars()
 	buildBar = TwNewBar("Building");
 	editBar = TwNewBar("Editing");
 	debugBar = TwNewBar("Debugging");
-	RefreshUI();
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  InitGUI                                                                    |
-//  |  Prepares a basic user interface.                                     LH2'19|
-//  +-----------------------------------------------------------------------------+
-void InitGUI()
-{
-	// Init AntTweakBar
-	InitAntTweakBars();
-
-	navMeshShader = new NavMeshShader(renderer, "data\\ai\\");
-
-	InitFPSPrinter();
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  DrawGUI                                                                    |
-//  |  Performs all GUI GL drawing.                                         LH2'19|
-//  +-----------------------------------------------------------------------------+
-void DrawGUI(float deltaTime)
-{
-	navMeshShader->DrawGL();
-	TwDraw();
-	PrintFPS(deltaTime);
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  OnSelectNavMesh                                                            |
-//  |  Handles selecting/deselecting navmesh objects. nullptr to deselect.  LH2'19|
-//  +-----------------------------------------------------------------------------+
-void OnSelectNavMesh(int instID)
-{
-	selectionType = NONE;
-	navMeshShader->Deselect();
-	selectionID = polygonArea = polygonType = -1;
-	for (int i = 0; i < 6; i++) selectionVerts[i] = origin;
-	isOffMesh = false; // TODO: can't get this info yet
-
-	if (instID)
-	{
-		if (navMeshShader->isVert(probMeshID))
-		{
-			selectionType = VERT;
-			selectedVert = navMeshShader->SelectVert(instID);
-			selectionID = selectedVert->idx;
-			selectionVerts[0] = selectedVert->pos;
-			TwDefine(" editBar/v0 visible=true ");
-		}
-		else if (navMeshShader->isEdge(probMeshID))
-		{
-			selectionType = EDGE;
-			selectedEdge = navMeshShader->SelectEdge(instID);
-			selectionID = selectedEdge->idx;
-			selectionVerts[0] = navMeshShader->GetVertPos(selectedEdge->v1);
-			selectionVerts[1] = navMeshShader->GetVertPos(selectedEdge->v2);
-		}
-		else if (navMeshShader->isPoly(probMeshID))
-		{
-			selectionType = POLY;
-			selectedPoly = navMeshShader->SelectPoly(probedPos, navMeshNavigator);
-			selectionID = -1; // TODO
-			for (size_t i = 0; i < selectedPoly->vertCount; i++)
-				selectionVerts[i] = navMeshShader->GetVertPos(selectedPoly->verts[i]);
-			polygonArea = selectedPoly->getArea();
-			polygonType = selectedPoly->getType();
-		}
-	}
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  HandleMouseInputEditMode                                                   |
-//  |  Process mouse input when in EDIT mode.                               LH2'19|
-//  +-----------------------------------------------------------------------------+
-void HandleMouseInputEditMode()
-{
-	// Instance selecting (SHIFT) (L-CLICK)
-	if (leftClickLastFrame && shiftClickLastFrame)
-	{
-		if (navMeshShader->isNavMesh(probMeshID)) OnSelectNavMesh(probeInstID);
-		else OnSelectNavMesh(0);
-	}
-
-	// Adding off-mesh connections (CTRL)
-	if (ctrlClickLastFrame)
-	{
-
-	}
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  OnSelectAgent                                                              |
-//  |  Handles selecting/deselecting an agent. Deselect by passing 0.       LH2'19|
-//  +-----------------------------------------------------------------------------+
-void OnSelectAgent(Agent* a_agent)
-{
-	if (!agent && !a_agent) return;
-	agent = a_agent;
-
-	if (agent) // selecting
-	{
-		// link GUI info directly to agent
-		agentPos = agent->GetPos();
-		agentDir = agent->GetDir();
-		agentTarget = agent->GetTarget();
-
-		// keep pathStart/pathEnd local
-		if (agent->GetTarget())
-		{
-			if (!pathStart) pathStart = new float3();
-			if (!pathEnd) pathEnd = new float3();
-			*pathStart = *agentPos;
-			*pathEnd = *agent->GetTarget();
-			navMeshShader->SetPath(agent->GetPath());
-		}
-		else // stop shading previous path
-		{
-			delete pathStart; pathStart = 0;
-			delete pathEnd; pathEnd = 0;
-			navMeshShader->SetPath(0);
-		}
-	}
-	else // deselecting
-	{
-		delete pathStart; pathStart = 0;
-		delete pathEnd; pathEnd = 0;
-		navMeshShader->SetPath(0);
-		navMeshShader->Deselect();
-	}
-
-	// sync beacon pointers with shader
-	navMeshShader->SetPathStart(pathStart);
-	navMeshShader->SetPathEnd(pathEnd);
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  HandleMouseInputDebugMode                                                  |
-//  |  Process mouse input when in DEBUG mode.                              LH2'19|
-//  +-----------------------------------------------------------------------------+
-void HandleMouseInputDebugMode()
-{
-	// Agent placement (SHIFT) (R-CLICK)
-	if (rightClickLastFrame && shiftClickLastFrame)
-	{
-		if (navMeshShader->isPoly(probMeshID))
-		{
-			RigidBody* rb = rigidBodies->AddRB(agentScale, mat4::Identity(), mat4::Translate(probedPos));
-			Agent* agent = navMeshAgents->AddAgent(navMeshNavigator, rb);
-			navMeshShader->AddAgentToScene(agent);
-		}
-	}
-
-	// Agent selecting (SHIFT) (L-CLICK)
-	if (leftClickLastFrame && shiftClickLastFrame)
-	{
-		if (navMeshShader->isAgent(probMeshID))
-			OnSelectAgent(navMeshShader->SelectAgent(probeInstID));
-		else if (agent)
-			OnSelectAgent(0);
-	}
-
-	// Setting path start/end (CTRL)
-	if (ctrlClickLastFrame && navMeshShader->isNavMesh(probMeshID))
-	{
-		if (!agent) // When no agent is selected
-		{
-			if (leftClickLastFrame)
-			{
-				if (!pathStart) pathStart = new float3(probedPos); else *pathStart = probedPos;
-				navMeshShader->SetPathStart(pathStart);
-				if (pathEnd) // if both start and end are set
-					if (!navMeshNavigator->FindPath(*pathStart, *pathEnd, path, reachable))
-						navMeshShader->SetPath(&path);
-			}
-			if (rightClickLastFrame)
-			{
-				if (!pathEnd) pathEnd = new float3(probedPos); else *pathEnd = probedPos;
-				navMeshShader->SetPathEnd(pathEnd);
-				if (pathStart) // if both start and end are set
-					if (!navMeshNavigator->FindPath(*pathStart, *pathEnd, path, reachable))
-						navMeshShader->SetPath(&path);
-			}
-		}
-		else // When an agent is selected
-		{
-			if (rightClickLastFrame)
-			{
-				if (!pathStart) pathStart = new float3(*agentPos); else *pathStart = *agentPos;
-				navMeshShader->SetPathStart(pathStart);
-				if (!pathEnd) pathEnd = new float3(probedPos); else *pathEnd = probedPos;
-				navMeshShader->SetPathEnd(pathEnd);
-				agent->SetTarget(*pathEnd);
-				agent->UpdateNavigation(0);
-				navMeshShader->SetPath(agent->GetPath());
-			}
-		}
-	}
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  HandleInput                                                                |
-//  |  Process user input.                                                  LH2'19|
-//  +-----------------------------------------------------------------------------+
-bool HandleInput(float frameTime)
-{
-	if (!hasFocus) return false;
-
-	// handle keyboard input
-	float translateSpeed = (GetAsyncKeyState(VK_SHIFT) ? 15.0f : 5.0f) * frameTime, rotateSpeed = 2.5f * frameTime;
-	bool changed = false;
-	Camera* camera = renderer->GetCamera();
-	if (GetAsyncKeyState('A')) { changed = true; camera->TranslateRelative(make_float3(-translateSpeed, 0, 0)); }
-	if (GetAsyncKeyState('D')) { changed = true; camera->TranslateRelative(make_float3(translateSpeed, 0, 0)); }
-	if (GetAsyncKeyState('W')) { changed = true; camera->TranslateRelative(make_float3(0, 0, translateSpeed)); }
-	if (GetAsyncKeyState('S')) { changed = true; camera->TranslateRelative(make_float3(0, 0, -translateSpeed)); }
-	if (GetAsyncKeyState('R')) { changed = true; camera->TranslateRelative(make_float3(0, translateSpeed, 0)); }
-	if (GetAsyncKeyState('F')) { changed = true; camera->TranslateRelative(make_float3(0, -translateSpeed, 0)); }
-	if (GetAsyncKeyState('B')) changed = true; // force restart
-	if (GetAsyncKeyState(VK_UP)) { changed = true; camera->TranslateTarget(make_float3(0, -rotateSpeed, 0)); }
-	if (GetAsyncKeyState(VK_DOWN)) { changed = true; camera->TranslateTarget(make_float3(0, rotateSpeed, 0)); }
-	if (GetAsyncKeyState(VK_LEFT)) { changed = true; camera->TranslateTarget(make_float3(-rotateSpeed, 0, 0)); }
-	if (GetAsyncKeyState(VK_RIGHT)) { changed = true; camera->TranslateTarget(make_float3(rotateSpeed, 0, 0)); }
-
-	// Probing results are one frame delayed due to camera refresh
-	if (leftClickLastFrame || rightClickLastFrame)
-	{
-
-		// Only calculate probe info when ctrl/shift-clicked
-		if (ctrlClickLastFrame || shiftClickLastFrame)
-		{
-			// Identify probed instance
-			probeInstID = coreStats.probedInstid;
-			probeTriID = coreStats.probedTriid;
-			probMeshID = renderer->GetInstanceMeshID(probeInstID);
-			meshName = renderer->GetMesh(probMeshID)->name;
-
-			// Get 3D probe position
-			ViewPyramid p = camera->GetView();
-			float3 unitRight = (p.p2 - p.p1) / scrwidth;
-			float3 unitDown = (p.p3 - p.p1) / scrheight;
-			float3 pixelLoc = p.p1 + probeCoords.x * unitRight + probeCoords.y * unitDown;
-			probedPos = camera->position + normalize(pixelLoc - camera->position) * coreStats.probedDist;
-		}
-
-		if (guiMode == EDIT) HandleMouseInputEditMode();
-		else if (guiMode == DEBUG) HandleMouseInputDebugMode();
-
-		// Depth of field (SHIFT)
-		if (shiftClickLastFrame)
-			if (coreStats.probedDist < 1000) // prevents scene from going invisible
-				camera->focalDistance = coreStats.probedDist;
-
-		// Update camera
-		if (shiftClickLastFrame) changed = true;
-	}
-
-	// reset click delay booleans
-	leftClickLastFrame = rightClickLastFrame = false;
-	ctrlClickLastFrame = shiftClickLastFrame = altClickLastFrame = false;
-
-	// process button click
-	if (leftClicked || rightClicked)
-	{
-		if (leftClicked) leftClickLastFrame = true;
-		if (rightClicked) rightClickLastFrame = true;
-		if (GetAsyncKeyState(VK_LSHIFT) < 0) shiftClickLastFrame = true;
-		if (GetAsyncKeyState(VK_RSHIFT) < 0) shiftClickLastFrame = true;
-		if (GetAsyncKeyState(VK_LCONTROL) < 0) ctrlClickLastFrame = true;
-		if (GetAsyncKeyState(VK_RCONTROL) < 0) ctrlClickLastFrame = true;
-
-		leftClicked = rightClicked = false;
-		changed = true; // probing requires a camera refresh
-	}
-
-	// let the main loop know if the camera should update
-	return changed;
+	RefreshSettingsBar();
+	RefreshBuildBar();
+	RefreshEditBar();
+	RefreshDebugBar();
 }
 
 } // namespace AI_UI

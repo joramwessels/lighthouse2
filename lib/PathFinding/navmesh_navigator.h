@@ -21,14 +21,16 @@
 	#include "DetourNavMeshQuery.h" // dtNavMesh, dtNavMeshQuery, dtQueryFilter
 //#endif
 
-#include "system.h" // float3
-#include "navmesh_common.h"
+#include "system.h"	// float3
+#include "navmesh_common.h"		// NavMeshError, DETOUR_MAX_NAVMESH_NODES, NMINPUT
 
 namespace lighthouse2 {
 
-int SerializeNavMesh(const char* dir, const char* ID, dtNavMesh* navmesh);
+int SerializeNavMesh(const char* dir, const char* ID, const dtNavMesh* navmesh);
 int DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh*& navmesh);
 int GetNavMeshQuery(dtNavMesh* navmesh, dtNavMeshQuery** query);
+
+static const dtQueryFilter s_filter; // default empty filter
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshNavigator                                                           |
@@ -66,8 +68,8 @@ public:
 
 	int FindNearestPoly(float3 pos, dtPolyRef& polyID, float3& polyPos) const;
 	int FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float3& nearestPoint, bool* posOverPoly=0);
-	int FindPathConstSize(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount=64);
-	int FindPathConstSize_Legacy(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount = 64);
+	int FindPathConstSize(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount=64, const dtQueryFilter* filter=&s_filter);
+	int FindPathConstSize_Legacy(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount = 64, const dtQueryFilter* filter = &s_filter);
 	int FindPath(float3 start, float3 end, std::vector<PathNode>& path, bool& reachable, int maxCount=64);
 	void Clean();
 
@@ -81,7 +83,6 @@ protected:
 	bool m_owner;			 // owner of the dtNavMesh
 	dtNavMesh* m_navmesh = 0;
 	dtNavMeshQuery* m_query = 0;
-	dtQueryFilter m_filter;  // TODO: is this agent specific? or a navmesh variable
 	float m_polyFindExtention[3] = { 5.0f, 5.0f, 5.0f };	// Half the search area for FindNearestPoly calls
 };
 

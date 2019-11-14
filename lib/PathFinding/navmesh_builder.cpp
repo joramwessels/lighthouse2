@@ -33,20 +33,20 @@ namespace lighthouse2 {
 //  |  GetMinMaxBounds                                                            |
 //  |  Determines the AABB bounds of the entire input mesh.                 LH2'19|
 //  +-----------------------------------------------------------------------------+
-	void GetMinMaxBounds(std::vector<float3>* data, float3* min, float3* max)
+void GetMinMaxBounds(std::vector<float3>* data, float3* min, float3* max)
+{
+	*min = make_float3(0.0f);
+	*max = make_float3(0.0f);
+	for (std::vector<float3>::iterator it = data->begin(); it != data->end(); ++it)
 	{
-		*min = make_float3(0.0f);
-		*max = make_float3(0.0f);
-		for (std::vector<float3>::iterator it = data->begin(); it != data->end(); ++it)
-		{
-			if (it->x < min->x) min->x = it->x;
-			if (it->y < min->y) min->y = it->y;
-			if (it->z < min->z) min->z = it->z;
-			if (it->x > max->x) max->x = it->x;
-			if (it->y > max->y) max->y = it->y;
-			if (it->z > max->z) max->z = it->z;
-		}
+		if (it->x < min->x) min->x = it->x;
+		if (it->y < min->y) min->y = it->y;
+		if (it->z < min->z) min->z = it->z;
+		if (it->x > max->x) max->x = it->x;
+		if (it->y > max->y) max->y = it->y;
+		if (it->z > max->z) max->z = it->z;
 	}
+}
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshBuilder::NavMeshBuilder                                             |
@@ -371,13 +371,18 @@ int NavMeshBuilder::CreateDetourData()
 		params.detailVertsCount = m_dmesh->nverts;
 		params.detailTris = m_dmesh->tris;
 		params.detailTriCount = m_dmesh->ntris;
-		params.offMeshConVerts = 0;//m_geom->getOffMeshConnectionVerts();
-		params.offMeshConRad = 0;//m_geom->getOffMeshConnectionRads();
-		params.offMeshConDir = 0;//m_geom->getOffMeshConnectionDirs();
-		params.offMeshConAreas = 0;//m_geom->getOffMeshConnectionAreas();
-		params.offMeshConFlags = 0;//m_geom->getOffMeshConnectionFlags();
-		params.offMeshConUserID = 0;//m_geom->getOffMeshConnectionId();
-		params.offMeshConCount = 0;//m_geom->getOffMeshConnectionCount();
+
+		if (!m_offMeshFlags.empty())
+		{
+			params.offMeshConCount = (int)m_offMeshFlags.size();
+			params.offMeshConVerts = (float*)m_offMeshVerts.data();
+			params.offMeshConRad = m_offMeshRadii.data();
+			params.offMeshConAreas = m_offMeshAreas.data();
+			params.offMeshConFlags = m_offMeshFlags.data();
+			params.offMeshConUserID = m_offMeshUserIDs.data();
+			params.offMeshConDir = m_offMeshDirection.data();
+		}
+
 		params.walkableHeight = m_config.m_walkableHeight;
 		params.walkableRadius = m_config.m_walkableRadius;
 		params.walkableClimb = m_config.m_walkableClimb;
@@ -390,6 +395,7 @@ int NavMeshBuilder::CreateDetourData()
 		if (!dtCreateNavMeshData(&params, &navData, &navDataSize))
 			RECAST_ERROR(NMDETOUR & NMCREATION, "Could not build Detour navmesh.");
 
+		if (m_navMesh) dtFreeNavMesh(m_navMesh);
 		m_navMesh = dtAllocNavMesh();
 		if (!m_navMesh)
 		{
@@ -472,6 +478,13 @@ void NavMeshBuilder::Cleanup()
 	m_dmesh = 0;
 	if (m_navMesh) dtFreeNavMesh(m_navMesh);
 	m_navMesh = 0;
+
+	m_offMeshVerts.clear();
+	m_offMeshRadii.clear();
+	m_offMeshAreas.clear();
+	m_offMeshFlags.clear();
+	m_offMeshUserIDs.clear();
+	m_offMeshDirection.clear();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -482,6 +495,23 @@ void NavMeshBuilder::DumpLog() const
 {
 	((BuildContext*)m_ctx)->dumpLog("\n");
 };
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshBuilder::AddOffMeshConnection                                       |
+//  |  Adds an off-mesh connection edge to the navmesh.                           |
+//  |  If the connection is unidirectional (e.g. ziplines, jump downs)            |
+//  |  vertex 0 leads to vertex 1.                                          LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshBuilder::AddOffMeshConnection(float3 v0, float3 v1, float radius, bool unidirectional)
+{
+	m_offMeshVerts.push_back(v0);
+	m_offMeshVerts.push_back(v1);
+	m_offMeshRadii.push_back(radius);
+	m_offMeshAreas.push_back(0);
+	m_offMeshFlags.push_back(0);
+	m_offMeshUserIDs.push_back((unsigned int)m_offMeshFlags.size());
+	m_offMeshDirection.push_back((unidirectional ? 0 : DT_OFFMESH_CON_BIDIR));
+}
 
 } // namespace lighthouse2
 

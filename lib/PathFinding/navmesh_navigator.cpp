@@ -13,11 +13,10 @@
    limitations under the License.
 */
 
-#include <stdio.h>
+#include <stdio.h> // fopen_s, sprintf_s, fclose, fwrite
 
 #include "rendersystem.h"		// FileExists
 #include "navmesh_navigator.h"
-#include "navmesh_common.h"
 
 namespace lighthouse2 {
 
@@ -32,9 +31,8 @@ namespace lighthouse2 {
 //  |  *reachable* specifies whether the end poly matches the last path poly.     |
 //  |  *maxCount* specifies the maximum path length in nodes.               LH2'19|
 //  +-----------------------------------------------------------------------------+
-int NavMeshNavigator::FindPathConstSize(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount)
+int NavMeshNavigator::FindPathConstSize(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount, const dtQueryFilter* filter)
 {
-
 	if (!path) DETOUR_ERROR(NMDETOUR & NMINPUT, "Pathfinding failed: *path* is a nullpointer");
 
 	// Resolve positions into navmesh polygons
@@ -56,7 +54,7 @@ int NavMeshNavigator::FindPathConstSize(float3 start, float3 end, PathNode* path
 
 	// Calculate path
 	dtPolyRef* polyPath = (dtPolyRef*)malloc(sizeof(dtPolyRef)*POLYPATH_SIZE);
-	dtStatus err = m_query->findPath(startRef, endRef, (float*)&start, (float*)&end, &m_filter, polyPath, &count, POLYPATH_SIZE);
+	dtStatus err = m_query->findPath(startRef, endRef, (float*)&start, (float*)&end, filter, polyPath, &count, POLYPATH_SIZE);
 	if (dtStatusFailed(err))
 	{
 		free(polyPath);
@@ -101,7 +99,7 @@ int NavMeshNavigator::FindPathConstSize(float3 start, float3 end, PathNode* path
 //  |  *reachable* specifies whether the end poly matches the last path poly.     |
 //  |  *maxCount* specifies the maximum path length in nodes.               LH2'19|
 //  +-----------------------------------------------------------------------------+
-int NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount)
+int NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount, const dtQueryFilter* filter)
 {
 	if (!path) DETOUR_ERROR(NMDETOUR & NMINPUT, "Pathfinding failed: *path* is a nullpointer");
 
@@ -131,7 +129,7 @@ int NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 end, PathNod
 
 	// Calculate path
 	dtPolyRef* polyPath = (dtPolyRef*)malloc(sizeof(dtPolyRef)*maxCount);
-	dtStatus err = m_query->findPath(startRef, endRef, (float*)&start, (float*)&end, &m_filter, polyPath, &count, maxCount);
+	dtStatus err = m_query->findPath(startRef, endRef, (float*)&start, (float*)&end, filter, polyPath, &count, maxCount);
 	if (dtStatusFailed(err))
 	{
 		free(polyPath);
@@ -216,7 +214,7 @@ int NavMeshNavigator::FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float
 //  +-----------------------------------------------------------------------------+
 int NavMeshNavigator::FindNearestPoly(float3 pos, dtPolyRef& polyID, float3& polyPos) const
 {
-	dtStatus status = m_query->findNearestPoly((float*)&pos, m_polyFindExtention, &m_filter, &polyID, (float*)&polyPos);
+	dtStatus status = m_query->findNearestPoly((float*)&pos, m_polyFindExtention, &s_filter, &polyID, (float*)&polyPos);
 	if (dtStatusFailed(status))
 		DETOUR_ERROR(NMDETOUR, "Couldn't find the nearest poly to (%.2f, %.2f, %.2f)", pos.x, pos.y, pos.z);
 	return NMSUCCESS;
@@ -233,7 +231,6 @@ void NavMeshNavigator::Clean()
 	m_navmesh = 0;
 	dtFreeNavMeshQuery(m_query);
 	if (m_query) m_navmesh = 0;
-	m_filter = dtQueryFilter();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -260,12 +257,11 @@ struct NavMeshTileHeader { dtTileRef tileRef; int dataSize; };
 //  |  Serialize                                                                  |
 //  |  Writes the navmesh to storage for future use.                        LH2'19|
 //  +-----------------------------------------------------------------------------+
-int SerializeNavMesh(const char* dir, const char* ID, dtNavMesh* navmesh)
+int SerializeNavMesh(const char* dir, const char* ID, const dtNavMesh* navMesh)
 {
 	// Opening navmesh file for writing
 	char filename[128];
 	sprintf_s(filename, "%s%s.navmesh", dir, ID);
-	const dtNavMesh* navMesh = navmesh;
 	if (!navMesh) DETOUR_ERROR(NMINPUT & NMDETOUR, "Can't serialize '%s', dtNavMesh is nullpointer", ID);
 	FILE* fp;
 	fopen_s(&fp, filename, "wb");

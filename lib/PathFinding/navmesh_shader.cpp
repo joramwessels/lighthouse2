@@ -32,6 +32,7 @@ void NavMeshShader::UpdateMesh(NavMeshNavigator* navmesh)
 	AddPolysToScene(navmesh);
 	AddVertsToScene();
 	AddEdgesToScene();
+	AddOMCsToScene();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -40,7 +41,6 @@ void NavMeshShader::UpdateMesh(NavMeshNavigator* navmesh)
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::UpdateAgentPositions()
 {
-	DrawAgentImpulse();
 	for (std::vector<ShaderAgent>::iterator it = m_agents.begin(); it != m_agents.end(); it++)
 		m_renderer->SetNodeTransform(it->instID, it->agent->GetTransform());
 	m_renderer->SynchronizeSceneData();
@@ -60,6 +60,7 @@ void NavMeshShader::DrawGL() const
 	if (m_vertSelect) DrawVertHighlightGL();
 	if (m_edgeSelect) DrawEdgeHighlightGL();
 	if (m_agentSelect) DrawAgentHighlightGL();
+	if (m_agentSelect) DrawAgentImpulse();
 
 	if (m_path && !m_path->empty()) PlotPath();
 	if (m_pathStart || m_pathEnd) DrawPathMarkers();
@@ -102,7 +103,7 @@ void NavMeshShader::RemovePolysFromScene()
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddVertsToScene()
 {
-	for (std::vector<ShaderVert>::iterator i = m_verts.begin(); i != m_verts.end(); i++)
+	for (std::vector<Vert>::iterator i = m_verts.begin(); i != m_verts.end(); i++)
 		i->instID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(*i->pos) * mat4::Scale(m_vertWidth));
 }
 
@@ -112,9 +113,9 @@ void NavMeshShader::AddVertsToScene()
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::RemoveVertsFromScene()
 {
-	for (std::vector<ShaderVert>::iterator i = m_verts.begin(); i != m_verts.end(); i++)
+	for (std::vector<Vert>::iterator i = m_verts.begin(); i != m_verts.end(); i++)
 	{
-		m_renderer->RemoveInstance(i->instID);
+		if (i->instID >= 0) m_renderer->RemoveInstance(i->instID);
 		i->instID = -1;
 	}
 	m_renderer->SynchronizeSceneData();
@@ -126,7 +127,7 @@ void NavMeshShader::RemoveVertsFromScene()
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddEdgesToScene()
 {
-	for (std::vector<ShaderEdge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
+	for (std::vector<Edge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
 	{
 		float3 v1 = *m_verts[i->v1].pos, v2 = *m_verts[i->v2].pos;
 		float3 v1v2 = v2 - v1; float len = length(v1v2); v1v2 /= len;
@@ -143,10 +144,52 @@ void NavMeshShader::AddEdgesToScene()
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::RemoveEdgesFromScene()
 {
-	for (std::vector<ShaderEdge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
+	for (std::vector<Edge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
 	{
-		m_renderer->RemoveInstance(i->instID);
+		if (i->instID >= 0) m_renderer->RemoveInstance(i->instID);
 		i->instID = -1;
+	}
+	m_renderer->SynchronizeSceneData();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::AddOMCsToScene                                              |
+//  |  Adds all off-mesh connections as cylinders/arrows to the scene.      LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::AddOMCsToScene()
+{
+	for (std::vector<OMC>::iterator i = m_OMCs.begin(); i != m_OMCs.end(); i++)
+	{
+		// Add the edge
+		float3 v1 = *(float3*)i->omc->pos, v2 = *(float3*)(i->omc->pos + 3);
+		float3 v1v2 = v2 - v1; float len = length(v1v2); v1v2 /= len;
+		mat4 sca = mat4::Scale(make_float3(m_edgeWidth, len, m_edgeWidth));
+		mat4 rot = mat4::Rotate(cross({ 0, 1, 0 }, v1v2), -acosf(v1v2.y));
+		mat4 tra = mat4::Translate((v1 + v2) / 2);
+		int meshID = (true ? m_directedEdgeMeshID : m_edgeMeshID); // TODO: replace 'true' with a check for bidirectionality
+		i->edgeInstID = m_renderer->AddInstance(meshID, tra * rot * sca);
+
+		// Add the two verts
+		i->v1InstID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(v1) * mat4::Scale(i->omc->rad));
+		i->v2InstID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(v2) * mat4::Scale(i->omc->rad));
+	}
+	m_renderer->SynchronizeSceneData();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::RemoveOMCsFromScene                                         |
+//  |  Removes all off-mesh connection instances from the scene.            LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::RemoveOMCsFromScene()
+{
+	for (std::vector<OMC>::iterator i = m_OMCs.begin(); i != m_OMCs.end(); i++)
+	{
+		if (i->v1InstID >= 0) m_renderer->RemoveInstance(i->v1InstID);
+		if (i->v2InstID >= 0) m_renderer->RemoveInstance(i->v2InstID);
+		if (i->edgeInstID >= 0) m_renderer->RemoveInstance(i->edgeInstID);
+		i->v1InstID = -1;
+		i->v2InstID = -1;
+		i->edgeInstID = -1;
 	}
 	m_renderer->SynchronizeSceneData();
 }
@@ -219,10 +262,12 @@ void NavMeshShader::RemoveAgent(int instID)
 	for (std::vector<ShaderAgent>::iterator i = m_agents.end(); i != m_agents.end(); i++)
 		if (i->instID == instID)
 		{
-			m_renderer->RemoveInstance(instID);
+			if (i->instID >= 0) m_renderer->RemoveInstance(instID);
 			i->instID = -1;
+			m_agents.erase(i);
+			m_renderer->SynchronizeSceneData();
+			return;
 		}
-	m_renderer->SynchronizeSceneData();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -233,7 +278,7 @@ void NavMeshShader::RemoveAllAgents()
 {
 	for (std::vector<ShaderAgent>::iterator i = m_agents.begin(); i != m_agents.end(); i++)
 	{
-		m_renderer->RemoveInstance(i->instID);
+		if (i->instID >= 0) m_renderer->RemoveInstance(i->instID);
 		i->instID = -1;
 	}
 	m_agents.clear();
@@ -244,7 +289,7 @@ void NavMeshShader::RemoveAllAgents()
 //  |  NavMeshShader::DrawAgentImpulse                                            |
 //  |  Draws a line indicating the agent's movement.                        LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::DrawAgentImpulse()
+void NavMeshShader::DrawAgentImpulse() const
 {
 	if (!m_agentSelect) return;
 	const float4 col = { .1f, .9f, .1f, 1.0f };
@@ -263,14 +308,14 @@ void NavMeshShader::DrawAgentImpulse()
 //  |  NavMeshShader::SelectPoly                                                  |
 //  |  Highlights a polygon given a world position and a navmesh navigator. LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::SelectPoly(float3 pos, NavMeshNavigator* navmesh)
+const dtPoly* NavMeshShader::SelectPoly(float3 pos, NavMeshNavigator* navmesh)
 {
 	Deselect();
-	if (!navmesh) { m_polySelect = 0; return; }
+	if (!navmesh) { m_polySelect = 0; return 0; }
 	dtPolyRef ref;
 	float3 posOnPoly;
 	navmesh->FindNearestPoly(pos, ref, posOnPoly);
-	m_polySelect = navmesh->GetPoly(ref);
+	return m_polySelect = navmesh->GetPoly(ref);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -293,14 +338,13 @@ void NavMeshShader::DrawPolyHighlightGL() const
 //  |  NavMeshShader::SelectVert                                                  |
 //  |  Hightlights a vertex instance.                                       LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::SelectVert(int instanceID)
+NavMeshShader::Vert* NavMeshShader::SelectVert(int instanceID)
 {
 	Deselect();
-	if (instanceID < 0) return;
-	int meshID = m_renderer->GetInstanceMeshID(instanceID);
-	if (!isVert(meshID)) return;
-	for (std::vector<ShaderVert>::iterator i = m_verts.begin(); i != m_verts.end(); i++)
-		if (i->instID == instanceID) m_vertSelect = new ShaderVert(*i);
+	if (instanceID < 0) return 0;
+	for (size_t i = 0; i < m_verts.size(); i++)
+		if (m_verts[i].instID == instanceID) return m_vertSelect = &m_verts[i];
+	return 0;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -320,14 +364,13 @@ void NavMeshShader::DrawVertHighlightGL() const
 //  |  NavMeshShader::SelectEdge                                                  |
 //  |  Hightlights an edge instance.                                        LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::SelectEdge(int instanceID)
+NavMeshShader::Edge* NavMeshShader::SelectEdge(int instanceID)
 {
 	Deselect();
-	if (instanceID < 0) return;
-	int meshID = m_renderer->GetInstanceMeshID(instanceID);
-	if (!isEdge(meshID)) return;
-	for (std::vector<ShaderEdge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
-		if (i->instID == instanceID) m_edgeSelect = new ShaderEdge(*i);
+	if (instanceID < 0) return 0;
+	for (size_t i = 0; i < m_edges.size(); i++)
+		if (m_edges[i].instID == instanceID) return m_edgeSelect = &m_edges[i];
+	return 0;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -351,11 +394,9 @@ Agent* NavMeshShader::SelectAgent(int instanceID)
 {
 	Deselect();
 	if (instanceID < 0) return 0;
-	int meshID = m_renderer->GetInstanceMeshID(instanceID);
-	if (!isAgent(meshID)) return 0;
-	for (std::vector<ShaderAgent>::iterator i = m_agents.begin(); i != m_agents.end(); i++)
-		if (i->instID == instanceID) m_agentSelect = new ShaderAgent(*i);
-	return m_agentSelect->agent;
+	for (size_t i = 0; i < m_agents.size(); i++)
+		if (m_agents[i].instID == instanceID) return (m_agentSelect = &m_agents[i])->agent;
+	return 0;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -403,7 +444,7 @@ void NavMeshShader::PlotPath() const
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  DrawPathMarkers                                                            |
+//  |  NavMeshShader::DrawPathMarkers                                             |
 //  |  Draws the start and end of the path as beacons.                      LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::DrawPathMarkers() const
@@ -433,6 +474,62 @@ void NavMeshShader::DrawPathMarkers() const
 
 
 
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::SetTmpVert                                                  |
+//  |  Adds a temporary vertex to the scene.                                LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::SetTmpVert(float3 pos, float width)
+{
+	RemoveTMPVert();
+	m_tmpVert.pos = new float3(pos);
+	m_tmpVert.instID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(pos) * mat4::Scale(width));
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::RemoveTMPVert                                               |
+//  |  Removes the temporary vertex from the scene.                         LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::RemoveTMPVert()
+{
+	if (m_tmpVert.instID >= 0)
+	{
+		m_renderer->RemoveInstance(m_tmpVert.instID);
+		m_renderer->SynchronizeSceneData();
+		m_tmpVert.instID = -1;
+		delete m_tmpVert.pos; // locally owned
+		m_tmpVert.pos = 0;
+	}
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::AddTmpOMC                                                   |
+//  |  Adds a temporary off-mesh connection during runtime.                       |
+//  |  *omc* should be a permanent pointer from the dtNavMesh object.       LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::AddTmpOMC(float3 v0, float3 v1, float width)
+{
+	m_OMCs.push_back({ 0 });
+	OMC* newOMC = m_OMCs._Mylast();
+
+	// Add the edge
+	float3 v1v2 = v1 - v0; float len = length(v1v2); v1v2 /= len;
+	mat4 sca = mat4::Scale(make_float3(m_edgeWidth, len, m_edgeWidth));
+	mat4 rot = mat4::Rotate(cross({ 0, 1, 0 }, v1v2), -acosf(v1v2.y));
+	mat4 tra = mat4::Translate((v0 + v1) / 2);
+	int meshID = (true ? m_directedEdgeMeshID : m_edgeMeshID); // TODO: replace 'true' with a check for bidirectionality
+	newOMC->edgeInstID = m_renderer->AddInstance(meshID, tra * rot * sca);
+
+	// Add the two verts
+	newOMC->v1InstID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(v0) * mat4::Scale(width));
+	newOMC->v2InstID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(v1) * mat4::Scale(width));
+
+	m_renderer->SynchronizeSceneData();
+}
+
+
+
+
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::Clean                                                       |
 //  |  Resets the internal NavMesh representation and stops shading it.     LH2'19|
@@ -442,14 +539,17 @@ void NavMeshShader::Clean()
 	RemovePolysFromScene();
 	RemoveVertsFromScene();
 	RemoveEdgesFromScene();
+	RemoveOMCsFromScene();
 	RemoveAllAgents();
+	RemoveTMPVert();
 
 	Deselect();
 	m_verts.clear();
 	m_edges.clear();
+	m_OMCs.clear();
 
-	m_path = 0;
-	m_pathStart = m_pathEnd = 0;
+	m_path = nullptr;
+	m_pathStart = m_pathEnd = nullptr;
 	m_shadeTris = m_shadeVerts = m_shadeEdges = false;
 }
 
@@ -459,13 +559,13 @@ void NavMeshShader::Clean()
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, const dtPoly* poly)
 {
-	for (std::vector<ShaderEdge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
+	for (std::vector<Edge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
 		if ((i->v1 == v1 && i->v2 == v2) || (i->v1 == v2 && i->v2 == v1))
 		{
 			i->poly2 = poly; // edge already exists, so add the second poly
 			return;
 		}
-	m_edges.push_back({ v1, v2, -1, poly }); // add a new edge
+	m_edges.push_back({ v1, v2, (int)m_edges.size(), -1, poly }); // add a new edge
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -474,35 +574,53 @@ void NavMeshShader::AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, const dtP
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::ExtractVertsAndEdges(const dtNavMesh* mesh)
 {
-	for (int a = 0; a < mesh->getMaxTiles(); a++) // TODO: breaks for multiple tiles
+	int totalVerts = 0;
+	for (int a = 0; a < mesh->getMaxTiles(); a++) if (mesh->getTile(a)->header)
+	{
+		dtMeshHeader* header = mesh->getTile(a)->header;
+		totalVerts += header->vertCount + header->detailVertCount;
+	}
+	m_verts.reserve(totalVerts); // total amount of verts
+	m_edges.reserve(totalVerts); // at least this many edges
+
+	int tileBaseIdx = 0;
+	for (int a = 0; a < mesh->getMaxTiles(); a++) if (mesh->getTile(a)->header)
 	{
 		// Adding Verts and their positions
 		const dtMeshTile* tile = mesh->getTile(a);
-		m_verts.reserve(tile->header->vertCount + tile->header->detailVertCount);
 		for (int i = 0; i < tile->header->vertCount; ++i)
 		{
 			const float* v = &tile->verts[i * 3];
-			m_verts.push_back({ (float3*)v, i });
+			m_verts.push_back({ (float3*)v, tileBaseIdx + i });
 		}
 		for (int i = 0; i < tile->header->detailVertCount; ++i)
 		{
 			const float* v = &tile->detailVerts[i * 3];
-			m_verts.push_back({ (float3*)v, i + tile->header->vertCount });
+			m_verts.push_back({ (float3*)v, tileBaseIdx + tile->header->vertCount + i });
 		}
+
 
 		// Adding Vert polygon associations and Edges
 		for (int b = 0; b < tile->header->polyCount; b++)
 		{
 			const dtPoly* poly = &tile->polys[b];
-			for (int c = 0; c < poly->vertCount; c++)
+			if (poly->getType() == DT_POLYTYPE_OFFMESH_CONNECTION) continue;
+
+			for (int c = 0; c < poly->vertCount; c++) // for every poly vert
 			{
-				m_verts[poly->verts[c]].polys.push_back(poly);
+				m_verts[tileBaseIdx + poly->verts[c]].polys.push_back(poly);
 				if (c < poly->vertCount-1) // adding the first n-1 edges
-					AddEdgeToEdgesAndPreventDuplicates(poly->verts[c], poly->verts[c + 1], poly);
+					AddEdgeToEdgesAndPreventDuplicates(tileBaseIdx + poly->verts[c], tileBaseIdx + poly->verts[c + 1], poly);
 				else // adding the last edge connecting the first vertex
-					AddEdgeToEdgesAndPreventDuplicates(poly->verts[c], poly->verts[0], poly);
+					AddEdgeToEdgesAndPreventDuplicates(tileBaseIdx + poly->verts[c], tileBaseIdx + poly->verts[0], poly);
 			}
 		}
+
+		// Adding off-mesh connections
+		for (int j = 0; j < tile->header->offMeshConCount; j++)
+			m_OMCs.push_back({ &tile->offMeshCons[j] });
+
+		tileBaseIdx += tile->header->vertCount + tile->header->detailVertCount;
 	}
 }
 
@@ -679,7 +797,7 @@ void NavMeshShader::SaveAsMesh(NavMeshNavigator* navmesh)
 	// Writing one group per tile
 	for (int i = 0; i < mesh->getMaxTiles(); ++i) if (mesh->getTile(i)->header)
 	{
-		fprintf(f, "g Tile%2i\n", i);
+		fprintf(f, "g Tile%3i\n", i);
 		WriteTileToMesh(mesh->getTile(i), f);
 	}
 

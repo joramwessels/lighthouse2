@@ -39,11 +39,17 @@ public:
 		m_vertMeshID = m_renderer->AddMesh("vertex.obj", m_dir, 1.0f);
 		m_agentMeshID = m_renderer->AddMesh("agent.obj", m_dir, 1.0f);
 		m_edgeMeshID = m_renderer->AddMesh("edge.obj", m_dir, 1.0f);
+		m_directedEdgeMeshID = m_renderer->AddMesh("arrow.obj", m_dir, 1.0f);
 		m_renderer->GetScene()->meshes[m_vertMeshID]->name = "Vertex";
 		m_renderer->GetScene()->meshes[m_agentMeshID]->name = "Agent";
 		m_renderer->GetScene()->meshes[m_edgeMeshID]->name = "Edge";
+		m_renderer->GetScene()->meshes[m_directedEdgeMeshID]->name = "DirectedEdge";
 	};
 	~NavMeshShader() {};
+
+	struct Vert { float3* pos; int idx = -1, instID = -1; std::vector<const dtPoly*> polys; };
+	struct Edge { int v1 = -1, v2 = -1, idx = -1, instID = -1; const dtPoly *poly1 = 0, *poly2 = 0; };
+	struct OMC { const dtOffMeshConnection* omc; int v1InstID = -1, v2InstID = -1, edgeInstID = -1; };
 
 	void UpdateMesh(NavMeshNavigator* navmesh);
 	void UpdateAgentPositions();
@@ -53,9 +59,11 @@ public:
 	void AddPolysToScene(NavMeshNavigator* navmesh);
 	void AddVertsToScene();
 	void AddEdgesToScene();
+	void AddOMCsToScene();
 	void RemovePolysFromScene();
 	void RemoveVertsFromScene();
 	void RemoveEdgesFromScene();
+	void RemoveOMCsFromScene();
 
 	// NavMesh GL shading
 	void AddPolysToGL() { m_shadeTris = true; };
@@ -72,9 +80,9 @@ public:
 
 	// Object selection
 	void Deselect() { m_vertSelect = 0; m_edgeSelect = 0; m_polySelect = 0; m_agentSelect = 0; };
-	void SelectPoly(float3 pos, NavMeshNavigator* navmesh);
-	void SelectVert(int instanceID);
-	void SelectEdge(int instanceID);
+	const dtPoly* SelectPoly(float3 pos, NavMeshNavigator* navmesh);
+	Vert* SelectVert(int instanceID);
+	Edge* SelectEdge(int instanceID);
 	Agent* SelectAgent(int instanceID);
 	Agent* GetSelectedAgent() const { return m_agentSelect->agent; };
 
@@ -82,6 +90,11 @@ public:
 	void SetPath(const std::vector<NavMeshNavigator::PathNode>* path) { m_path = path; };
 	void SetPathStart(const float3* start) { m_pathStart = start; };
 	void SetPathEnd(const float3* end) { m_pathEnd = end; };
+
+	// Editing
+	void SetTmpVert(float3 pos, float vertWidth=.5f);
+	void RemoveTMPVert();
+	void AddTmpOMC(float3 v0, float3 v1, float vertWidth);
 
 	void Clean();
 
@@ -91,21 +104,23 @@ public:
 	bool isEdge(int meshID) const { return meshID == m_edgeMeshID; };
 	bool isNavMesh(int meshID) const { return isVert(meshID) || isEdge(meshID) || isPoly(meshID); };
 
+	inline float3* GetVertPos(int idx) { return m_verts[idx].pos; };
+
 private:
 	RenderAPI* m_renderer;
 	const char* m_dir;
 	
 	// NavMesh representation
-	struct ShaderVert { float3* const pos; int idx = -1, instID = -1; std::vector<const dtPoly*> polys; };
-	struct ShaderEdge { int v1 = -1, v2 = -1, instID = -1; const dtPoly *poly1 = 0, *poly2 = 0; };
-	std::vector<ShaderVert> m_verts;
-	std::vector<ShaderEdge> m_edges;
+	std::vector<Vert> m_verts; // (verts, detailVerts, offMeshVerts) * nTiles
+	std::vector<Edge> m_edges;
+	std::vector<OMC> m_OMCs;
 	void ExtractVertsAndEdges(const dtNavMesh* navmesh);
 	void AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, const dtPoly* poly);
 
 	// Scene shading
 	int m_polyMeshID = -1, m_polyInstID = -1;
 	int m_vertMeshID = -1, m_edgeMeshID = -1;
+	int m_directedEdgeMeshID = -1;
 	const float m_vertWidth = .3f, m_edgeWidth = .1f; // in world coordinates
 
 	// GL shading
@@ -122,13 +137,13 @@ private:
 	int m_agentMeshID = -1;
 	struct ShaderAgent { int instID = -1; Agent* agent; };
 	std::vector<ShaderAgent> m_agents;
-	void DrawAgentImpulse();
+	void DrawAgentImpulse() const;
 
 	// Object selecting / highlighting
 	const dtPoly* m_polySelect = 0;
-	const ShaderVert* m_vertSelect = 0;
-	const ShaderEdge* m_edgeSelect = 0;
-	const ShaderAgent* m_agentSelect = 0;
+	Vert* m_vertSelect = 0;
+	Edge* m_edgeSelect = 0;
+	ShaderAgent* m_agentSelect = 0;
 	void DrawPolyHighlightGL() const;
 	void DrawVertHighlightGL() const;
 	void DrawEdgeHighlightGL() const;
@@ -145,6 +160,9 @@ private:
 	const float4 m_pathColor = { 1.0f, 0.0f, 0.0f, 0.5f }; // rgba
 	const float4 m_beaconStColor = { 0, 1.0f, 0, 1.0f };   // rgba
 	const float4 m_beaconEnColor = { 1.0f, 0, 0, 1.0f };   // rgba
+
+	// Editing
+	Vert m_tmpVert;
 
 	// File writing
 	void WriteMaterialFile();

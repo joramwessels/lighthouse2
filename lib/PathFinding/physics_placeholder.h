@@ -18,6 +18,8 @@
 //#include "common_types.h" // float3
 #include "system.h" // float3
 
+#define PHYSICSEPSILON 0.001
+
 namespace lighthouse2 {
 
 static const float s_drag = .2f;
@@ -35,12 +37,15 @@ public:
 		m_vel(make_float3(0)), m_linAcc(make_float3(0)), m_impulse(make_float3(0)) {}
 
 	void AddImpulse(float3 impulse) { m_impulse += impulse; }
-	void Update(float deltaTime)
+	bool Update(float deltaTime)
 	{
 		m_vel += m_impulse / m_mass;
 		m_impulse = { 0, 0, 0 };
 		m_vel -= m_vel * s_drag * deltaTime;
-		m_pos += m_vel * deltaTime;
+		float3 movement = m_vel * deltaTime;
+		if (length(movement) < PHYSICSEPSILON) return false;
+		m_pos += movement;
+		return true;
 	}
 	void Kill() { m_alive = false; };
 	bool isAlive() const { return m_alive == true; };
@@ -131,10 +136,12 @@ public:
 	//  |  RigidBody::Update                                                          |
 	//  |  Called every physics tick. Updates all active rigid bodies.          LH2'19|
 	//  +-----------------------------------------------------------------------------+
-	void Update(float deltaTime)
+	bool Update(float deltaTime)
 	{
+		bool changed = false;
 		for (int i = 0; i < m_bodyCount; i++)
-			if (m_bodies[i].isAlive()) m_bodies[i].Update(deltaTime);
+			if (m_bodies[i].isAlive()) changed |= m_bodies[i].Update(deltaTime);
+		return changed; // whether any positions changed 
 	}
 
 protected:

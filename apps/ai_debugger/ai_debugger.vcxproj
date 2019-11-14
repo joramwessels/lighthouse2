@@ -90,6 +90,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="debug_ui.cpp" />
+    <ClCompile Include="edit_ui.cpp" />
     <ClCompile Include="fps_printer.cpp" />
     <ClCompile Include="main.cpp">
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -99,6 +101,8 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="debug_ui.h" />
+    <ClInclude Include="edit_ui.h" />
     <ClInclude Include="main_tools.h" />
     <ClInclude Include="main_ui.h" />
   </ItemGroup>
