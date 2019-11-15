@@ -13,7 +13,7 @@ You can move the camera using WASD, and rotate using the arrow keys. Hold SHIFT 
 
 #### Building
 
-Navmeshes can be generated using the 'build' tab. The `NavMeshBuilder` class is automatically given the `HostScene` of the renderer, which is initialized in `main.cpp/PrepareScene()`. The following navmesh building parameters can be altered in the 'bulid' tab:
+Navmeshes can be generated using the 'build' tab. The `NavMeshBuilder` class is automatically given the `HostScene` of the renderer, which is initialized in `main.cpp/PrepareScene()`. Navmesh generation is influenced by multiple configurations, the implications of which are more thoroughly explained in the [Pathfinding documentation](../../lib/PathFinding/README.md). The following parameters can be found in the build menu:
 
 * `AABB min/max`: The bounding box limiting the navmesh. Defaults to the scene bounds when 0.
 * `cell size`: The width and depth of the voxel grids during rasterization.
@@ -57,6 +57,8 @@ To add an agent, hold SHIFT while right clicking anywhere on the navmesh. Hold S
 
 ## Backlog
 
+* clean up main_ui.h ❗
+
 #### Building
 * extensive QA testing for all build params
 * give instances/meshes a flag that can exclude them from navmesh generation
@@ -65,29 +67,19 @@ To add an agent, hold SHIFT while right clicking anywhere on the navmesh. Hold S
 * navmesh editing
     * finish AntTweakBar vert hiding ❗
     * spawn unit axis at selected vert/edge
-    * controlls to drag unit axis
+    * add mouse controls to drag unit axis
     * make local copy of changed objects
         * Make NavMeshShader verts reference this local copy
-    * apply changes in AntTweakBar callback
+        * apply changes in AntTweakBar 'Apply Changes' callback
+        * discard changes in AntTweakBar 'Discard Changes' callback
 * off-mesh connections
-    * debug traversal ❗
-    * test saving/loading ❗
-    * how to check directionality in `navmesh_shader.cpp/NavMeshShader::AddOMCsToScene` and `navmesh_shader.cpp/NavMeshShader::AddTmpOMC`
-    * make OMCs added to shader during runtime temporary/removable
     * make OMCs visible and editable in the edit menu (radius, directionality)
 * edit menu
     * add polygon flags/areas ❗
 
 #### Debugging
+* BUG: agent pos/dir/target can't be tracked bc the pointer keeps changing
 * add agent editing (dtQueryFilter, speed)
-
-#### Shading
-* fix instance deleting ❗
-* make meshes transparant
-    * BUG: OMC edge wrong mesh? ❗
-* are calls to SynchronizeSceneData() necessary after add operation?
-* OpenGL highlights cost 10-20 fps
-* OpenGL highlights lag behind 1 frame due to scene probing delay
 
 #### UI
 * add mouse movement
@@ -97,5 +89,6 @@ To add an agent, hold SHIFT while right clicking anywhere on the navmesh. Hold S
 * automatic conversion tab in build menu
     * agent height/radius/climb in world coordinates
     * conversion to voxels before building
-* add pause button to disables agents/physics updates
+* add pause button to disable agents/physics updates
 * don't refresh navmesh when nothing has been edited
+* OpenGL highlights lag behind 1 frame due to scene probing delay

@@ -16,7 +16,7 @@
 #pragma once
 
 #include "navmesh_navigator.h"
-#include "agent.h"
+#include "navmesh_agents.h"
 
 namespace lighthouse2 {
 

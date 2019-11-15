@@ -18,6 +18,10 @@
 #include "navmesh_builder.h"
 #include "navmesh_shader.h"
 
+//  +-----------------------------------------------------------------------------+
+//  |  OffMeshConnectionTool                                                      |
+//  |  Handles adding off mesh connections.                                 LH2'19|
+//  +-----------------------------------------------------------------------------+
 class OffMeshConnectionTool
 {
 public:
@@ -25,6 +29,10 @@ public:
 		: m_builder(builder), m_shader(shader) {};
 	~OffMeshConnectionTool() {};
 
+	//  +-----------------------------------------------------------------------------+
+	//  |  OffMeshConnectionTool::SetStart                                            |
+	//  |  Sets the first vertex of a new off-mesh connection.                  LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void SetStart(float3 pos)
 	{
 		m_v0 = pos;
@@ -32,6 +40,11 @@ public:
 		if (m_vertSet == V0SET) m_shader->SetTmpVert(pos, m_defaultVertWidth);
 		if (m_vertSet == BOTHSET) AddToScene();
 	}
+
+	//  +-----------------------------------------------------------------------------+
+	//  |  OffMeshConnectionTool::SetEnd                                              |
+	//  |  Sets the second vertex of a new off-mesh connection.                 LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void SetEnd(float3 pos)
 	{
 		m_v1 = pos;
@@ -39,7 +52,12 @@ public:
 		if (m_vertSet == V1SET) m_shader->SetTmpVert(pos, m_defaultVertWidth);
 		if (m_vertSet == BOTHSET) AddToScene();
 	}
-	void Clear() { m_vertSet = NONESET; m_shader->RemoveTMPVert(); }
+
+	//  +-----------------------------------------------------------------------------+
+	//  |  OffMeshConnectionTool::Clear                                               |
+	//  |  Resets the internal state and removes any leftovers.                 LH2'19|
+	//  +-----------------------------------------------------------------------------+
+	void Clear() { m_vertSet = NONESET; m_shader->RemoveTmpVert(); }
 
 protected:
 	NavMeshBuilder* m_builder;
@@ -51,6 +69,10 @@ protected:
 	const float m_defaultVertWidth = .5f;
 	const bool m_defaultDirectionality = true;
 
+	//  +-----------------------------------------------------------------------------+
+	//  |  OffMeshConnectionTool::AddToScene                                          |
+	//  |  Adds a new off-mesh connection to the builder and shader.            LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void AddToScene()
 	{
 		m_builder->AddOffMeshConnection(m_v0, m_v1, m_defaultVertWidth, m_defaultDirectionality);

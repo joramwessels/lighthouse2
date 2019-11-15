@@ -83,7 +83,7 @@ protected:
 	bool m_owner;			 // owner of the dtNavMesh
 	dtNavMesh* m_navmesh = 0;
 	dtNavMeshQuery* m_query = 0;
-	float m_polyFindExtention[3] = { 5.0f, 5.0f, 5.0f };	// Half the search area for FindNearestPoly calls
+	float m_polyFindExtention[3] = { 5.0f, 5.0f, 5.0f }; // Half the search area for FindNearestPoly calls
 };
 
 } // namespace Lighthouse2

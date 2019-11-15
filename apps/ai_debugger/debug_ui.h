@@ -17,8 +17,12 @@
 
 #include "navmesh_navigator.h"
 #include "navmesh_shader.h"
-#include "agent.h"
+#include "navmesh_agents.h"
 
+//  +-----------------------------------------------------------------------------+
+//  |  AgentNavigationTool                                                        |
+//  |  Handles selecting- and editing agents.                               LH2'19|
+//  +-----------------------------------------------------------------------------+
 class AgentNavigationTool
 {
 public:
@@ -26,10 +30,15 @@ public:
 		: m_shader(shader) {};
 	~AgentNavigationTool() {};
 
+	//  +-----------------------------------------------------------------------------+
+	//  |  AgentNavigationTool::SelectAgent                                           |
+	//  |  Selects an agent, highlights the instance, and plots its path.       LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void SelectAgent(Agent* agent)
 	{
 		Clear();
 		if (!agent) return;
+
 		m_agent = agent;
 		m_pathv0 = *agent->GetPos();
 
@@ -49,6 +58,11 @@ public:
 			m_shader->SetPathEnd(0);
 		}
 	}
+
+	//  +-----------------------------------------------------------------------------+
+	//  |  AgentNavigationTool::SetTarget                                             |
+	//  |  Assigns a target the the selected agent and updates its navigation.  LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void SetTarget(float3 pos)
 	{
 		if (!m_agent) return;
@@ -61,6 +75,11 @@ public:
 		m_shader->SetPathStart(&m_pathv0);
 		m_shader->SetPathEnd(&m_pathv1);
 	}
+
+	//  +-----------------------------------------------------------------------------+
+	//  |  AgentNavigationTool::Clear                                                 |
+	//  |  Resets the internal state, stops highlighting, and removes path.     LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void Clear()
 	{
 		if (m_agent) // if there was an agent selected at all
@@ -82,6 +101,10 @@ protected:
 	float3 m_pathv0, m_pathv1;
 };
 
+//  +-----------------------------------------------------------------------------+
+//  |  PathDrawingTool                                                            |
+//  |  Handles manual path drawing.                                         LH2'19|
+//  +-----------------------------------------------------------------------------+
 class PathDrawingTool
 {
 public:
@@ -89,6 +112,10 @@ public:
 		: m_shader(shader), m_navmesh(navmesh) {};
 	~PathDrawingTool() {};
 
+	//  +-----------------------------------------------------------------------------+
+	//  |  PathDrawingTool::SetStart                                                  |
+	//  |  Sets the start of the path.                                          LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void SetStart(float3 pos)
 	{
 		m_v0 = pos;
@@ -98,6 +125,11 @@ public:
 			if (!m_navmesh->FindPath(m_v0, m_v1, m_path, m_reachable))
 				m_shader->SetPath(&m_path);
 	}
+
+	//  +-----------------------------------------------------------------------------+
+	//  |  PathDrawingTool::SetEnd                                                    |
+	//  |  Sets the end of the path.                                            LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void SetEnd(float3 pos)
 	{
 		m_v1 = pos;
@@ -107,6 +139,11 @@ public:
 			if (!m_navmesh->FindPath(m_v0, m_v1, m_path, m_reachable))
 				m_shader->SetPath(&m_path);
 	}
+
+	//  +-----------------------------------------------------------------------------+
+	//  |  PathDrawingTool::Clear                                                     |
+	//  |  Resets the internal state and removes the path from the shader.      LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void Clear()
 	{
 		m_vertSet = NONESET;

@@ -23,7 +23,7 @@
 #include "navmesh_navigator.h"
 #include "navmesh_shader.h"
 #include "physics_placeholder.h"
-#include "agent.h"
+#include "navmesh_agents.h"
 
 #include "edit_ui.h"
 #include "debug_ui.h"
@@ -83,7 +83,6 @@ static NavMeshShader::Edge* selectedEdge;
 static std::vector<NavMeshNavigator::PathNode> path;
 static bool reachable;
 static float3 pathStart, pathEnd;
-static const float3 *agentPos, *agentDir, *agentTarget;
 static mat4 agentScale;
 
 // Forward declarations
@@ -114,13 +113,13 @@ static void InitGUI(RenderAPI *a_renderer, NavMeshBuilder *a_builder, PhysicsPla
 	scrheight = &a_scrheight;
 	config = a_builder->GetConfig();
 
-	// Init AntTweakBar
-	InitAntTweakBars();
-
 	navMeshShader = new NavMeshShader(renderer, "data\\ai\\");
 	s_omcTool = new OffMeshConnectionTool(navMeshBuilder, navMeshShader);
 	s_agentTool = new AgentNavigationTool(navMeshShader);
 	s_pathTool = new PathDrawingTool(navMeshShader, navMeshNavigator);
+
+	// Init AntTweakBar
+	InitAntTweakBars();
 
 	InitFPSPrinter();
 }
@@ -203,6 +202,7 @@ static void RefreshNavigator()
 	if (navMeshNavigator) delete navMeshNavigator;
 	navMeshNavigator = navMeshBuilder->GetNavigator();
 	navMeshShader->UpdateMesh(navMeshNavigator);
+	navMeshShader->AddNavMeshToScene();
 
 	// Updating new config data
 	float radius = config->m_walkableRadius * config->m_cs; // voxels to world units
@@ -308,32 +308,15 @@ static void HandleMouseInputDebugMode()
 		if (navMeshShader->isAgent(probMeshID)) // selecting
 		{
 			s_pathTool->Clear();
-			selectionType = NONE;
-
 			Agent* agent = navMeshShader->SelectAgent(probeInstID);
-			if (agent)
-			{
-				// link GUI info directly to agent
-				agentPos = agent->GetPos();
-				agentDir = agent->GetDir();
-				agentTarget = agent->GetTarget();
-				selectionType = AGENT;
-			}
-			else
-			{
-				agentPos = origin;
-				agentDir = origin;
-				agentTarget = origin;
-			}
+			if (agent) selectionType = AGENT;
+			else selectionType = NONE;
 			s_agentTool->SelectAgent(agent);
 		}
 		else if (selectionType == AGENT) // deselecting
 		{
 			s_agentTool->Clear();
 			selectionType = NONE;
-			agentPos = origin;
-			agentDir = origin;
-			agentTarget = origin;
 		}
 	}
 
@@ -821,9 +804,6 @@ void RefreshDebugBar()
 	TwSetParam(debugBar, "path", "opened", TW_PARAM_INT32, 1, &opened);
 
 	// create agent block
-	TwAddVarRO(debugBar, "Pos", float3Type, &agentPos, "group='agent'");
-	TwAddVarRO(debugBar, "Dir", float3Type, &agentDir, "group='agent'");
-	TwAddVarRO(debugBar, "Target", TW_TYPE_FLOAT, &agentTarget, "group='agent'");
 	TwSetParam(debugBar, "agent", "opened", TW_PARAM_INT32, 1, &opened);
 }
 

@@ -21,7 +21,7 @@
 
 #include "rendersystem.h"		// RenderAPI
 #include "navmesh_navigator.h"  // NavMeshNavigator
-#include "agent.h"				// Agent
+#include "navmesh_agents.h"		// Agent
 
 namespace lighthouse2 {
 
@@ -56,19 +56,23 @@ public:
 	void DrawGL() const;
 
 	// NavMesh scene shading
-	void AddPolysToScene(NavMeshNavigator* navmesh);
+	void AddNavMeshToScene();
+	void AddPolysToScene();
 	void AddVertsToScene();
 	void AddEdgesToScene();
 	void AddOMCsToScene();
+	void RemoveNavMeshFromScene();
 	void RemovePolysFromScene();
 	void RemoveVertsFromScene();
 	void RemoveEdgesFromScene();
 	void RemoveOMCsFromScene();
 
 	// NavMesh GL shading
+	void AddNavMeshToGL() { m_shadeTris = m_shadeVerts = m_shadeEdges = true; };
 	void AddPolysToGL() { m_shadeTris = true; };
 	void AddVertsToGL() { m_shadeVerts = true; };
 	void AddEdgesToGL() { m_shadeEdges = true; };
+	void RemoveNavMeshFromGL() { m_shadeTris = m_shadeVerts = m_shadeEdges = false; };
 	void RemovePolysFromGL() { m_shadeTris = false; };
 	void RemoveVertsFromGL() { m_shadeVerts = false; };
 	void RemoveEdgesFromGL() { m_shadeEdges = false; };
@@ -84,7 +88,6 @@ public:
 	Vert* SelectVert(int instanceID);
 	Edge* SelectEdge(int instanceID);
 	Agent* SelectAgent(int instanceID);
-	Agent* GetSelectedAgent() const { return m_agentSelect->agent; };
 
 	// Path drawing
 	void SetPath(const std::vector<NavMeshNavigator::PathNode>* path) { m_path = path; };
@@ -93,7 +96,7 @@ public:
 
 	// Editing
 	void SetTmpVert(float3 pos, float vertWidth=.5f);
-	void RemoveTMPVert();
+	void RemoveTmpVert();
 	void AddTmpOMC(float3 v0, float3 v1, float vertWidth);
 
 	void Clean();
@@ -165,11 +168,12 @@ private:
 	Vert m_tmpVert;
 
 	// File writing
+	std::string m_navmeshID;
 	void WriteMaterialFile();
 	void WriteTileToMesh(const dtMeshTile* tile, FILE* file);
 	void SaveAsMesh(NavMeshNavigator* navmesh);
-	std::string GetObjFileName(const char* ID) const
-		{ return ".tmp." + std::string(ID) + ".obj"; };
+	std::string GetObjFileName() const
+		{ return ".tmp." + m_navmeshID + ".obj"; };
 	std::string GetMatFileName() const { return "navmesh.mtl"; };
 };
 

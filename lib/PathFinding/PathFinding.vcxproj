@@ -134,7 +134,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\tinyxml2\tinyxml2.cpp" />
-    <ClCompile Include="agent.cpp" />
+    <ClCompile Include="navmesh_agents.cpp" />
     <ClCompile Include="navmesh_shader.cpp" />
     <ClCompile Include="navmesh_navigator.cpp" />
     <ClCompile Include="navmesh_builder.cpp" />
@@ -171,7 +171,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\tinyxml2\tinyxml2.h" />
-    <ClInclude Include="agent.h" />
+    <ClInclude Include="navmesh_agents.h" />
     <ClInclude Include="buildcontext.h" />
     <ClInclude Include="navmesh_shader.h" />
     <ClInclude Include="navmesh_common.h" />

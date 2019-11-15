@@ -21,7 +21,7 @@
 #include "navmesh_navigator.h"
 #include "navmesh_shader.h"
 #include "physics_placeholder.h"
-#include "agent.h"
+#include "navmesh_agents.h"
 
 static RenderAPI* renderer = 0;
 static GLTexture* renderTarget = 0;

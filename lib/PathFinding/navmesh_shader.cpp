@@ -27,12 +27,9 @@ namespace lighthouse2 {
 void NavMeshShader::UpdateMesh(NavMeshNavigator* navmesh)
 {
 	Clean();
+	m_navmeshID = navmesh->GetID();
 	ExtractVertsAndEdges(navmesh->GetDetourMesh());
-	
-	AddPolysToScene(navmesh);
-	AddVertsToScene();
-	AddEdgesToScene();
-	AddOMCsToScene();
+	SaveAsMesh(navmesh);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -69,18 +66,41 @@ void NavMeshShader::DrawGL() const
 
 
 
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::AddNavMeshToScene                                           |
+//  |  Adds all navmesh assets to the scene.                                LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::AddNavMeshToScene()
+{
+	AddPolysToScene();
+	AddVertsToScene();
+	AddEdgesToScene();
+	AddOMCsToScene();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::RemoveNavMeshFromScene                                      |
+//  |  Removes all navmesh assets from the scene.                           LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::RemoveNavMeshFromScene()
+{
+	RemovePolysFromScene();
+	RemoveVertsFromScene();
+	RemoveEdgesFromScene();
+	RemoveOMCsFromScene();
+}
+
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::AddNavMeshToScene                                           |
 //  |  Adds the navmesh triangles to the scene as a single mesh.            LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::AddPolysToScene(NavMeshNavigator* navmesh)
+void NavMeshShader::AddPolysToScene()
 {
-	SaveAsMesh(navmesh);
-	std::string filename = GetObjFileName(navmesh->GetID());
+	std::string filename = GetObjFileName();
 	m_polyMeshID = m_renderer->AddMesh(filename.c_str(), m_dir, 1.0f);
 	m_renderer->GetMesh(m_polyMeshID)->name = "NavMesh";
 	m_polyInstID = m_renderer->AddInstance(m_polyMeshID, mat4::Identity());
-	// TODO: remove .obj file (requires new platform function)
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -481,7 +501,7 @@ void NavMeshShader::DrawPathMarkers() const
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::SetTmpVert(float3 pos, float width)
 {
-	RemoveTMPVert();
+	RemoveTmpVert();
 	m_tmpVert.pos = new float3(pos);
 	m_tmpVert.instID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(pos) * mat4::Scale(width));
 }
@@ -490,7 +510,7 @@ void NavMeshShader::SetTmpVert(float3 pos, float width)
 //  |  NavMeshShader::RemoveTMPVert                                               |
 //  |  Removes the temporary vertex from the scene.                         LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::RemoveTMPVert()
+void NavMeshShader::RemoveTmpVert()
 {
 	if (m_tmpVert.instID >= 0)
 	{
@@ -536,21 +556,21 @@ void NavMeshShader::AddTmpOMC(float3 v0, float3 v1, float width)
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::Clean()
 {
-	RemovePolysFromScene();
-	RemoveVertsFromScene();
-	RemoveEdgesFromScene();
-	RemoveOMCsFromScene();
+	RemoveNavMeshFromScene();
+	RemoveNavMeshFromGL();
 	RemoveAllAgents();
-	RemoveTMPVert();
+	RemoveTmpVert();
 
 	Deselect();
 	m_verts.clear();
 	m_edges.clear();
 	m_OMCs.clear();
 
-	m_path = nullptr;
-	m_pathStart = m_pathEnd = nullptr;
-	m_shadeTris = m_shadeVerts = m_shadeEdges = false;
+	m_path = 0;
+	m_pathStart = m_pathEnd = 0;
+
+	// TODO: remove .obj file (requires new platform function)
+	m_navmeshID = "";
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -640,31 +660,41 @@ void NavMeshShader::WriteMaterialFile()
 	if (!f) printf("File '%s' could not be opened", filename);
 
 	// Writing contents
-	fprintf(f, "newmtl %s\n", "navmesh");
+	fprintf(f, "newmtl %s\n", "default");
+	fprintf(f, "Ka    %.2f %.2f %.2f\n", 0.8f, 0.8f, 0.8f);
+	fprintf(f, "Kd    %.2f %.2f %.2f\n", 0.8f, 0.8f, 0.8f);
+	fprintf(f, "Ks    %.2f %.2f %.2f\n", 0.0f, 0.0f, 0.0f);
+	fprintf(f, "d     %.2f\nTr    %.2f\nillum 1", 1.0f, 0.0f);
+
+	fprintf(f, "\n\nnewmtl %s\n", "navmesh");
 	fprintf(f, "Ka    %.2f %.2f %.2f\n", 0.0f, 1.0f, 1.0f);
 	fprintf(f, "Kd    %.2f %.2f %.2f\n", 0.0f, 1.0f, 1.0f);
 	fprintf(f, "Ks    %.2f %.2f %.2f\n", 0.0f, 0.0f, 0.0f);
-	fprintf(f, "d     %.2f\n", 0.2f);
-	fprintf(f, "Tr    %.2f\n", 0.8f);
-	fprintf(f, "illum 1");
+	fprintf(f, "d     %.2f\nTr    %.2f\nillum 1", 0.2f, 0.8f);
 
-	fprintf(f, "\n\n");
-	fprintf(f, "newmtl %s\n", "node");
+	fprintf(f, "\n\nnewmtl %s\n", "vertex");
 	fprintf(f, "Ka    %.2f %.2f %.2f\n", 1.0f, 0.0f, 1.0f);
 	fprintf(f, "Kd    %.2f %.2f %.2f\n", 1.0f, 0.0f, 1.0f);
 	fprintf(f, "Ks    %.2f %.2f %.2f\n", 0.0f, 0.0f, 0.0f);
-	fprintf(f, "d     %.2f\n", 0.2f);
-	fprintf(f, "Tr    %.2f\n", 0.8f);
-	fprintf(f, "illum 1");
+	fprintf(f, "d     %.2f\nTr    %.2f\nillum 1", 0.5f, 0.5f);
 
-	fprintf(f, "\n\n");
-	fprintf(f, "newmtl %s\n", "agent");
+	fprintf(f, "\n\nnewmtl %s\n", "edge");
+	fprintf(f, "Ka    %.2f %.2f %.2f\n", 0.5f, 0.5f, 1.0f);
+	fprintf(f, "Kd    %.2f %.2f %.2f\n", 0.5f, 0.5f, 1.0f);
+	fprintf(f, "Ks    %.2f %.2f %.2f\n", 0.0f, 0.0f, 0.0f);
+	fprintf(f, "d     %.2f\nTr    %.2f\nillum 1", 0.5f, 0.5f);
+
+	fprintf(f, "\n\nnewmtl %s\n", "agent");
 	fprintf(f, "Ka    %.2f %.2f %.2f\n", 1.0f, 1.0f, 0.0f);
 	fprintf(f, "Kd    %.2f %.2f %.2f\n", 1.0f, 1.0f, 0.0f);
 	fprintf(f, "Ks    %.2f %.2f %.2f\n", 0.0f, 0.0f, 0.0f);
-	fprintf(f, "d     %.2f\n", 0.6f);
-	fprintf(f, "Tr    %.2f\n", 0.4f);
-	fprintf(f, "illum 1");
+	fprintf(f, "d     %.2f\nTr    %.2f\nillum 1", 0.6f, 0.4f);
+
+	fprintf(f, "\n\nnewmtl %s\n", "arrow");
+	fprintf(f, "Ka    %.2f %.2f %.2f\n", 1.0f, 0.0f, 0.0f);
+	fprintf(f, "Kd    %.2f %.2f %.2f\n", 1.0f, 0.0f, 0.0f);
+	fprintf(f, "Ks    %.2f %.2f %.2f\n", 0.0f, 0.0f, 0.0f);
+	fprintf(f, "d     %.2f\nTr    %.2f\nillum 1", 0.5f, 0.5f);
 
 	fclose(f);
 	printf("Navmesh material file saved as '%s'", filename);
@@ -780,7 +810,7 @@ void NavMeshShader::SaveAsMesh(NavMeshNavigator* navmesh)
 {
 	// Opening file
 	const char* ID = navmesh->GetID();
-	std::string filename = m_dir + GetObjFileName(ID);
+	std::string filename = m_dir + GetObjFileName();
 	FILE* f;
 	fopen_s(&f, filename.c_str(), "w");
 	if (!f) printf("File '%s' could not be opened", filename.c_str());
