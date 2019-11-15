@@ -50,9 +50,9 @@ static PathDrawingTool* s_pathTool = 0;
 static TwBar* settingsBar = 0, *buildBar = 0, *editBar = 0, *debugBar = 0;
 
 // GUI state
-enum GUIMODE { EDIT, DEBUG };
-static GUIMODE guiMode = EDIT;
-static GUIMODE editMode = EDIT, debugMode = DEBUG; // AntTweakBar callback needs smth to point to
+enum GUIMODE { GUI_MODE_BUILD, GUI_MODE_EDIT, GUI_MODE_DEBUG };
+static GUIMODE guiMode = GUI_MODE_BUILD;
+static GUIMODE buildMode = GUI_MODE_BUILD, editMode = GUI_MODE_EDIT, debugMode = GUI_MODE_DEBUG; // AntTweakBar callback needs smth to point to
 static int alphaActive = 220, alphaPassive = 80;
 enum SELECTIONTYPE { NONE, POLY, EDGE, VERT, AGENT };
 static SELECTIONTYPE selectionType = NONE;
@@ -405,8 +405,8 @@ static bool HandleInput(float frameTime)
 			probedPos = camera->position + normalize(pixelLoc - camera->position) * coreStats.probedDist;
 		}
 
-		if (guiMode == EDIT) HandleMouseInputEditMode();
-		else if (guiMode == DEBUG) HandleMouseInputDebugMode();
+		if (guiMode == GUI_MODE_EDIT) HandleMouseInputEditMode();
+		else if (guiMode == GUI_MODE_DEBUG) HandleMouseInputDebugMode();
 
 		// Depth of field (SHIFT)
 		if (shiftClickLastFrame)
@@ -467,18 +467,15 @@ static bool HandleInput(float frameTime)
 //  +-----------------------------------------------------------------------------+
 void TW_CALL BuildNavMesh(void *data)
 {
-	// Set configurations
-	builderErrorStatus = NMSUCCESS;
+	if (guiMode != GUI_MODE_BUILD) return;
 
-	// Build new mesh
+	builderErrorStatus = NMSUCCESS;
 	ClearNavMesh();
 	navMeshBuilder->Build(renderer->GetScene());
 	navMeshBuilder->DumpLog();
 	builderErrorStatus = (bool)navMeshBuilder->GetError();
 	if (builderErrorStatus) return;
-
 	RefreshNavigator();
-
 	*camMoved = true;
 }
 
@@ -488,9 +485,7 @@ void TW_CALL BuildNavMesh(void *data)
 //  +-----------------------------------------------------------------------------+
 void TW_CALL SaveNavMesh(void *data)
 {
-	// Set configurations
 	builderErrorStatus = NMSUCCESS;
-
 	navMeshBuilder->Serialize();
 	navMeshBuilder->DumpLog();
 	builderErrorStatus = (bool)navMeshBuilder->GetError();
@@ -502,18 +497,15 @@ void TW_CALL SaveNavMesh(void *data)
 //  +-----------------------------------------------------------------------------+
 void TW_CALL LoadNavMesh(void *data)
 {
-	// Set configurations
-	builderErrorStatus = NMSUCCESS;
+	if (guiMode != GUI_MODE_BUILD) return;
 
-	// Load mesh
+	builderErrorStatus = NMSUCCESS;
 	ClearNavMesh();
 	navMeshBuilder->Deserialize();
 	navMeshBuilder->DumpLog();
 	builderErrorStatus = (bool)navMeshBuilder->GetError();
 	if (builderErrorStatus) return;
-
 	RefreshNavigator();
-
 	*camMoved = true;
 }
 
@@ -523,7 +515,30 @@ void TW_CALL LoadNavMesh(void *data)
 //  +-----------------------------------------------------------------------------+
 void TW_CALL CleanNavMesh(void *data)
 {
+	if (guiMode != GUI_MODE_BUILD) return;
 	ClearNavMesh();
+	*camMoved = true;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  TW_CALL ApplyChanges                                                       |
+//  |  Callback function for AntTweakBar button.                            LH2'19|
+//  +-----------------------------------------------------------------------------+
+void TW_CALL ApplyChanges(void *data)
+{
+	if (guiMode != GUI_MODE_EDIT) return;
+	RefreshNavigator();
+	*camMoved = true;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  TW_CALL DiscardChanges (TODO)                                              |
+//  |  Callback function for AntTweakBar button.                            LH2'19|
+//  +-----------------------------------------------------------------------------+
+void TW_CALL DiscardChanges(void *data)
+{
+	if (guiMode != GUI_MODE_EDIT) return;
+	printf("DiscardChanges hasn't been implemented yet.\n"); // DEBUG
 	*camMoved = true;
 }
 
@@ -533,22 +548,58 @@ void TW_CALL CleanNavMesh(void *data)
 //  +-----------------------------------------------------------------------------+
 void TW_CALL SwitchGUIMode(void *data)
 {
-	if (guiMode == *((GUIMODE*)data)) return; // nothing changed
-	guiMode = *((GUIMODE*)data);
+	builderErrorStatus = false;
+	GUIMODE newMode = *((GUIMODE*)data);
+	if (guiMode == newMode) return; // nothing changed
 
-	if (guiMode == EDIT)
+	// Cleaning up from the previous mode
+	if (guiMode == GUI_MODE_BUILD)
 	{
-		TwSetParam(buildBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaActive);
-		TwSetParam(debugBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
-		RemoveDebugAssets();
+
 	}
-	else if (guiMode == DEBUG)
+	else if (guiMode == GUI_MODE_EDIT)
 	{
-		TwSetParam(buildBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
-		TwSetParam(debugBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaActive);
 		RemoveEditAssets();
 		RefreshNavigator();
 	}
+	else if (guiMode == GUI_MODE_DEBUG)
+	{
+		RemoveDebugAssets();
+	}
+
+	// Set tab alpha to represent GUI mode
+	if (newMode == GUI_MODE_BUILD)
+	{
+		TwSetParam(buildBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaActive);
+		TwSetParam(editBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
+		TwSetParam(debugBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
+	}
+	else if (newMode == GUI_MODE_EDIT)
+	{
+		if (!navMeshBuilder->HasIntermediateResults())
+		{
+			builderErrorStatus = true;
+			printf("Edit mode requires internal build data. Build a new navmesh to edit it.\n");
+			return;
+		}
+		TwSetParam(buildBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
+		TwSetParam(editBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaActive);
+		TwSetParam(debugBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
+	}
+	else if (newMode == GUI_MODE_DEBUG)
+	{
+		if (navMeshBuilder->IsClean())
+		{
+			builderErrorStatus = true;
+			printf("No navmesh to debug. Build/load a navmesh to test it.\n");
+			return;
+		}
+		TwSetParam(buildBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
+		TwSetParam(editBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
+		TwSetParam(debugBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaActive);
+	}
+
+	guiMode = newMode;
 	*camMoved = true;
 }
 
@@ -636,8 +687,8 @@ void RefreshBuildBar()
 	};
 	TwType float3Type = TwDefineStruct("AABB", float3Members, 3, sizeof(float3), NULL, NULL);
 
-	TwAddButton(buildBar, "Activate EDIT mode", SwitchGUIMode, &editMode, " label='Switch to EDIT mode' ");
-	TwAddSeparator(buildBar, "editactivateseparator", "");
+	TwAddButton(buildBar, "Activate BUILD mode", SwitchGUIMode, &buildMode, " label='Switch to BUILD mode' ");
+	TwAddSeparator(buildBar, "buildactivateseparator", "");
 
 	// create voxelgrid block
 	TwAddVarRW(buildBar, "AABB min", float3Type, &config->m_bmin, " group='voxelgrid'");
@@ -676,15 +727,15 @@ void RefreshBuildBar()
 	// create output block
 	TwAddVarRW(buildBar, "NavMesh ID", TW_TYPE_STDSTRING, &config->m_id, " group='output'");
 	TwAddVarRW(buildBar, "Print build stats", TW_TYPE_BOOL8, &config->m_printBuildStats, " group='output'");
-	TwAddSeparator(buildBar, "menuseparator0", "group='output'");
 	TwAddVarRO(buildBar, "error code", TW_TYPE_BOOL8, &builderErrorStatus, " group='output' true='ERROR' false=''");
+	TwAddSeparator(buildBar, "menuseparator0", "group='output'");
+	TwAddButton(buildBar, "Build", BuildNavMesh, NULL, "group='output' label='Build' ");
 	TwAddSeparator(buildBar, "menuseparator1", "group='output'");
-	TwAddButton(buildBar, "Build", BuildNavMesh, NULL, " label='Build' ");
-	TwAddButton(buildBar, "Save", SaveNavMesh, NULL, " label='Save' ");
+	TwAddButton(buildBar, "Save", SaveNavMesh, NULL, "group='output' label='Save' ");
 	TwAddSeparator(buildBar, "menuseparator2", "group='output'");
-	TwAddButton(buildBar, "Load", LoadNavMesh, NULL, " label='Load' ");
+	TwAddButton(buildBar, "Load", LoadNavMesh, NULL, "group='output' label='Load' ");
 	TwAddSeparator(buildBar, "menuseparator3", "group='output'");
-	TwAddButton(buildBar, "Clean", CleanNavMesh, NULL, " label='Clean' ");
+	TwAddButton(buildBar, "Clean", CleanNavMesh, NULL, "group='output' label='Clean' ");
 	TwAddSeparator(buildBar, "menuseparator4", "group='output'");
 	TwSetParam(buildBar, "output", "opened", TW_PARAM_INT32, 1, &opened);
 }
@@ -715,6 +766,9 @@ void RefreshEditBar()
 	};
 	TwType objectSelectionTypeType = TwDefineEnum("SelectionType", objectSelectionType, 5);
 
+	TwAddButton(editBar, "Activate EDIT mode", SwitchGUIMode, &editMode, " label='Switch to EDIT mode' ");
+	TwAddSeparator(editBar, "editactivateseparator", "");
+
 	// create selection block
 	TwAddVarRO(editBar, "Type", objectSelectionTypeType, &selectionType, "");
 	TwAddVarRO(editBar, "ID", TW_TYPE_INT32, &selectionID, "");
@@ -728,6 +782,15 @@ void RefreshEditBar()
 	TwAddVarRO(editBar, "v4", float3Type, selectionVerts[4], "group='Verts' visible=false ");
 	TwAddVarRO(editBar, "v5", float3Type, selectionVerts[5], "group='Verts' visible=false ");
 	TwSetParam(editBar, "Verts", "opened", TW_PARAM_INT32, 1, &opened);
+
+	// saving
+	TwAddSeparator(editBar, "editsaveseparator1", "");
+	TwAddButton(editBar, "Apply", ApplyChanges, NULL, " label='Apply Changes' ");
+	TwAddSeparator(editBar, "editsaveseparator2", "");
+	TwAddButton(editBar, "Discard", DiscardChanges, NULL, " label='Discard Changes' ");
+	TwAddSeparator(editBar, "editsaveseparator3", "");
+	TwAddButton(editBar, "Save", SaveNavMesh, NULL, " label='Save NavMesh' ");
+	TwAddSeparator(editBar, "editsaveseparator4", "");
 }
 
 //  +-----------------------------------------------------------------------------+

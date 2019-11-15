@@ -130,6 +130,8 @@ public:
 	void SetConfig(NavMeshConfig config) { m_config = config; };
 	void SetID(const char* id) { m_config.m_id = id; };
 
+	bool IsClean() const { if (m_navMesh) return false; else return true; };
+	bool HasIntermediateResults() const { return (m_pmesh && m_dmesh); };
 	const char* GetDir() const { return m_dir; };
 	NavMeshConfig* GetConfig() { return &m_config; };
 	dtNavMesh* GetMesh() const { return m_navMesh; };
