@@ -3,8 +3,6 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="fps_printer.cpp" />
-    <ClCompile Include="edit_ui.cpp" />
-    <ClCompile Include="debug_ui.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main_tools.h" />

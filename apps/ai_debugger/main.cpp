@@ -31,7 +31,7 @@ static PhysicsPlaceholder* rigidBodies = 0;
 static NavMeshAgents* navMeshAgents = 0;
 
 static uint scrwidth = 0, scrheight = 0, scrspp = 1;
-static bool camMoved = false, hasFocus = true, running = true;
+static bool posChanges = false, camMoved = false, hasFocus = true, running = true;
 static bool leftClicked = false, rightClicked = false;
 static int2 probeCoords;
 
@@ -85,8 +85,9 @@ int main()
 	InitGLFW();
 
 	// initialize renderer: pick one
+	renderer = RenderAPI::CreateRenderAPI("RenderCore_Optix7filter");				// OPTIX7 core, with filtering (static scenes only for now)
 	// renderer = RenderAPI::CreateRenderAPI( "rendercore_optix7.dll" );			// OPTIX7 core, best for RTX devices
-	renderer = RenderAPI::CreateRenderAPI( "rendercore_optixprime_b.dll" );			// OPTIX PRIME, best for pre-RTX CUDA devices
+	//renderer = RenderAPI::CreateRenderAPI( "rendercore_optixprime_b.dll" );		// OPTIX PRIME, best for pre-RTX CUDA devices
 	// renderer = RenderAPI::CreateRenderAPI( "rendercore_primeref.dll" );			// REFERENCE, for image validation
 	// renderer = RenderAPI::CreateRenderAPI( "rendercore_optixrtx_b.dll" );		// OPTIX6 core, for reference
 	// renderer = RenderAPI::CreateRenderAPI( "rendercore_softrasterizer.dll" );	// RASTERIZER, your only option if not on NVidia
@@ -120,8 +121,8 @@ int main()
 		deltaTime = timer.elapsed();
 		timer.reset();
 		// Physics
-		bool posChanges = rigidBodies->Update(deltaTime);
-		if (posChanges) AI_UI::navMeshShader->UpdateAgentPositions();
+		posChanges = rigidBodies->Update(deltaTime);
+		if (posChanges) AI_UI::PostPhysicsUpdate(deltaTime);
 		// render
 		renderer->Render( c );
 		AI_UI::PostRenderUpdate(deltaTime);
@@ -144,6 +145,7 @@ int main()
 		if (!running) break;
 	}
 	// clean up
+	AI_UI::ShutDown();
 	renderer->SerializeCamera( "camera.xml" );
 	renderer->Shutdown();
 	glfwDestroyWindow( window );

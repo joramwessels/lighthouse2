@@ -90,8 +90,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="debug_ui.cpp" />
-    <ClCompile Include="edit_ui.cpp" />
     <ClCompile Include="fps_printer.cpp" />
     <ClCompile Include="main.cpp">
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

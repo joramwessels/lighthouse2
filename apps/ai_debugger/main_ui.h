@@ -45,6 +45,7 @@ static uint *scrwidth = 0, *scrheight = 0;
 static NavMeshNavigator* navMeshNavigator = 0;
 static NavMeshShader* navMeshShader = 0;
 static OffMeshConnectionTool* s_omcTool = 0;
+static NavMeshSelectionTool* s_navmeshTool = 0;
 static AgentNavigationTool* s_agentTool = 0;
 static PathDrawingTool* s_pathTool = 0;
 static TwBar* settingsBar = 0, *buildBar = 0, *editBar = 0, *debugBar = 0;
@@ -73,13 +74,6 @@ static float s_agentHeight, s_agentRadius, s_agentClimb;
 static float s_minRegionArea, s_mergeRegionArea, s_maxEdgeLen;
 
 // Edit bar
-static int selectionID = -1, polygonArea = -1, polygonType = -1;
-static float3* origin = new float3{ 0, 0, 0 };
-static float3* selectionVerts[6] = { origin, origin, origin, origin, origin, origin };
-static bool isOffMesh = false, isDetail = false;
-static const dtPoly* selectedPoly;
-static NavMeshShader::Vert* selectedVert;
-static NavMeshShader::Edge* selectedEdge;
 
 // Debug bar
 static std::vector<NavMeshNavigator::PathNode> path;
@@ -90,7 +84,6 @@ static mat4 agentScale;
 // Forward declarations
 void InitFPSPrinter();
 void PrintFPS(float deltaTime);
-void OnSelectNavMesh(int InstID);
 void InitAntTweakBars();
 void ConvertConfigToWorld();
 
@@ -119,11 +112,21 @@ static void InitGUI(RenderAPI *a_renderer, NavMeshBuilder *a_builder, PhysicsPla
 
 	navMeshShader = new NavMeshShader(renderer, "data\\ai\\");
 	s_omcTool = new OffMeshConnectionTool(navMeshBuilder, navMeshShader);
+	s_navmeshTool = new NavMeshSelectionTool(navMeshShader);
 	s_agentTool = new AgentNavigationTool(navMeshShader);
 	s_pathTool = new PathDrawingTool(navMeshShader, navMeshNavigator);
 
 	InitAntTweakBars();
 	InitFPSPrinter();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  ShutDown                                                                   |
+//  |  Called on shut down.                                                 LH2'19|
+//  +-----------------------------------------------------------------------------+
+static void ShutDown()
+{
+	navMeshShader->Clean();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -138,10 +141,10 @@ static void DrawGUI(float deltaTime)
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  PreRenderUpdate                                                            |
-//  |  Updates the GUI after physics, and before rendering.                 LH2'19|
+//  |  PostPhysicsUpdate                                                          |
+//  |  Updates the GUI after the physics have updated.                      LH2'19|
 //  +-----------------------------------------------------------------------------+
-static void PreRenderUpdate(float deltaTime)
+static void PostPhysicsUpdate(float deltaTime)
 {
 	navMeshShader->UpdateAgentPositions();
 }
@@ -156,10 +159,6 @@ static void PostRenderUpdate(float deltaTime)
 	mraysincl = coreStats.totalRays / (coreStats.renderTime * 1000);
 	mraysexcl = coreStats.totalRays / (coreStats.traceTime0 * 1000);
 }
-
-
-
-
 
 //  +-----------------------------------------------------------------------------+
 //  |  RemoveEditAssets                                                           |
@@ -260,49 +259,6 @@ static void ConvertConfigToWorld()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  OnSelectNavMesh                                                            |
-//  |  Handles selecting/deselecting navmesh objects. nullptr to deselect.  LH2'19|
-//  +-----------------------------------------------------------------------------+
-static void OnSelectNavMesh(int instID)
-{
-	selectionType = NONE;
-	navMeshShader->Deselect();
-	selectionID = polygonArea = polygonType = -1;
-	for (int i = 0; i < 6; i++) selectionVerts[i] = origin;
-	isOffMesh = false; // TODO: can't get this info yet
-
-	if (instID)
-	{
-		if (navMeshShader->isVert(probMeshID))
-		{
-			selectionType = VERT;
-			selectedVert = navMeshShader->SelectVert(instID);
-			selectionID = selectedVert->idx;
-			selectionVerts[0] = selectedVert->pos;
-			TwDefine(" editBar/v0 visible=true ");
-		}
-		else if (navMeshShader->isEdge(probMeshID))
-		{
-			selectionType = EDGE;
-			selectedEdge = navMeshShader->SelectEdge(instID);
-			selectionID = selectedEdge->idx;
-			selectionVerts[0] = navMeshShader->GetVertPos(selectedEdge->v1);
-			selectionVerts[1] = navMeshShader->GetVertPos(selectedEdge->v2);
-		}
-		else if (navMeshShader->isPoly(probMeshID))
-		{
-			selectionType = POLY;
-			selectedPoly = navMeshShader->SelectPoly(probedPos, navMeshNavigator);
-			selectionID = -1; // TODO
-			for (size_t i = 0; i < selectedPoly->vertCount; i++)
-				selectionVerts[i] = navMeshShader->GetVertPos(selectedPoly->verts[i]);
-			polygonArea = selectedPoly->getArea();
-			polygonType = selectedPoly->getType();
-		}
-	}
-}
-
-//  +-----------------------------------------------------------------------------+
 //  |  HandleMouseInputEditMode                                                   |
 //  |  Process mouse input when in EDIT mode.                               LH2'19|
 //  +-----------------------------------------------------------------------------+
@@ -311,8 +267,18 @@ static void HandleMouseInputEditMode()
 	// Instance selecting (SHIFT) (L-CLICK)
 	if (leftClickLastFrame && shiftClickLastFrame)
 	{
-		if (navMeshShader->isNavMesh(probMeshID)) OnSelectNavMesh(probeInstID);
-		else OnSelectNavMesh(0);
+		if (probeInstID > 0 && navMeshShader->isNavMesh(probMeshID))
+		{
+			if (navMeshShader->isVert(probMeshID))
+				selectionType = (SELECTIONTYPE)s_navmeshTool->SelectVert(probeInstID); // TODO: SELECTIONTYPE conversions are unsafe
+			else if (navMeshShader->isEdge(probMeshID))
+				selectionType = (SELECTIONTYPE)s_navmeshTool->SelectEdge(probeInstID);
+			else if (navMeshShader->isPoly(probMeshID))
+				selectionType = (SELECTIONTYPE)s_navmeshTool->SelectPoly(probedPos, navMeshNavigator);
+			else
+				selectionType = (SELECTIONTYPE)s_navmeshTool->Deselect();
+		}
+		else selectionType = (SELECTIONTYPE)s_navmeshTool->Deselect();
 	}
 
 	// Adding off-mesh connections (CTRL)
@@ -784,30 +750,32 @@ void RefreshEditBar()
 	};
 	TwType float3Type = TwDefineStruct("vert", float3Members, 3, sizeof(float3), NULL, NULL);
 	TwEnumVal objectSelectionType[] = {
-		{ NONE, "-" },
-		{ VERT, "Vert" },
-		{ EDGE, "Edge" },
-		{ POLY, "Poly" },
-		{ AGENT, "Agent" }
+		{ NavMeshSelectionTool::NONE, "" },
+		{ NavMeshSelectionTool::VERT, "Vert" },
+		{ NavMeshSelectionTool::EDGE, "Edge" },
+		{ NavMeshSelectionTool::POLY, "Poly" }
 	};
-	TwType objectSelectionTypeType = TwDefineEnum("SelectionType", objectSelectionType, 5);
+	TwType objectSelectionTypeType = TwDefineEnum("SelectionType", objectSelectionType, 4);
 
 	TwAddButton(editBar, "Activate EDIT mode", SwitchGUIMode, &editMode, " label='Switch to EDIT mode' ");
 	TwAddSeparator(editBar, "editactivateseparator", "");
 
 	// create selection block
-	TwAddVarRO(editBar, "Type", objectSelectionTypeType, &selectionType, "");
-	TwAddVarRO(editBar, "ID", TW_TYPE_INT32, &selectionID, "");
-	TwAddVarRO(editBar, "OffMesh", TW_TYPE_BOOL32, &isOffMesh, "");
+	TwAddVarRO(editBar, "Selection Type", objectSelectionTypeType, &s_navmeshTool->m_selectionType, "");
+	TwAddVarRO(editBar, "ID", TW_TYPE_INT32, &s_navmeshTool->m_selectionID, "");
+	TwAddVarRO(editBar, "OffMesh", TW_TYPE_BOOL32, &s_navmeshTool->m_isOffMesh, "");
+	TwAddVarRO(editBar, "Detail", TW_TYPE_BOOL32, &s_navmeshTool->m_isDetail, "");
+	TwAddVarRO(editBar, "Poly type", TW_TYPE_INT32, &s_navmeshTool->m_polygonType, "");
+	TwAddVarRO(editBar, "Poly area", TW_TYPE_INT32, &s_navmeshTool->m_polygonArea, "");
 
 	// create verts block
-	TwAddVarRO(editBar, "v0", float3Type, selectionVerts[0], "group='Verts' visible=false ");
-	TwAddVarRO(editBar, "v1", float3Type, selectionVerts[1], "group='Verts' visible=false ");
-	TwAddVarRO(editBar, "v2", float3Type, selectionVerts[2], "group='Verts' visible=false ");
-	TwAddVarRO(editBar, "v3", float3Type, selectionVerts[3], "group='Verts' visible=false ");
-	TwAddVarRO(editBar, "v4", float3Type, selectionVerts[4], "group='Verts' visible=false ");
-	TwAddVarRO(editBar, "v5", float3Type, selectionVerts[5], "group='Verts' visible=false ");
-	TwSetParam(editBar, "Verts", "opened", TW_PARAM_INT32, 1, &opened);
+	TwAddVarRO(editBar, "v0", float3Type, &s_navmeshTool->m_verts[0], "group='Verts' visible=false ");
+	TwAddVarRO(editBar, "v1", float3Type, &s_navmeshTool->m_verts[1], "group='Verts' visible=false ");
+	TwAddVarRO(editBar, "v2", float3Type, &s_navmeshTool->m_verts[2], "group='Verts' visible=false ");
+	TwAddVarRO(editBar, "v3", float3Type, &s_navmeshTool->m_verts[3], "group='Verts' visible=false ");
+	TwAddVarRO(editBar, "v4", float3Type, &s_navmeshTool->m_verts[4], "group='Verts' visible=false ");
+	TwAddVarRO(editBar, "v5", float3Type, &s_navmeshTool->m_verts[5], "group='Verts' visible=false ");
+	TwSetParam(editBar, "Verts", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// saving
 	TwAddSeparator(editBar, "editsaveseparator1", "");

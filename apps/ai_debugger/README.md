@@ -65,7 +65,8 @@ To add an agent, hold SHIFT while right clicking anywhere on the navmesh. Hold S
 
 #### Editing
 * navmesh editing
-    * finish AntTweakBar vert hiding ❗
+    * move editing to editing tool ❗
+        * refresh verts every tick? AntTweakBar won't refresh pointer
     * spawn unit axis at selected vert/edge
     * add mouse controls to drag unit axis
     * make local copy of changed objects
@@ -86,9 +87,6 @@ To add an agent, hold SHIFT while right clicking anywhere on the navmesh. Hold S
     * middle mouse draggin for up/down
     * right mouse dragging for rotation (except when CTRL SHIFT)
 * typing w/a/s/d in navmesh ID field moves camera
-* automatic conversion tab in build menu
-    * agent height/radius/climb in world coordinates
-    * conversion to voxels before building
 * add pause button to disable agents/physics updates
 * don't refresh navmesh when nothing has been edited
 * OpenGL highlights lag behind 1 frame due to scene probing delay

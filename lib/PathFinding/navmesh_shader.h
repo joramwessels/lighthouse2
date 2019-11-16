@@ -168,13 +168,10 @@ private:
 	Vert m_tmpVert;
 
 	// File writing
-	std::string m_navmeshID;
-	void WriteMaterialFile();
+	std::string m_meshFileName;
+	const std::string m_matFileName = "navmesh.mtl";
 	void WriteTileToMesh(const dtMeshTile* tile, FILE* file);
 	void SaveAsMesh(NavMeshNavigator* navmesh);
-	std::string GetObjFileName() const
-		{ return ".tmp." + m_navmeshID + ".obj"; };
-	std::string GetMatFileName() const { return "navmesh.mtl"; };
 };
 
 } // namespace lighthouse2

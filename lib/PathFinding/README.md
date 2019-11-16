@@ -95,8 +95,10 @@ To fascilitate graphical navmesh editing, the shader can add-, move-, and remove
 
 
 #### NavMeshShader
-* delete tmp navmesh .obj file on `Clear` ❗
-* fix instance deleting ❗
+* BUG: instances won't delete ❗
+* BUG: agents/vertices won't select after rebuild
+    * instIDs differ
+* BUG: big triangle spanning two islets when climb is too high
 * make meshes transparent
 * off-mesh connections
     * BUG: OMC edge wrong mesh? ❗

@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include "AntTweakBar.h"
+
 #include "navmesh_builder.h"
 #include "navmesh_shader.h"
 
@@ -81,3 +83,109 @@ protected:
 	}
 };
 
+class NavMeshSelectionTool
+{
+public:
+	NavMeshSelectionTool(NavMeshShader* shader)
+		: m_shader(shader) {};
+	~NavMeshSelectionTool() {};
+
+	enum SELECTIONTYPE { NONE, POLY, EDGE, VERT, AGENT };
+
+	SELECTIONTYPE Deselect()
+	{
+		if (!m_selectionType == NONE)
+		{
+			m_shader->Deselect();
+			m_selectionID = -1;
+			m_polygonArea = m_polygonType = 0;
+			TwDefine(" Editing/OffMesh visible=false ");
+			TwDefine(" Editing/Detail visible=false ");
+			TwDefine(" 'Editing/Poly type' visible=false ");
+			TwDefine(" 'Editing/Poly area' visible=false ");
+			TwDefine(" Editing/v0 visible=false ");
+			TwDefine(" Editing/v1 visible=false ");
+			TwDefine(" Editing/v2 visible=false ");
+			TwDefine(" Editing/v3 visible=false ");
+			TwDefine(" Editing/v4 visible=false ");
+			TwDefine(" Editing/v5 visible=false ");
+		}
+		m_selectionType = NONE;
+		return m_selectionType;
+	}
+
+	SELECTIONTYPE SelectVert(int instID)
+	{
+		Deselect();
+		m_selectedVert = m_shader->SelectVert(instID);
+		if (!m_selectedVert) return m_selectionType;
+		m_selectionID = m_selectedVert->idx;
+
+		m_isOffMesh = false; // TODO
+		m_isDetail = false; // TODO
+		TwDefine(" Editing/OffMesh visible=true ");
+		TwDefine(" Editing/Detail visible=true ");
+		m_verts[0] = *m_selectedVert->pos;
+		TwDefine(" Editing/v0 visible=true ");
+
+		m_selectionType = VERT;
+		return m_selectionType;
+	}
+
+	SELECTIONTYPE SelectEdge(int instID)
+	{
+		Deselect();
+		m_selectedEdge = m_shader->SelectEdge(instID);
+		if (!m_selectedEdge) return m_selectionType;
+		m_selectionID = m_selectedEdge->idx;
+
+		m_isOffMesh = false; // TODO
+		TwDefine(" Editing/OffMesh visible=true ");
+		m_verts[0] = *m_shader->GetVertPos(m_selectedEdge->v1);
+		m_verts[1] = *m_shader->GetVertPos(m_selectedEdge->v2);
+		TwDefine(" Editing/v0 visible=true ");
+		TwDefine(" Editing/v1 visible=true ");
+
+		m_selectionType = EDGE;
+		return m_selectionType;
+	}
+
+	SELECTIONTYPE SelectPoly(float3 pos, NavMeshNavigator* navmesh)
+	{
+		Deselect();
+		if (!navmesh) return m_selectionType;
+		m_selectedPoly = m_shader->SelectPoly(pos, navmesh);
+		if (!m_selectedPoly) return m_selectionType;
+		m_selectionID = -1; // TODO
+
+		m_polygonArea = m_selectedPoly->getArea();
+		m_polygonType = m_selectedPoly->getType();
+		TwDefine(" 'Editing/Poly type' visible=true ");
+		TwDefine(" 'Editing/Poly area' visible=true ");
+		for (size_t i = 0; i < m_selectedPoly->vertCount; i++)
+			m_verts[i] = *m_shader->GetVertPos(m_selectedPoly->verts[i]);
+		TwDefine(" Editing/v0 visible=true ");
+		TwDefine(" Editing/v1 visible=true ");
+		TwDefine(" Editing/v2 visible=true ");
+		TwDefine(" Editing/v3 visible=true ");
+		TwDefine(" Editing/v4 visible=true ");
+		TwDefine(" Editing/v5 visible=true ");
+
+		m_selectionType = POLY;
+		return m_selectionType;
+	}
+
+	SELECTIONTYPE m_selectionType = NONE;
+	int m_selectionID = -1;
+	float3 m_verts[6] = { origin, origin, origin, origin, origin, origin };
+	bool m_isOffMesh = false, m_isDetail = false;
+	int m_polygonArea = 0, m_polygonType = 0;
+
+protected:
+	NavMeshShader* m_shader;
+	const float3 origin = float3{ 0, 0, 0 };
+
+	NavMeshShader::Vert* m_selectedVert;
+	NavMeshShader::Edge* m_selectedEdge;
+	const dtPoly* m_selectedPoly;
+};
