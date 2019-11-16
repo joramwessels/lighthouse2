@@ -165,10 +165,17 @@ void shadeKernel( float4* accumulator, const uint stride,
 	}
 
 	// detect specular surfaces
-	if (ROUGHNESS < 0.01f) FLAGS |= S_SPECULAR; else FLAGS &= ~S_SPECULAR;
+	if (ROUGHNESS == 0.001f) FLAGS |= S_SPECULAR; /* detect pure speculars; skip NEE for these */ else FLAGS &= ~S_SPECULAR;
 
 	// initialize seed based on pixel index
 	uint seed = WangHash( pathIdx + R0 /* well-seeded xor32 is all you need */ );
+
+	// normal alignment for backfacing polygons
+	const float flip = (dot( D, N ) > 0) ? -1 : 1;
+	N *= flip;		// fix geometric normal
+	iN *= flip;		// fix interpolated normal (consistent normal interpolation)
+	fN *= flip;		// fix final normal (includes normal map)
+	if (flip) shadingData.InvertETA(); // leaving medium; eta ==> 1 / eta
 
 	// apply postponed bsdf pdf
 	throughput *= 1.0f / bsdfPdf;
@@ -179,8 +186,8 @@ void shadeKernel( float4* accumulator, const uint stride,
 		if (sampleIdx < 256)
 		{
 			const uint x = (pixelIdx % w) & 127, y = (pixelIdx / w) & 127;
-			r0 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 4 );
-			r1 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 5 );
+			r0 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 4 + 4 * pathLength );
+			r1 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 5 + 4 * pathLength );
 		}
 		else
 		{
@@ -222,16 +229,18 @@ void shadeKernel( float4* accumulator, const uint stride,
 	if (sampleIdx < 256)
 	{
 		const uint x = (pixelIdx % w) & 127, y = (pixelIdx / w) & 127;
-		r3 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 4 );
-		r4 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 5 );
+		r3 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 6 + 4 * pathLength );
+		r4 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 7 + 4 * pathLength );
 	}
 	else
 	{
 		r3 = RandomFloat( seed );
 		r4 = RandomFloat( seed );
 	}
-	const float3 bsdf = SampleBSDF( shadingData, fN, N, T, D * -1.0f, r3, r4, R, newBsdfPdf );
+	bool specular = false;
+	const float3 bsdf = SampleBSDF( shadingData, fN, N, T, D * -1.0f, r3, r4, R, newBsdfPdf, specular );
 	if (newBsdfPdf < EPSILON || isnan( newBsdfPdf )) return;
+	if (specular) FLAGS |= S_SPECULAR;
 
 	// write extension ray
 	const uint extensionRayIdx = atomicAdd( &counters->extensionRays, 1 ); // compact

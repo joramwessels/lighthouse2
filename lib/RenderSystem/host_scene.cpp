@@ -83,10 +83,12 @@ void HostScene::SerializeMaterials( const char* xmlFile )
 		diffuse->SetAttribute( "b", materials[i]->color.z );
 		diffuse->SetAttribute( "g", materials[i]->color.y );
 		diffuse->SetAttribute( "r", materials[i]->color.x );
+		(XMLElement*)materialEntry->InsertEndChild( diffuse );
 		XMLElement* absorption = doc.NewElement( "absorption" );
 		absorption->SetAttribute( "b", materials[i]->absorption.z );
 		absorption->SetAttribute( "g", materials[i]->absorption.y );
 		absorption->SetAttribute( "r", materials[i]->absorption.x );
+		(XMLElement*)materialEntry->InsertEndChild( absorption );
 		((XMLElement*)materialEntry->InsertEndChild( doc.NewElement( "metallic" ) ))->SetText( materials[i]->metallic );
 		((XMLElement*)materialEntry->InsertEndChild( doc.NewElement( "subsurface" ) ))->SetText( materials[i]->subsurface );
 		((XMLElement*)materialEntry->InsertEndChild( doc.NewElement( "specular" ) ))->SetText( materials[i]->specular );
@@ -121,7 +123,8 @@ void HostScene::DeserializeMaterials( const char* xmlFile )
 	XMLElement* countElement = root->FirstChildElement( "material_count" );
 	if (!countElement) return;
 	int materialCount;
-	scanf_s( countElement->GetText(), "%i", &materialCount );
+	const char* t = countElement->GetText();
+	sscanf_s( t, "%i", &materialCount );
 	if (materialCount != materials.size()) return;
 	for (int i = 0; i < materialCount; i++)
 	{
@@ -194,11 +197,46 @@ int HostScene::AddMesh( const char* objFile, const char* dir, const float scale 
 }
 
 //  +-----------------------------------------------------------------------------+
+//  |  HostScene::AddMesh                                                         |
+//  |  Create a mesh with the specified amount of triangles without actually      |
+//  |  setting the triangles. These are expected to be set via the AddTriToMesh   |
+//  |  function.                                                            LH2'19|
+//  +-----------------------------------------------------------------------------+
+int HostScene::AddMesh( const int triCount )
+{
+	HostMesh* newMesh = new HostMesh( triCount );
+	newMesh->ID = (int)meshes.size();
+	meshes.push_back( newMesh );
+	return newMesh->ID;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  HostScene::AddTriToMesh                                                    |
+//  |  Add a single triangle to a mesh.                                     LH2'19|
+//  +-----------------------------------------------------------------------------+
+void HostScene::AddTriToMesh( const int meshId, const float3& v0, const float3& v1, const float3& v2, const int matId )
+{
+	HostMesh* m = HostScene::meshes[meshId];
+	m->vertices.push_back( make_float4( v0, 1 ) );
+	m->vertices.push_back( make_float4( v1, 1 ) );
+	m->vertices.push_back( make_float4( v2, 1 ) );
+	HostTri tri;
+	tri.material = matId;
+	float3 N = normalize( cross( v1 - v0, v2 - v0 ) );
+	tri.vN0 = tri.vN1 = tri.vN2 = N;
+	tri.Nx = N.x, tri.Ny = N.y, tri.Nz = N.z;
+	tri.vertex0 = v0;
+	tri.vertex1 = v1;
+	tri.vertex2 = v2;
+	m->triangles.push_back( tri );
+}
+
+//  +-----------------------------------------------------------------------------+
 //  |  HostScene::AddScene                                                        |
 //  |  Loads a collection of meshes from a gltf file. An instance and a scene     |
 //  |  graph node is created for each mesh.                                 LH2'19|
 //  +-----------------------------------------------------------------------------+
-void HostScene::AddScene( const char* sceneFile, const char* dir, const mat4& transform )
+int HostScene::AddScene( const char* sceneFile, const char* dir, const mat4& transform )
 {
 	// offsets: if we loaded an object before this one, indices should not start at 0.
 	// based on https://github.com/SaschaWillems/Vulkan-glTF-PBR/blob/master/base/VulkanglTFModel.hpp
@@ -208,6 +246,7 @@ void HostScene::AddScene( const char* sceneFile, const char* dir, const mat4& tr
 	const int skinBase = (int)skins.size();
 	bool hasTransform = (transform != mat4::Identity());
 	const int nodeBase = (int)nodes.size() + (hasTransform ? 1 : 0);
+	const int retVal = nodeBase;
 	// load gltf file
 	string cleanFileName = dir + string( sceneFile );
 	tinygltf::Model gltfModel;
@@ -303,6 +342,8 @@ void HostScene::AddScene( const char* sceneFile, const char* dir, const mat4& tr
 		// add the root nodes to the scene
 		for (size_t i = 0; i < glftScene.nodes.size(); i++) scene.push_back( glftScene.nodes[i] + nodeBase );
 	}
+	// return index of first created node
+	return retVal;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -311,7 +352,7 @@ void HostScene::AddScene( const char* sceneFile, const char* dir, const mat4& tr
 //  |  centroid position and a material. Typically used to add an area light      |
 //  |  to a scene.                                                          LH2'19|
 //  +-----------------------------------------------------------------------------+
-int HostScene::AddQuad( float3 N, const float3 pos, const float width, const float height, const int material, const int meshID )
+int HostScene::AddQuad( float3 N, const float3 pos, const float width, const float height, const int matId, const int meshID )
 {
 	HostMesh* newMesh = meshID > -1 ? meshes[meshID] : new HostMesh();
 	N = normalize( N ); // let's not assume the normal is normalized.
@@ -335,7 +376,7 @@ int HostScene::AddQuad( float3 N, const float3 pos, const float width, const flo
 	newMesh->vertices.push_back( make_float4( pos - B + T, 1 ) );
 	// triangles
 	HostTri tri1, tri2;
-	tri1.material = tri2.material = material;
+	tri1.material = tri2.material = matId;
 	tri1.vN0 = tri1.vN1 = tri1.vN2 = N;
 	tri2.vN0 = tri2.vN1 = tri2.vN2 = N;
 	tri1.Nx = N.x, tri1.Ny = N.y, tri1.Nz = N.z;
@@ -354,7 +395,7 @@ int HostScene::AddQuad( float3 N, const float3 pos, const float width, const flo
 	if (meshID == -1)
 	{
 		newMesh->ID = (int)meshes.size();
-		newMesh->materialList.push_back( material );
+		newMesh->materialList.push_back( matId );
 		meshes.push_back( newMesh );
 	}
 	return newMesh->ID;
@@ -371,7 +412,7 @@ int HostScene::AddInstance( const int meshId, const mat4& transform )
 	{
 		// we have holes in the nodes vector due to instance deletions; search from the
 		// end of the list to speed up frequent additions / deletions in complex scenes.
-		for (int i = (int)nodes.size() - 1; i >= 0; i--) if (!nodes[i])
+		for (int i = (int)nodes.size() - 1; i >= 0; i--) if (nodes[i] == 0)
 		{
 			// overwrite an empty slot, created by deleting an instance
 			nodes[i] = newNode;
@@ -452,10 +493,15 @@ int HostScene::FindOrCreateMaterial( const string& name )
 //  |  HostScene::GetTriangleMaterial                                             |
 //  |  Retrieve the material ID for the specified triangle.                 LH2'19|
 //  +-----------------------------------------------------------------------------+
-int HostScene::GetTriangleMaterial( const int nodeid, const int triid )
+int HostScene::GetTriangleMaterial( const int instId, const int triId )
 {
-	if (triid == -1) return -1;
-	return meshes[nodes[nodeid]->meshID]->triangles[triid].material;
+	if (triId == -1) return -1;
+	if (instId > instances.size()) return -1;
+	int nodeId = instances[instId];
+	if (nodeId > nodes.size()) return -1;
+	int meshId = nodes[nodeId]->meshID;
+	if (triId > meshes[meshId]->triangles.size()) return -1;
+	return meshes[meshId]->triangles[triId].material;
 }
 
 //  +-----------------------------------------------------------------------------+

@@ -25,7 +25,7 @@ void finalizeRender( const float4* accumulator, const int w, const int h, const 
 void prepareFilter( const float4* accumulator, uint4* features, const float4* worldPos, const float4* prevWorldPos,
 	float4* shading, float2* motion, float4* moments, float4* prevMoments, const float4* deltaDepth,
 	const ViewPyramid& prevView, const float j0, const float j1, const float prevj0, const float prevj1,
-	const int w, const int h, const uint spp, const float directClamp, const float indirectClamp, const int flags );
+	const int w, const int h, const uint spp, const float directClamp, const float indirectClamp, const int camIsStationary );
 void shade( const int pathCount, float4* accumulator, const uint stride,
 	uint4* features, float4* worldPos, float4* deltaDepth,
 	float4* pathStates, const float4* hits, float4* connections,
@@ -774,6 +774,9 @@ void RenderCore::Render( const ViewPyramid& view, const Convergence converge, co
 	// gather ray tracing statistics
 	coreStats.totalShadowRays = counters.shadowRays;
 	coreStats.totalExtensionRays = counters.totalExtensionRays;
+	coreStats.probedInstid = counters.probedInstid;
+	coreStats.probedTriid = counters.probedTriid;
+	coreStats.probedDist = counters.probedDist;
 	// present accumulator to final buffer
 	renderTarget.BindSurface();
 	samplesTaken += scrspp;
@@ -824,9 +827,6 @@ void RenderCore::Render( const ViewPyramid& view, const Convergence converge, co
 	coreStats.traceTimeX = coreStats.shadeTime = 0;
 	for (int i = 2; i < MAXPATHLENGTH; i++) coreStats.traceTimeX += CUDATools::Elapsed( traceStart[i], traceEnd[i] );
 	for (int i = 0; i < MAXPATHLENGTH; i++) coreStats.shadeTime += CUDATools::Elapsed( shadeStart[i], shadeEnd[i] );
-	coreStats.probedInstid = counters.probedInstid;
-	coreStats.probedTriid = counters.probedTriid;
-	coreStats.probedDist = counters.probedDist;
 	// store view for next frame
 	prevView = view;
 }

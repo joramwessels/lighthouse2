@@ -127,7 +127,7 @@ void shadeKernel( float4* accumulator, const uint stride,
 		{
 			if (pathLength == 1 || (FLAGS & S_SPECULAR) > 0)
 			{
-				// only camera rays will be treated special
+				// accept light contribution if previous vertex was specular
 				contribution = shadingData.color;
 			}
 			else
@@ -148,7 +148,7 @@ void shadeKernel( float4* accumulator, const uint stride,
 	}
 
 	// detect specular surfaces
-	if (ROUGHNESS < 0.01f) FLAGS |= S_SPECULAR; else FLAGS &= ~S_SPECULAR;
+	if (ROUGHNESS == 0.001f || TRANSMISSION > 0.999f) FLAGS |= S_SPECULAR; /* detect pure speculars; skip NEE for these */ else FLAGS &= ~S_SPECULAR;
 
 	// initialize seed based on pixel index
 	uint seed = WangHash( pathIdx + R0  /* well-seeded xor32 is all you need */ );
@@ -158,6 +158,7 @@ void shadeKernel( float4* accumulator, const uint stride,
 	N *= flip;		// fix geometric normal
 	iN *= flip;		// fix interpolated normal (consistent normal interpolation)
 	fN *= flip;		// fix final normal (includes normal map)
+	if (flip) shadingData.InvertETA(); // leaving medium; eta ==> 1 / eta
 
 	// apply postponed bsdf pdf
 	throughput *= 1.0f / bsdfPdf;
@@ -170,8 +171,8 @@ void shadeKernel( float4* accumulator, const uint stride,
 		if (sampleIdx < 256)
 		{
 			const uint x = (pixelIdx % w) & 127, y = (pixelIdx / w) & 127;
-			r0 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 4 );
-			r1 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 5 );
+			r0 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 4 + 4 * pathLength );
+			r1 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 5 + 4 * pathLength );
 		}
 		else
 		{
@@ -185,7 +186,7 @@ void shadeKernel( float4* accumulator, const uint stride,
 		if (NdotL > 0 && dot( fN, L ) > 0 && lightPdf > 0)
 		{
 			float bsdfPdf;
-			const float3 sampledBSDF = EvaluateBSDF( shadingData, fN, T, D * -1.0f, L, bsdfPdf );
+			const float3 sampledBSDF = EvaluateBSDF( shadingData, fN, T, D * -1.0f, L, bsdfPdf ) * ROUGHNESS;
 			if (bsdfPdf > 0)
 			{
 				// calculate potential contribution
@@ -195,8 +196,8 @@ void shadeKernel( float4* accumulator, const uint stride,
 				// add fire-and-forget shadow ray to the connections buffer
 				const uint shadowRayIdx = atomicAdd( &counters->shadowRays, 1 ); // compaction
 				connections[shadowRayIdx] = make_float4( SafeOrigin( I, L, N, geometryEpsilon ), 0 ); // O4
-				connections[shadowRayIdx + stride * MAXPATHLENGTH] = make_float4( L, dist - 2 * geometryEpsilon ); // D4
-				connections[shadowRayIdx + stride * 2 * MAXPATHLENGTH] = make_float4( contribution, __int_as_float( pixelIdx ) ); // E4
+				connections[shadowRayIdx + stride * 2] = make_float4( L, dist - 2 * geometryEpsilon ); // D4
+				connections[shadowRayIdx + stride * 2 * 2] = make_float4( contribution, __int_as_float( pixelIdx ) ); // E4
 			}
 		}
 	}
@@ -213,16 +214,18 @@ void shadeKernel( float4* accumulator, const uint stride,
 	if (sampleIdx < 256)
 	{
 		const uint x = (pixelIdx % w) & 127, y = (pixelIdx / w) & 127;
-		r3 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 4 );
-		r4 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 5 );
+		r3 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 6 + 4 * pathLength );
+		r4 = blueNoiseSampler( blueNoise, x, y, sampleIdx, 7 + 4 * pathLength );
 	}
 	else
 	{
 		r3 = RandomFloat( seed );
 		r4 = RandomFloat( seed );
 	}
-	const float3 bsdf = SampleBSDF( shadingData, fN, N, T, D * -1.0f, r3, r4, R, newBsdfPdf );
+	bool specular = false;
+	const float3 bsdf = SampleBSDF( shadingData, fN, N, T, D * -1.0f, r3, r4, R, newBsdfPdf, specular );
 	if (newBsdfPdf < EPSILON || isnan( newBsdfPdf )) return;
+	if (specular) FLAGS |= S_SPECULAR;
 
 	// write extension ray
 	const uint extensionRayIdx = atomicAdd( &counters->extensionRays, 1 ); // compact
