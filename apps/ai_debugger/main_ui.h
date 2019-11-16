@@ -69,6 +69,8 @@ static float3 probedPos;
 // Build bar
 static NavMeshConfig* config;
 static bool builderErrorStatus = false;
+static float s_agentHeight, s_agentRadius, s_agentClimb;
+static float s_minRegionArea, s_mergeRegionArea, s_maxEdgeLen;
 
 // Edit bar
 static int selectionID = -1, polygonArea = -1, polygonType = -1;
@@ -90,6 +92,7 @@ void InitFPSPrinter();
 void PrintFPS(float deltaTime);
 void OnSelectNavMesh(int InstID);
 void InitAntTweakBars();
+void ConvertConfigToWorld();
 
 
 //  +-----------------------------------------------------------------------------+
@@ -112,16 +115,26 @@ static void InitGUI(RenderAPI *a_renderer, NavMeshBuilder *a_builder, PhysicsPla
 	scrwidth = &a_scrwidth;
 	scrheight = &a_scrheight;
 	config = a_builder->GetConfig();
+	ConvertConfigToWorld();
 
 	navMeshShader = new NavMeshShader(renderer, "data\\ai\\");
 	s_omcTool = new OffMeshConnectionTool(navMeshBuilder, navMeshShader);
 	s_agentTool = new AgentNavigationTool(navMeshShader);
 	s_pathTool = new PathDrawingTool(navMeshShader, navMeshNavigator);
 
-	// Init AntTweakBar
 	InitAntTweakBars();
-
 	InitFPSPrinter();
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  DrawGUI                                                                    |
+//  |  Performs all GUI GL drawing.                                         LH2'19|
+//  +-----------------------------------------------------------------------------+
+static void DrawGUI(float deltaTime)
+{
+	navMeshShader->DrawGL();
+	PrintFPS(deltaTime);
+	TwDraw();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -143,6 +156,10 @@ static void PostRenderUpdate(float deltaTime)
 	mraysincl = coreStats.totalRays / (coreStats.renderTime * 1000);
 	mraysexcl = coreStats.totalRays / (coreStats.traceTime0 * 1000);
 }
+
+
+
+
 
 //  +-----------------------------------------------------------------------------+
 //  |  RemoveEditAssets                                                           |
@@ -210,15 +227,36 @@ static void RefreshNavigator()
 	agentScale = mat4::Scale(make_float3(radius * 2, height, radius * 2));
 }
 
+
+
+
+
 //  +-----------------------------------------------------------------------------+
-//  |  DrawGUI                                                                    |
-//  |  Performs all GUI GL drawing.                                         LH2'19|
+//  |  ConvertConfigToVoxels                                                      |
+//  |  Converts config parameters from world coordinates to voxels.         LH2'19|
 //  +-----------------------------------------------------------------------------+
-static void DrawGUI(float deltaTime)
+static void ConvertConfigToVoxels()
 {
-	navMeshShader->DrawGL();
-	TwDraw();
-	PrintFPS(deltaTime);
+	config->m_walkableHeight = ceil(s_agentHeight / config->m_ch);
+	config->m_walkableClimb = floor(s_agentClimb / config->m_ch);
+	config->m_walkableRadius = ceil(s_agentRadius / config->m_cs);
+	config->m_minRegionArea = ceil(s_minRegionArea / (config->m_cs * config->m_cs)); // area
+	config->m_mergeRegionArea = ceil(s_mergeRegionArea / (config->m_cs * config->m_cs)); // area
+	config->m_maxEdgeLen = floor(s_maxEdgeLen / config->m_cs);
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  ConvertConfigToWorld                                                       |
+//  |  Converts config parameters from voxels to world coordinates.         LH2'19|
+//  +-----------------------------------------------------------------------------+
+static void ConvertConfigToWorld()
+{
+	s_agentHeight = config->m_walkableHeight * config->m_ch;
+	s_agentClimb = config->m_walkableClimb * config->m_ch;
+	s_agentRadius = config->m_walkableRadius * config->m_cs;
+	s_minRegionArea = config->m_minRegionArea * (config->m_cs * config->m_cs); // area
+	s_mergeRegionArea = config->m_mergeRegionArea * (config->m_cs * config->m_cs); // area
+	s_maxEdgeLen = config->m_maxEdgeLen = config->m_cs;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -454,6 +492,8 @@ void TW_CALL BuildNavMesh(void *data)
 
 	builderErrorStatus = NMSUCCESS;
 	ClearNavMesh();
+	ConvertConfigToVoxels();
+	ConvertConfigToWorld();
 	navMeshBuilder->Build(renderer->GetScene());
 	navMeshBuilder->DumpLog();
 	builderErrorStatus = (bool)navMeshBuilder->GetError();
@@ -469,6 +509,8 @@ void TW_CALL BuildNavMesh(void *data)
 void TW_CALL SaveNavMesh(void *data)
 {
 	builderErrorStatus = NMSUCCESS;
+	ConvertConfigToVoxels();
+	ConvertConfigToWorld();
 	navMeshBuilder->Serialize();
 	navMeshBuilder->DumpLog();
 	builderErrorStatus = (bool)navMeshBuilder->GetError();
@@ -488,6 +530,7 @@ void TW_CALL LoadNavMesh(void *data)
 	navMeshBuilder->DumpLog();
 	builderErrorStatus = (bool)navMeshBuilder->GetError();
 	if (builderErrorStatus) return;
+	ConvertConfigToWorld();
 	RefreshNavigator();
 	*camMoved = true;
 }
@@ -682,9 +725,9 @@ void RefreshBuildBar()
 
 	// create agent block
 	TwAddVarRW(buildBar, "max slope", TW_TYPE_FLOAT, &config->m_walkableSlopeAngle, " group='agent' min=0 max=90");
-	TwAddVarRW(buildBar, "min height", TW_TYPE_INT32, &config->m_walkableHeight, " group='agent' min=1");
-	TwAddVarRW(buildBar, "max climb", TW_TYPE_INT32, &config->m_walkableClimb, " group='agent' min=0");
-	TwAddVarRW(buildBar, "min radius", TW_TYPE_INT32, &config->m_walkableRadius, " group='agent' min=1");
+	TwAddVarRW(buildBar, "min height", TW_TYPE_FLOAT, &s_agentHeight, " group='agent' min=0.01");
+	TwAddVarRW(buildBar, "max climb", TW_TYPE_FLOAT, &s_agentClimb, " group='agent' min=0");
+	TwAddVarRW(buildBar, "min radius", TW_TYPE_FLOAT, &s_agentRadius, " group='agent' min=0.01");
 	TwSetParam(buildBar, "agent", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create filtering block
@@ -696,7 +739,7 @@ void RefreshBuildBar()
 	// create partitioning block
 	TwAddVarRW(buildBar, "partition type", PartitionType, &config->m_partitionType, " group='partitioning'");
 	TwAddVarRW(buildBar, "min region area", TW_TYPE_INT32, &config->m_minRegionArea, " group='partitioning' min=0");
-	TwAddVarRW(buildBar, "min merged region", TW_TYPE_INT32, &config->m_mergeRegionArea, " group='partitioning' min=0");
+	TwAddVarRW(buildBar, "merge region area", TW_TYPE_INT32, &config->m_mergeRegionArea, " group='partitioning' min=0");
 	TwSetParam(buildBar, "partitioning", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create rasterization block

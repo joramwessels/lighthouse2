@@ -13,23 +13,23 @@ You can move the camera using WASD, and rotate using the arrow keys. Hold SHIFT 
 
 #### Building
 
-Navmeshes can be generated using the 'build' tab. The `NavMeshBuilder` class is automatically given the `HostScene` of the renderer, which is initialized in `main.cpp/PrepareScene()`. Navmesh generation is influenced by multiple configurations, the implications of which are more thoroughly explained in the [Pathfinding documentation](../../lib/PathFinding/README.md). The following parameters can be found in the build menu:
+Navmeshes can be generated using the 'build' tab. The `NavMeshBuilder` class is automatically given the `HostScene` of the renderer, which is initialized in `main.cpp/PrepareScene()`. Navmesh generation is influenced by multiple configurations, the implications of which are more thoroughly explained in the [Pathfinding documentation](../../lib/PathFinding/README.md). Some parameters you see here are automatically rasterized to voxels before being passed to the builder. The following parameters can be found in the build menu:
 
 * `AABB min/max`: The bounding box limiting the navmesh. Defaults to the scene bounds when 0.
-* `cell size`: The width and depth of the voxel grids during rasterization.
-* `cell height`: The height of the voxel grids during rasterization.
+* `cell size`: The width and depth of the voxel cells during rasterization.
+* `cell height`: The height of the voxel cells during rasterization.
 * `max slope`: The maximum slope this agent can traverse.
-* `min height`: The minimum height the agent needs (i.e. the agent's height) expressed in voxels.
-* `max climb`: The maximum number of voxels the agent can climb (e.g. stairs).
-* `min radius`: The minimum width/depth the agent needs (i.e. the agent's width).
+* `min height`: The minimum height the agent needs to fit underneath obstacles (i.e. the agent's height).
+* `max climb`: The maximum height the agent can climb (e.g. stairs).
+* `min radius`: The minimum width/depth the agent needs to fit in between obstacles (i.e. the agent's width).
 * `filtering`: Whether to filter for low hanging obstacles/ledge spans/low height spans.
 * `partition type`: The method used for partitioning. The options are:
     * Watershed partitioning
     * Monotone partitioning
     * Layer partitioning
-* `min region area`: The minimum number of connected voxels that constitue a traversable surface. Surfaces with less voxels will be discarded.
-* `min merged region`: The minimum number of voxels needed to be a separate region. When smaller than this, the region will (if possible) be merged with a neighboring region.
-* `max edge length`: The maximum length any navmesh edge can have, expressed in voxels.
+* `min region area`: The minimum area that can constitue surface. Isolated surfaces smaller than this will be discarded.
+* `merge region area`: The area needed to stay a separate region. When smaller than this, the region will (if possible) be merged with a neighboring region.
+* `max edge length`: The maximum length any navmesh edge can have.
 * `max simpl err`: The maximum distance a border edge can deviate from the generated contours.
 * `max verts per poly`: The maximum number of vertices in a polygon, ranging from 3 to 6.
 * `detail sample dist`: The sampling distance used to create the detail mesh.
