@@ -47,7 +47,8 @@ public:
 	};
 	~NavMeshShader() {};
 
-	struct Vert { float3* pos; int idx = -1, instID = -1; std::vector<const dtPoly*> polys; };
+	union Poly { const dtPoly* poly; const dtOffMeshConnection* omc; };
+	struct Vert { float3* pos; int idx = -1, instID = -1; std::vector<Poly> polys; };
 	struct Edge { int v1 = -1, v2 = -1, idx = -1, instID = -1; const dtPoly *poly1 = 0, *poly2 = 0; };
 	struct OMC { const dtOffMeshConnection* omc; int v1InstID = -1, v2InstID = -1, edgeInstID = -1; };
 
@@ -79,7 +80,7 @@ public:
 
 	// Agents
 	void AddAgentToScene(Agent* agent);
-	void RemoveAgent(int instanceID);
+	void RemoveAgentFromScene(Agent* agent);
 	void RemoveAllAgents();
 
 	// Object selection
@@ -107,6 +108,10 @@ public:
 	bool isEdge(int meshID) const { return meshID == m_edgeMeshID; };
 	bool isNavMesh(int meshID) const { return isVert(meshID) || isEdge(meshID) || isPoly(meshID); };
 
+	bool isNormalVert(int idx) const { for (auto i : m_vertOffsets) { if (idx >= i.x && idx < i.y) return true; } return false; };
+	bool isDetailVert(int idx) const { for (auto i : m_vertOffsets) { if (idx >= i.y && idx < i.z) return true; } return false; };
+	bool isOffMeshVert(int idx) const { if (isNormalVert(idx)) { return false; } if (isDetailVert(idx)) { return false; } return true; };
+	inline int GetVertIdx(int instID) { for (auto v : m_verts) if (v.instID == instID) return v.idx; return -1; };
 	inline float3* GetVertPos(int idx) { return m_verts[idx].pos; };
 
 private:
@@ -115,8 +120,9 @@ private:
 	
 	// NavMesh representation
 	std::vector<Vert> m_verts; // (verts, detailVerts, offMeshVerts) * nTiles
-	std::vector<Edge> m_edges;
+	std::vector<Edge> m_edges; // (edges, offMeshEdges) * nTiles
 	std::vector<OMC> m_OMCs;
+	std::vector<int3> m_vertOffsets; // idx offset of (poly, detail, omc) verts per tile
 	void ExtractVertsAndEdges(const dtNavMesh* navmesh);
 	void AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, const dtPoly* poly);
 

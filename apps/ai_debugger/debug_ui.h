@@ -20,88 +20,6 @@
 #include "navmesh_agents.h"
 
 //  +-----------------------------------------------------------------------------+
-//  |  AgentNavigationTool                                                        |
-//  |  Handles selecting- and editing agents.                               LH2'19|
-//  +-----------------------------------------------------------------------------+
-class AgentNavigationTool
-{
-public:
-	AgentNavigationTool(NavMeshShader* shader)
-		: m_shader(shader) {};
-	~AgentNavigationTool() {};
-
-	//  +-----------------------------------------------------------------------------+
-	//  |  AgentNavigationTool::SelectAgent                                           |
-	//  |  Selects an agent, highlights the instance, and plots its path.       LH2'19|
-	//  +-----------------------------------------------------------------------------+
-	void SelectAgent(Agent* agent)
-	{
-		Clear();
-		if (!agent) return;
-
-		m_agent = agent;
-		m_pathv0 = *agent->GetPos();
-
-		if (agent->GetTarget()) // if it's already moving
-		{
-			m_pathv1 = *agent->GetTarget();
-			m_pathSet = true;
-			m_shader->SetPath(agent->GetPath());
-			m_shader->SetPathStart(&m_pathv0);
-			m_shader->SetPathEnd(&m_pathv1);
-		}
-		else // if it's standing still
-		{
-			m_pathSet = false;
-			m_shader->SetPath(0);
-			m_shader->SetPathStart(0);
-			m_shader->SetPathEnd(0);
-		}
-	}
-
-	//  +-----------------------------------------------------------------------------+
-	//  |  AgentNavigationTool::SetTarget                                             |
-	//  |  Assigns a target the the selected agent and updates its navigation.  LH2'19|
-	//  +-----------------------------------------------------------------------------+
-	void SetTarget(float3 pos)
-	{
-		if (!m_agent) return;
-		m_pathv0 = *m_agent->GetPos();
-		m_pathv1 = pos;
-		m_pathSet = true;
-		m_agent->SetTarget(pos);
-		m_agent->UpdateNavigation(0);
-		m_shader->SetPath(m_agent->GetPath());
-		m_shader->SetPathStart(&m_pathv0);
-		m_shader->SetPathEnd(&m_pathv1);
-	}
-
-	//  +-----------------------------------------------------------------------------+
-	//  |  AgentNavigationTool::Clear                                                 |
-	//  |  Resets the internal state, stops highlighting, and removes path.     LH2'19|
-	//  +-----------------------------------------------------------------------------+
-	void Clear()
-	{
-		if (m_agent) // if there was an agent selected at all
-		{
-			m_shader->Deselect();
-			m_shader->SetPath(0);
-			m_shader->SetPathStart(0);
-			m_shader->SetPathEnd(0);
-		}
-		m_agent = 0;
-		m_pathSet = false;
-	}
-
-protected:
-	NavMeshShader* m_shader;
-
-	Agent* m_agent = 0;
-	bool m_pathSet = false;
-	float3 m_pathv0, m_pathv1;
-};
-
-//  +-----------------------------------------------------------------------------+
 //  |  PathDrawingTool                                                            |
 //  |  Handles manual path drawing.                                         LH2'19|
 //  +-----------------------------------------------------------------------------+
@@ -146,12 +64,20 @@ public:
 	//  +-----------------------------------------------------------------------------+
 	void Clear()
 	{
-		m_vertSet = NONESET;
-		m_shader->SetPath(0);
-		m_shader->SetPathStart(0);
-		m_shader->SetPathEnd(0);
-		m_path.clear();
+		if (m_vertSet != NONESET)
+		{
+			m_vertSet = NONESET;
+			m_shader->SetPath(0);
+			m_shader->SetPathStart(0);
+			m_shader->SetPathEnd(0);
+			m_path.clear();
+			m_v0 = m_v1 = float3{ 0, 0, 0 };
+		}
 	}
+
+	const float3* GetStart() const { return &m_v0; };
+	const float3* GetEnd() const { return &m_v1; };
+	const bool* GetReachable() const { return &m_reachable; };
 
 protected:
 	NavMeshShader* m_shader;
@@ -163,3 +89,94 @@ protected:
 	enum { V0SET = 0x1, V1SET = 0x2, BOTHSET = 0x3, NONESET = 0x0 };
 	unsigned char m_vertSet = NONESET;
 };
+
+//  +-----------------------------------------------------------------------------+
+//  |  AgentNavigationTool                                                        |
+//  |  Handles selecting- and editing agents.                               LH2'19|
+//  +-----------------------------------------------------------------------------+
+class AgentNavigationTool
+{
+public:
+	AgentNavigationTool(NavMeshShader* shader, PathDrawingTool* pathTool, SELECTIONTYPE* selectionType)
+		: m_shader(shader), m_pathTool(pathTool), m_selectionType(selectionType) {};
+	~AgentNavigationTool() {};
+
+	//  +-----------------------------------------------------------------------------+
+	//  |  AgentNavigationTool::SelectAgent                                           |
+	//  |  Selects an agent, highlights the instance, and plots its path.       LH2'19|
+	//  +-----------------------------------------------------------------------------+
+	void SelectAgent(Agent* agent)
+	{
+		if (agent == m_agent) return; // nothing changed
+		Clear();
+		if (!agent) return;
+		m_agent = agent;
+		*m_selectionType = SELECTION_AGENT;
+
+		if (agent->GetTarget()) // if it's already moving
+		{
+			m_pathSet = true;
+			m_pathTool->SetStart(*agent->GetPos());
+			m_pathTool->SetEnd(*agent->GetTarget());
+			m_shader->SetPath(agent->GetPath());
+		}
+		else // if it's standing still
+		{
+			m_pathSet = false;
+			m_pathTool->Clear();
+		}
+	}
+
+	//  +-----------------------------------------------------------------------------+
+	//  |  AgentNavigationTool::SetTarget                                             |
+	//  |  Assigns a target the the selected agent and updates its navigation.  LH2'19|
+	//  +-----------------------------------------------------------------------------+
+	void SetTarget(float3 pos)
+	{
+		if (!m_agent) return;
+		m_pathSet = true;
+		m_agent->SetTarget(pos);
+		m_agent->UpdateNavigation(0);
+		m_pathTool->SetStart(*m_agent->GetPos());
+		m_pathTool->SetEnd(pos);
+		m_shader->SetPath(m_agent->GetPath());
+	}
+
+	//  +-----------------------------------------------------------------------------+
+	//  |  AgentNavigationTool::RemoveSelectedAgent                                   |
+	//  |  Removes the selected agent.                                          LH2'19|
+	//  +-----------------------------------------------------------------------------+
+	void RemoveSelectedAgent()
+	{
+		if (!m_agent) return;
+		m_shader->RemoveAgentFromScene(m_agent);
+		m_agent->Kill();
+		Clear();
+	}
+
+	//  +-----------------------------------------------------------------------------+
+	//  |  AgentNavigationTool::Clear                                                 |
+	//  |  Resets the internal state, stops highlighting, and removes path.     LH2'19|
+	//  +-----------------------------------------------------------------------------+
+	void Clear()
+	{
+		if (m_agent) // if there was an agent selected at all
+		{
+			m_shader->Deselect();
+			m_pathTool->Clear();
+			*m_selectionType = SELECTION_NONE;
+		}
+		m_agent = 0;
+		m_pathSet = false;
+	}
+
+protected:
+	NavMeshShader* m_shader;
+	PathDrawingTool* m_pathTool;
+	SELECTIONTYPE* m_selectionType;
+
+	Agent* m_agent = 0;
+	bool m_pathSet = false;
+};
+
+// EOF

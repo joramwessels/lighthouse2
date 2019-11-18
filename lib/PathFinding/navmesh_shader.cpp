@@ -276,15 +276,15 @@ void NavMeshShader::AddAgentToScene(Agent* agent)
 //  |  NavMeshShader::RemoveAgent                                                 |
 //  |  Removes an individual agent from the scene.                          LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::RemoveAgent(int instID)
+void NavMeshShader::RemoveAgentFromScene(Agent* agent)
 {
-	for (std::vector<ShaderAgent>::iterator i = m_agents.end(); i != m_agents.end(); i++)
-		if (i->instID == instID)
+	for (std::vector<ShaderAgent>::iterator i = m_agents.begin(); i != m_agents.end(); i++)
+		if (i->agent == agent)
 		{
-			if (i->instID >= 0) m_renderer->RemoveInstance(instID);
+			if (i->instID >= 0) m_renderer->RemoveInstance(i->instID);
+			m_renderer->SynchronizeSceneData();
 			i->instID = -1;
 			m_agents.erase(i);
-			m_renderer->SynchronizeSceneData();
 			return;
 		}
 }
@@ -597,25 +597,29 @@ void NavMeshShader::ExtractVertsAndEdges(const dtNavMesh* mesh)
 	for (int a = 0; a < mesh->getMaxTiles(); a++) if (mesh->getTile(a)->header)
 	{
 		dtMeshHeader* header = mesh->getTile(a)->header;
-		totalVerts += header->vertCount + header->detailVertCount;
+		totalVerts += header->vertCount + header->detailVertCount + header->offMeshConCount * 2;
 	}
 	m_verts.reserve(totalVerts); // total amount of verts
 	m_edges.reserve(totalVerts); // at least this many edges
 
-	int tileBaseIdx = 0;
+	int tileBaseIdx = 0, nVerts, nDetail, nOMC;
 	for (int a = 0; a < mesh->getMaxTiles(); a++) if (mesh->getTile(a)->header)
 	{
-		// Adding Verts and their positions
 		const dtMeshTile* tile = mesh->getTile(a);
-		for (int i = 0; i < tile->header->vertCount; ++i)
+		nVerts = tile->header->vertCount;
+		nDetail = tile->header->detailVertCount;
+		nOMC = tile->header->offMeshConCount;
+
+		// Adding Verts and their positions
+		for (int i = 0; i < nVerts; ++i)
 		{
 			const float* v = &tile->verts[i * 3];
 			m_verts.push_back({ (float3*)v, tileBaseIdx + i });
 		}
-		for (int i = 0; i < tile->header->detailVertCount; ++i)
+		for (int i = 0; i < nDetail; ++i)
 		{
 			const float* v = &tile->detailVerts[i * 3];
-			m_verts.push_back({ (float3*)v, tileBaseIdx + tile->header->vertCount + i });
+			m_verts.push_back({ (float3*)v, tileBaseIdx + nVerts + i });
 		}
 
 
@@ -627,7 +631,7 @@ void NavMeshShader::ExtractVertsAndEdges(const dtNavMesh* mesh)
 
 			for (int c = 0; c < poly->vertCount; c++) // for every poly vert
 			{
-				m_verts[tileBaseIdx + poly->verts[c]].polys.push_back(poly);
+				m_verts[tileBaseIdx + poly->verts[c]].polys.push_back(Poly{ poly });
 				if (c < poly->vertCount-1) // adding the first n-1 edges
 					AddEdgeToEdgesAndPreventDuplicates(tileBaseIdx + poly->verts[c], tileBaseIdx + poly->verts[c + 1], poly);
 				else // adding the last edge connecting the first vertex
@@ -636,10 +640,23 @@ void NavMeshShader::ExtractVertsAndEdges(const dtNavMesh* mesh)
 		}
 
 		// Adding off-mesh connections
-		for (int j = 0; j < tile->header->offMeshConCount; j++)
-			m_OMCs.push_back({ &tile->offMeshCons[j] });
+		Poly omcPoly;
+		int v1, v2;
+		for (int j = 0; j < nOMC; j++)
+		{
+			const dtOffMeshConnection* omc = &tile->offMeshCons[j];
+			omcPoly.omc = omc;
+			v1 = tileBaseIdx + nVerts + nDetail + (j * 2);
+			v2 = tileBaseIdx + nVerts + nDetail + (j * 2) + 1;
+			m_verts.push_back({ (float3*)omc->pos, v1 });
+			m_verts.back().polys.push_back(omcPoly);
+			m_verts.push_back({ (float3*)(omc->pos+3), v2 });
+			m_verts.back().polys.push_back(omcPoly);
+			m_edges.push_back({ v1, v2, (int)m_edges.size(), -1 });
+		}
 
-		tileBaseIdx += tile->header->vertCount + tile->header->detailVertCount;
+		m_vertOffsets.push_back(int3{ tileBaseIdx, tileBaseIdx + nVerts, tileBaseIdx + nVerts + nDetail });
+		tileBaseIdx += nVerts + nDetail + nOMC * 2;
 	}
 }
 

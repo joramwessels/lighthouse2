@@ -31,7 +31,7 @@ static PhysicsPlaceholder* rigidBodies = 0;
 static NavMeshAgents* navMeshAgents = 0;
 
 static uint scrwidth = 0, scrheight = 0, scrspp = 1;
-static bool posChanges = false, camMoved = false, hasFocus = true, running = true;
+static bool posChanges = false, camMoved = false, hasFocus = true, running = true, paused = false;
 static bool leftClicked = false, rightClicked = false;
 static int2 probeCoords;
 
@@ -121,14 +121,14 @@ int main()
 		deltaTime = timer.elapsed();
 		timer.reset();
 		// Physics
-		posChanges = rigidBodies->Update(deltaTime);
+		if (!paused) posChanges = rigidBodies->Update(deltaTime);
 		if (posChanges) AI_UI::PostPhysicsUpdate(deltaTime);
 		// render
 		renderer->Render( c );
 		AI_UI::PostRenderUpdate(deltaTime);
 		// AI
-		navMeshAgents->UpdateAgentMovement(deltaTime);
-		navMeshAgents->UpdateAgentBehavior(deltaTime); // only updates at a regular interval
+		if (!paused) navMeshAgents->UpdateAgentMovement(deltaTime);
+		if (!paused) navMeshAgents->UpdateAgentBehavior(deltaTime); // only updates at a regular interval
 		// UI
 		if (AI_UI::HandleInput( deltaTime )) camMoved = true;
 		// postprocess
