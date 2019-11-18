@@ -31,7 +31,8 @@ static PhysicsPlaceholder* rigidBodies = 0;
 static NavMeshAgents* navMeshAgents = 0;
 
 static uint scrwidth = 0, scrheight = 0, scrspp = 1;
-static bool posChanges = false, camMoved = false, hasFocus = true, running = true, paused = false;
+static bool posChanges = false, camMoved = false;
+static bool hasFocus = true, running = true, paused = false;
 static bool leftClicked = false, rightClicked = false;
 static int2 probeCoords;
 

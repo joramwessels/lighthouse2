@@ -82,7 +82,10 @@ To fascilitate graphical navmesh editing, the shader can add-, move-, and remove
 
 ## Backlog
 
+* Add code documentation to readme ❗
+
 #### NavMeshBuilder
+* triangle soup only checks meshes, should check instances etc. ❗
 * off-mesh connections
     * debug m_navmesh recalculation ❗
     * test saving/loading ❗
