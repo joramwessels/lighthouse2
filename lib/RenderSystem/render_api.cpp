@@ -154,15 +154,11 @@ HostScene* RenderAPI::GetScene()
 
 int RenderAPI::GetInstanceMeshID(int instID)
 {
-	int nodeID;
-	std::vector<int> instances = renderer->scene->instances;
-	if (instances.size() > instID) nodeID = instances[instID];
-	else return -1;
-
 	HostNode* node;
 	std::vector<HostNode*> nodes = renderer->scene->nodes;
-	if (nodes.size() > nodeID) node = nodes[nodeID];
+	if (nodes.size() > instID) node = nodes[instID];
 	else return -1;
+	if (!node) return -1;
 
 	return node->meshID;
 }
