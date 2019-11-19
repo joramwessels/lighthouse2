@@ -135,7 +135,7 @@ public:
 	const char* GetDir() const { return m_dir; };
 	NavMeshConfig* GetConfig() { return &m_config; };
 	dtNavMesh* GetMesh() const { return m_navMesh; };
-	int GetError() { int e = m_errorCode; m_errorCode = NMSUCCESS; return e; };
+	int GetError() { return m_errorCode; };
 	NavMeshNavigator* GetNavigator() const { return new NavMeshNavigator(m_navMesh, m_config.m_id.c_str()); };
 
 protected:

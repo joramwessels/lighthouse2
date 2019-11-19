@@ -61,7 +61,6 @@ To add an agent, hold SHIFT while right clicking anywhere on the navmesh. Hold S
 
 #### Building
 * extensive QA testing for all build params
-* give instances/meshes a flag that can exclude them from navmesh generation
 
 #### Editing
 * navmesh editing
@@ -81,6 +80,7 @@ To add an agent, hold SHIFT while right clicking anywhere on the navmesh. Hold S
 * add agent editing (dtQueryFilter, speed)
 
 #### UI
+* excluding probed meshes from navmesh generation
 * add mouse movement
     * middle mouse draggin for up/down
     * right mouse dragging for rotation (except when CTRL SHIFT)

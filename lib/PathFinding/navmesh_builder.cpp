@@ -62,7 +62,7 @@ NavMeshBuilder::NavMeshBuilder(const char* dir) : m_dir(dir)
 	m_pmesh = 0;
 	m_dmesh = 0;
 	m_navMesh = 0;
-	m_errorCode = 0;
+	m_errorCode = NMSUCCESS;
 };
 
 //  +-----------------------------------------------------------------------------+
@@ -71,28 +71,43 @@ NavMeshBuilder::NavMeshBuilder(const char* dir) : m_dir(dir)
 //  +-----------------------------------------------------------------------------+
 int NavMeshBuilder::Build(HostScene* scene)
 {
-	if (!scene || !&scene->meshes)
-		RECAST_ERROR(NMRECAST & NMINPUT, "buildNavigation: Input mesh is not specified.");
+	m_errorCode = NMSUCCESS;
+	if (!scene || scene->scene.empty())
+		RECAST_ERROR(NMRECAST & NMINPUT, "ERROR NavMeshBuilder: HostScene is nullptr.");
 
 	printf("generating navmesh... ");
-	
-	// Extracting meshes
-	const std::vector<HostMesh*>* meshes = &scene->meshes;
-	int meshCount = (const int)meshes->size();
+
+	// Extracting triangle soup
+	const std::vector<int> instances = scene->instances;
+	const std::vector<HostMesh*> meshes = scene->meshes;
+	std::vector<HostTri> hostTris;
+	const HostNode* node;
 	std::vector<float3> vertices;
 	std::vector<int3> triangles;
-	for (int i = 0; i < meshCount; i++)
-		for (int j = 0; j < (*meshes)[i]->triangles.size(); j++)
+	int triCount = 0, instancesExcluded = 0;
+	for (int i = 0; i < (int)instances.size(); i++) // for every instance
+	{
+		node = scene->nodes[instances[i]];
+		if (meshes[node->meshID]->excludeFromNavmesh) // skip if excluded
 		{
-			vertices.push_back((*meshes)[i]->triangles[j].vertex0);
-			vertices.push_back((*meshes)[i]->triangles[j].vertex1);
-			vertices.push_back((*meshes)[i]->triangles[j].vertex2);
-			triangles.push_back(make_int3(
-				(i * meshCount + j) * 3 + 0,
-				(i * meshCount + j) * 3 + 1,
-				(i * meshCount + j) * 3 + 2
-			));
+			instancesExcluded++;
+			continue;
 		}
+		hostTris = meshes[node->meshID]->triangles;
+		mat4 transform = node->combinedTransform;
+		for (size_t j = 0; j < hostTris.size(); j++) // for every triangle
+		{
+			vertices.push_back(transform * hostTris[j].vertex0);
+			vertices.push_back(transform * hostTris[j].vertex1);
+			vertices.push_back(transform * hostTris[j].vertex2);
+			triangles.push_back(make_int3(
+				triCount * 3 + 0,
+				triCount * 3 + 1,
+				triCount * 3 + 2
+			));
+			triCount++;
+		}
+	}
 
 	// Initializing bounds
 	if (m_config.m_bmin.x == m_config.m_bmax.x ||
@@ -116,7 +131,11 @@ int NavMeshBuilder::Build(HostScene* scene)
 		m_ctx->log(RC_LOG_PROGRESS, " - Voxel grid: %d x %d cells", m_config.m_width, m_config.m_height);
 		m_ctx->log(RC_LOG_PROGRESS, " - Input mesh: %.1fK verts, %.1fK tris",
 			vertices.size() / 1000.0f, triangles.size() / 1000.0f);
+		m_ctx->log(RC_LOG_PROGRESS, " - Instances excluded: %i", instancesExcluded);
 	}
+
+	if (vertices.empty())
+		RECAST_ERROR(NMRECAST & NMINPUT, "ERROR NavMeshBuilder: Scene is empty.");
 
 	// NavMesh generation
 	RasterizePolygonSoup(
@@ -165,18 +184,18 @@ int NavMeshBuilder::RasterizePolygonSoup(const int vert_count, const float* vert
 	// Allocate voxel heightfield where we rasterize our input data to.
 	m_heightField = rcAllocHeightfield();
 	if (!m_heightField)
-		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'solid'.");
+		RECAST_ERROR(NMRECAST & NMALLOCATION, "ERROR NavMeshBuilder: Out of memory 'solid'.");
 
 	if (!rcCreateHeightfield(m_ctx, *m_heightField, m_config.m_width, m_config.m_height,
 		(const float*)&m_config.m_bmin, (const float*)&m_config.m_bmax, m_config.m_cs, m_config.m_ch))
-		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not create solid heightfield.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "ERROR NavMeshBuilder: Could not create solid heightfield.");
 
 	// Allocate array that can hold triangle area types.
 	// If you have multiple meshes you need to process, allocate
 	// and array which can hold the max number of triangles you need to process.
 	m_triareas = new unsigned char[tri_count];
 	if (!m_triareas)
-		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'm_triareas' (%d).", tri_count);
+		RECAST_ERROR(NMRECAST & NMALLOCATION, "ERROR NavMeshBuilder: Out of memory 'm_triareas' (%d).", tri_count);
 
 	// Find triangles which are walkable based on their slope and rasterize them.
 	// If your input data is multiple meshes, you can transform them here, calculate
@@ -185,7 +204,7 @@ int NavMeshBuilder::RasterizePolygonSoup(const int vert_count, const float* vert
 	rcMarkWalkableTriangles(m_ctx, m_config.m_walkableSlopeAngle, verts, vert_count, tris, tri_count, m_triareas);
 	if (!rcRasterizeTriangles(m_ctx, verts, vert_count, tris,
 		m_triareas, tri_count, *m_heightField, m_config.m_walkableClimb))
-		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not rasterize triangles.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "ERROR NavMeshBuilder: Could not rasterize triangles.");
 
 	return NMSUCCESS;
 }
@@ -226,14 +245,14 @@ int NavMeshBuilder::PartitionWalkableSurface()
 	// between walkable cells will be calculated.
 	m_chf = rcAllocCompactHeightfield();
 	if (!m_chf)
-		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'chf'.");
+		RECAST_ERROR(NMRECAST & NMALLOCATION, "ERROR NavMeshBuilder: Out of memory 'chf'.");
 
 	if (!rcBuildCompactHeightfield(m_ctx, m_config.m_walkableHeight, m_config.m_walkableClimb, *m_heightField, *m_chf))
-		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not build compact data.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "ERROR NavMeshBuilder: Could not build compact data.");
 
 	// Erode the walkable area by agent radius.
 	if (!rcErodeWalkableArea(m_ctx, m_config.m_walkableRadius, *m_chf))
-		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not erode.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "ERROR NavMeshBuilder: Could not erode.");
 
 	//// (Optional) Mark areas.
 	//const ConvexVolume* vols = m_geom->getConvexVolumes();
@@ -245,24 +264,24 @@ int NavMeshBuilder::PartitionWalkableSurface()
 	{
 		// Prepare for region partitioning, by calculating distance field along the walkable surface.
 		if (!rcBuildDistanceField(m_ctx, *m_chf))
-			RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not build distance field.");
+			RECAST_ERROR(NMRECAST & NMCREATION, "ERROR NavMeshBuilder: Could not build distance field.");
 
 		// Partition the walkable surface into simple regions without holes.
 		if (!rcBuildRegions(m_ctx, *m_chf, 0, m_config.m_minRegionArea, m_config.m_mergeRegionArea))
-			RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not build watershed regions.");
+			RECAST_ERROR(NMRECAST & NMCREATION, "ERROR NavMeshBuilder: Could not build watershed regions.");
 	}
 	else if (m_config.m_partitionType == NavMeshConfig::SAMPLE_PARTITION_MONOTONE)
 	{
 		// Partition the walkable surface into simple regions without holes.
 		// Monotone partitioning does not need distancefield.
 		if (!rcBuildRegionsMonotone(m_ctx, *m_chf, 0, m_config.m_minRegionArea, m_config.m_mergeRegionArea))
-			RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not build monotone regions.");
+			RECAST_ERROR(NMRECAST & NMCREATION, "ERROR NavMeshBuilder: Could not build monotone regions.");
 	}
 	else // SAMPLE_PARTITION_LAYERS
 	{
 		// Partition the walkable surface into simple regions without holes.
 		if (!rcBuildLayerRegions(m_ctx, *m_chf, 0, m_config.m_minRegionArea))
-			RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not build layer regions.");
+			RECAST_ERROR(NMRECAST & NMCREATION, "ERROR NavMeshBuilder: Could not build layer regions.");
 	}
 
 	return NMSUCCESS;
@@ -277,10 +296,10 @@ int NavMeshBuilder::ExtractContours()
 	if (m_errorCode) return NMINPUT;
 	m_cset = rcAllocContourSet();
 	if (!m_cset)
-		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'cset'.");
+		RECAST_ERROR(NMRECAST & NMALLOCATION, "ERROR NavMeshBuilder: Out of memory 'cset'.");
 
 	if (!rcBuildContours(m_ctx, *m_chf, m_config.m_maxSimplificationError, m_config.m_maxEdgeLen, *m_cset))
-		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not create contours.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "ERROR NavMeshBuilder: Could not create contours.");
 
 	return NMSUCCESS;
 }
@@ -294,10 +313,10 @@ int NavMeshBuilder::BuildPolygonMesh()
 	if (m_errorCode) return NMINPUT;
 	m_pmesh = rcAllocPolyMesh();
 	if (!m_pmesh)
-		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'pmesh'.");
+		RECAST_ERROR(NMRECAST & NMALLOCATION, "ERROR NavMeshBuilder: Out of memory 'pmesh'.");
 
 	if (!rcBuildPolyMesh(m_ctx, *m_cset, m_config.m_maxVertsPerPoly, *m_pmesh))
-		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not triangulate contours.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "ERROR NavMeshBuilder: Could not triangulate contours.");
 
 	return NMSUCCESS;
 }
@@ -311,10 +330,10 @@ int NavMeshBuilder::CreateDetailMesh()
 	if (m_errorCode) return NMINPUT;
 	m_dmesh = rcAllocPolyMeshDetail();
 	if (!m_dmesh)
-		RECAST_ERROR(NMRECAST & NMALLOCATION, "buildNavigation: Out of memory 'pmdtl'.");
+		RECAST_ERROR(NMRECAST & NMALLOCATION, "ERROR NavMeshBuilder: Out of memory 'pmdtl'.");
 
 	if (!rcBuildPolyMeshDetail(m_ctx, *m_pmesh, *m_chf, m_config.m_detailSampleDist, m_config.m_detailSampleMaxError, *m_dmesh))
-		RECAST_ERROR(NMRECAST & NMCREATION, "buildNavigation: Could not build detail mesh.");
+		RECAST_ERROR(NMRECAST & NMCREATION, "ERROR NavMeshBuilder: Could not build detail mesh.");
 
 	return NMSUCCESS;
 }
@@ -393,14 +412,14 @@ int NavMeshBuilder::CreateDetourData()
 		params.buildBvTree = true;
 
 		if (!dtCreateNavMeshData(&params, &navData, &navDataSize))
-			RECAST_ERROR(NMDETOUR & NMCREATION, "Could not build Detour navmesh.");
+			RECAST_ERROR(NMDETOUR & NMCREATION, "ERROR NavMeshBuilder: Could not build Detour navmesh.");
 
 		if (m_navMesh) dtFreeNavMesh(m_navMesh);
 		m_navMesh = dtAllocNavMesh();
 		if (!m_navMesh)
 		{
 			dtFree(navData);
-			RECAST_ERROR(NMDETOUR & NMALLOCATION, "Could not allocate Detour navmesh");
+			RECAST_ERROR(NMDETOUR & NMALLOCATION, "ERROR NavMeshBuilder: Could not allocate Detour navmesh");
 		}
 
 		dtStatus status;
@@ -409,7 +428,7 @@ int NavMeshBuilder::CreateDetourData()
 		if (dtStatusFailed(status))
 		{
 			dtFree(navData);
-			RECAST_ERROR(NMDETOUR & NMCREATION, "Could not init Detour navmesh");
+			RECAST_ERROR(NMDETOUR & NMCREATION, "ERROR NavMeshBuilder: Could not init Detour navmesh");
 		}
 	}
 
