@@ -561,6 +561,9 @@ bool operator == ( const mat4& a, const mat4& b );
 bool operator != ( const mat4& a, const mat4& b );
 float4 operator * ( const mat4& a, const float4& b );
 float4 operator * ( const float4& a, const mat4& b );
+float3 operator * (const mat4& a, const float3& b );
+float3 operator * ( const float3& a, const mat4& b );
+
 
 class quat // based on https://github.com/adafruit
 {

@@ -99,6 +99,8 @@ float4 operator * ( const float4& b, const mat4& a )
 		a.cell[8] * b.x + a.cell[9] * b.y + a.cell[10] * b.z + a.cell[11] * b.w,
 		a.cell[12] * b.x + a.cell[13] * b.y + a.cell[14] * b.z + a.cell[15] * b.w );
 }
+float3 operator * (const mat4& a, const float3& b) { return make_float3(a * make_float4(b, 1)); }
+float3 operator * (const float3& a, const mat4& b) { return make_float3(make_float4(a, 1) * b); }
 
 //  +-----------------------------------------------------------------------------+
 //  |  Bitmap functions.                                                    LH2'19|
