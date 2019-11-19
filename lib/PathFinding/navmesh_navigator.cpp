@@ -16,13 +16,16 @@
 #include <stdio.h> // fopen_s, sprintf_s, fclose, fwrite
 
 #include "rendersystem.h"		// FileExists
+
 #include "navmesh_navigator.h"
 
 namespace lighthouse2 {
 
-#define DETOUR_ERROR(X, ...) return NavMeshError(X, __VA_ARGS__)
-#define DETOUR_LOG(...) NavMeshError(NMSUCCESS, __VA_ARGS__)
-#define POLYPATH_SIZE 128
+#define NAVMESHIO_ERROR(X, ...) return NavMeshError(0, X, "ERROR NavMeshIO: ", __VA_ARGS__)
+#define DETOUR_ERROR(X, ...) return NavMeshError(0, X, "ERROR NavMeshNavigator: ", __VA_ARGS__)
+#define DETOUR_LOG(...) NavMeshError(0, NavMeshStatus::SUCCESS, "", __VA_ARGS__)
+
+#define POLYPATH_SIZE 128 // size of the intermediate non-smoothed path of dtPolyRefs in 'FindPathConstSize'
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshNavigator::FindPathConstSize                                        |
@@ -31,16 +34,19 @@ namespace lighthouse2 {
 //  |  *reachable* specifies whether the end poly matches the last path poly.     |
 //  |  *maxCount* specifies the maximum path length in nodes.               LH2'19|
 //  +-----------------------------------------------------------------------------+
-int NavMeshNavigator::FindPathConstSize(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount, const dtQueryFilter* filter)
+NavMeshStatus NavMeshNavigator::FindPathConstSize(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount, const dtQueryFilter* filter) const
 {
-	if (!path) DETOUR_ERROR(NMDETOUR & NMINPUT, "Pathfinding failed: *path* is a nullpointer");
+	if (!path)
+		DETOUR_ERROR(NavMeshStatus::DT | NavMeshStatus::INPUT, "Pathfinding failed: *path* is a nullpointer\n");
 
 	// Resolve positions into navmesh polygons
 	dtPolyRef startRef, endRef;
 	float3 firstPos, endPos; // tmp
-	m_errorCode = FindNearestPoly(start, startRef, firstPos);
-	m_errorCode = FindNearestPoly(end, endRef, endPos);
-	if (m_errorCode) return m_errorCode;
+	NavMeshStatus status = NavMeshStatus::SUCCESS;
+	status = FindNearestPoly(start, startRef, firstPos);
+	if (status.Failed()) return status;
+	status = FindNearestPoly(end, endRef, endPos);
+	if (status.Failed()) return status;
 
 	// When start & end are on the same poly
 	if (startRef == endRef)
@@ -49,7 +55,7 @@ int NavMeshNavigator::FindPathConstSize(float3 start, float3 end, PathNode* path
 		path[1] = PathNode{ end, GetPoly(endRef) };
 		count = 2;
 		reachable = true;
-		return NMSUCCESS;
+		return NavMeshStatus::SUCCESS;
 	}
 
 	// Calculate path
@@ -58,7 +64,7 @@ int NavMeshNavigator::FindPathConstSize(float3 start, float3 end, PathNode* path
 	if (dtStatusFailed(err))
 	{
 		free(polyPath);
-		DETOUR_ERROR(NMDETOUR, "Couldn't find a path from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)",
+		DETOUR_ERROR(NavMeshStatus::DT, "Couldn't find a path from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)\n",
 			start.x, start.y, start.z, end.x, end.y, end.z);
 	}
 	reachable = (polyPath[count - 1] == endRef);
@@ -74,7 +80,7 @@ int NavMeshNavigator::FindPathConstSize(float3 start, float3 end, PathNode* path
 		free(straightPath);
 		free(spPolys);
 		free(spFlags);
-		DETOUR_ERROR(NMDETOUR, "Couldn't find a straight path from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)",
+		DETOUR_ERROR(NavMeshStatus::DT, "Couldn't find a straight path from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)\n",
 			start.x, start.y, start.z, end.x, end.y, end.z);
 	}
 
@@ -89,7 +95,7 @@ int NavMeshNavigator::FindPathConstSize(float3 start, float3 end, PathNode* path
 	free(spPolys);
 	free(spFlags);
 
-	return NMSUCCESS;
+	return NavMeshStatus::SUCCESS;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -99,32 +105,34 @@ int NavMeshNavigator::FindPathConstSize(float3 start, float3 end, PathNode* path
 //  |  *reachable* specifies whether the end poly matches the last path poly.     |
 //  |  *maxCount* specifies the maximum path length in nodes.               LH2'19|
 //  +-----------------------------------------------------------------------------+
-int NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount, const dtQueryFilter* filter)
+NavMeshStatus NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount, const dtQueryFilter* filter) const
 {
-	if (!path) DETOUR_ERROR(NMDETOUR & NMINPUT, "Pathfinding failed: *path* is a nullpointer");
+	if (!path) DETOUR_ERROR(NavMeshStatus::DT | NavMeshStatus::INPUT, "Pathfinding failed: *path* is a nullpointer\n");
 
 	// Resolve positions into navmesh polygons
 	dtPolyRef startRef, endRef;
 	float3 firstPos, endPos; // first/last pos on poly
-	m_errorCode = FindNearestPoly(start, startRef, firstPos);
-	m_errorCode = FindNearestPoly(end, endRef, endPos);
-	if (m_errorCode) return m_errorCode;
+	NavMeshStatus status = NavMeshStatus::SUCCESS;
+	status = FindNearestPoly(start, startRef, firstPos);
+	if (status.Failed()) return status;
+	status = FindNearestPoly(end, endRef, endPos);
+	if (status.Failed()) return status;
 
 	// Add the start pos
 	maxCount--;
-	m_errorCode = FindClosestPointOnPoly(startRef, start, firstPos);
-	if (m_errorCode) return m_errorCode;
+	status = FindClosestPointOnPoly(startRef, start, firstPos);
+	if (status.Failed()) return status;
 	path[0] = PathNode{ firstPos, GetPoly(startRef) };
 
 	// When start & end are on the same poly
 	if (startRef == endRef)
 	{
-		m_errorCode = FindClosestPointOnPoly(endRef, end, endPos);
-		if (m_errorCode) return m_errorCode;
+		status = FindClosestPointOnPoly(endRef, end, endPos);
+		if (status.Failed()) return status;
 		path[1] = PathNode{ endPos, GetPoly(endRef) };
 		count = 2;
 		reachable = true;
-		return NMSUCCESS;
+		return NavMeshStatus::SUCCESS;
 	}
 
 	// Calculate path
@@ -133,7 +141,7 @@ int NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 end, PathNod
 	if (dtStatusFailed(err))
 	{
 		free(polyPath);
-		DETOUR_ERROR(NMDETOUR, "Couldn't find a path from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)",
+		DETOUR_ERROR(NavMeshStatus::DT, "Couldn't find a path from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)\n",
 			start.x, start.y, start.z, end.x, end.y, end.z);
 	}
 
@@ -141,8 +149,8 @@ int NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 end, PathNod
 	float3 iterPos = firstPos;
 	for (int i = 0; i < count; i++)
 	{
-		m_errorCode = FindClosestPointOnPoly(polyPath[i], iterPos, iterPos);
-		if (m_errorCode) { free(polyPath); return m_errorCode; }
+		status = FindClosestPointOnPoly(polyPath[i], iterPos, iterPos);
+		if (status.Failed()) { free(polyPath); return status; }
 		path[i + 1] = PathNode{ iterPos, GetPoly(polyPath[i]) };
 	}
 
@@ -150,16 +158,16 @@ int NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 end, PathNod
 	bool pathComplete = (count < maxCount); // means there's room for endPos
 	if (pathComplete && (endRef == polyPath[count - 1])) // complete & reachable
 	{
-		m_errorCode = FindClosestPointOnPoly(endRef, end, endPos);
-		if (m_errorCode) { free(polyPath); return m_errorCode; }
+		status = FindClosestPointOnPoly(endRef, end, endPos);
+		if (status.Failed()) { free(polyPath); return status; }
 		path[count + 1] = PathNode{ endPos, GetPoly(endRef) };
 		count++;
 		reachable = true;
 	}
 	else if (pathComplete) // path ended, poly unreachable
 	{
-		m_errorCode = FindClosestPointOnPoly(polyPath[count - 1], end, endPos);
-		if (m_errorCode) { free(polyPath); return m_errorCode; }
+		status = FindClosestPointOnPoly(polyPath[count - 1], end, endPos);
+		if (status.Failed()) { free(polyPath); return status; }
 		path[count + 1] = PathNode{ endPos, GetPoly(polyPath[count - 1]) };
 		count++;
 		reachable = false;
@@ -172,7 +180,7 @@ int NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 end, PathNod
 
 	count++; // to include firstPos
 
-	return NMSUCCESS;
+	return NavMeshStatus::SUCCESS;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -182,15 +190,15 @@ int NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 end, PathNod
 //  |  *distToEnd* is the error between the last position and the target.         |
 //  |  *maxCount* specifies the number of allocated elements.               LH2'19|
 //  +-----------------------------------------------------------------------------+
-int NavMeshNavigator::FindPath(float3 start, float3 end, std::vector<PathNode>& path, bool& reachable, int maxCount)
+NavMeshStatus NavMeshNavigator::FindPath(float3 start, float3 end, std::vector<PathNode>& path, bool& reachable, int maxCount) const
 {
 	path.resize(maxCount);
 	int pathCount;
-	m_errorCode = FindPathConstSize(start, end, path.data(), pathCount, reachable, maxCount);
-	if (m_errorCode) return m_errorCode;
+	NavMeshStatus status = FindPathConstSize(start, end, path.data(), pathCount, reachable, maxCount);
+	if (status.Failed()) return status;
 	path.resize(pathCount);
 	path.shrink_to_fit();
-	return NMSUCCESS;
+	return NavMeshStatus::SUCCESS;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -198,13 +206,13 @@ int NavMeshNavigator::FindPath(float3 start, float3 end, std::vector<PathNode>& 
 //  |  Finds the nearest pos on the specified *polyID* from the given position.   |
 //  |  *closest* is the output.                                             LH2'19|
 //  +-----------------------------------------------------------------------------+
-int NavMeshNavigator::FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float3& closest, bool* posOverPoly)
+NavMeshStatus NavMeshNavigator::FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float3& closest, bool* posOverPoly) const
 {
 	dtStatus err = m_query->closestPointOnPoly(polyID, (float*)&pos, (float*)&closest, posOverPoly);
 	if (dtStatusFailed(err))
-		DETOUR_ERROR(NMDETOUR, "Closest point on poly '%i' to (%.2f, %.2f, %.2f) could not be found",
+		DETOUR_ERROR(NavMeshStatus::DT, "Closest point on poly '%i' to (%.2f, %.2f, %.2f) could not be found\n",
 			polyID, pos.x, pos.y, pos.z);
-	return NMSUCCESS;
+	return NavMeshStatus::SUCCESS;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -212,12 +220,12 @@ int NavMeshNavigator::FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float
 //  |  Finds the polygon closest to the specified position. *polyID* and          |
 //  |  *polyPos* are the ouput. The position on the polygon is optional.    LH2'19|
 //  +-----------------------------------------------------------------------------+
-int NavMeshNavigator::FindNearestPoly(float3 pos, dtPolyRef& polyID, float3& polyPos) const
+NavMeshStatus NavMeshNavigator::FindNearestPoly(float3 pos, dtPolyRef& polyID, float3& polyPos) const
 {
 	dtStatus status = m_query->findNearestPoly((float*)&pos, m_polyFindExtention, &s_filter, &polyID, (float*)&polyPos);
 	if (dtStatusFailed(status))
-		DETOUR_ERROR(NMDETOUR, "Couldn't find the nearest poly to (%.2f, %.2f, %.2f)", pos.x, pos.y, pos.z);
-	return NMSUCCESS;
+		DETOUR_ERROR(NavMeshStatus::DT, "Couldn't find the nearest poly to (%.2f, %.2f, %.2f)\n", pos.x, pos.y, pos.z);
+	return NavMeshStatus::SUCCESS;
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -226,7 +234,6 @@ int NavMeshNavigator::FindNearestPoly(float3 pos, dtPolyRef& polyID, float3& pol
 //  +-----------------------------------------------------------------------------+
 void NavMeshNavigator::Clean()
 {
-	m_errorCode = NMSUCCESS;
 	if (m_navmesh && m_owner) dtFreeNavMesh(m_navmesh);
 	m_navmesh = 0;
 	dtFreeNavMeshQuery(m_query);
@@ -245,6 +252,26 @@ const dtPoly* NavMeshNavigator::GetPoly(dtPolyRef ref) const
 	else return 0;
 }
 
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshNavigator::CreateNavMeshQuery                                       |
+//  |  Creates NavMesQuery from a navmesh and checks for errors.            LH2'19|
+//  +-----------------------------------------------------------------------------+
+int NavMeshNavigator::CreateNavMeshQuery()
+{
+	if (!m_navmesh)
+		DETOUR_ERROR(NavMeshStatus::DT | NavMeshStatus::MEM, "NavMeshQuery creation failed: m_navmesh is nullptr\n");
+	m_query = dtAllocNavMeshQuery();
+	if (!m_query)
+		DETOUR_ERROR(NavMeshStatus::DT | NavMeshStatus::MEM, "NavMesh Query could not be allocated\n");
+	dtStatus status = m_query->init(m_navmesh, DETOUR_MAX_NAVMESH_NODES);
+	if (dtStatusFailed(status))
+	{
+		dtFreeNavMeshQuery(m_query);
+		DETOUR_ERROR(NavMeshStatus::DT | NavMeshStatus::MEM, "Could not init Detour navmesh query\n");
+	}
+	return NavMeshStatus::SUCCESS;
+}
+
 
 
 // Definitions required for NavMesh serialization
@@ -257,15 +284,17 @@ struct NavMeshTileHeader { dtTileRef tileRef; int dataSize; };
 //  |  Serialize                                                                  |
 //  |  Writes the navmesh to storage for future use.                        LH2'19|
 //  +-----------------------------------------------------------------------------+
-int SerializeNavMesh(const char* dir, const char* ID, const dtNavMesh* navMesh)
+NavMeshStatus SerializeNavMesh(const char* dir, const char* ID, const dtNavMesh* navMesh)
 {
+
 	// Opening navmesh file for writing
-	char filename[128];
-	sprintf_s(filename, "%s%s.navmesh", dir, ID);
-	if (!navMesh) DETOUR_ERROR(NMINPUT & NMDETOUR, "Can't serialize '%s', dtNavMesh is nullpointer", ID);
+	Timer timer;
+	std::string filename = std::string(dir) + ID + ".navmesh";
+	DETOUR_LOG("Saving NavMesh '%s'... ", filename.c_str());
+	if (!navMesh) NAVMESHIO_ERROR(NavMeshStatus::INPUT | NavMeshStatus::DT, "Can't serialize '%s', dtNavMesh is nullptr\n", ID);
 	FILE* fp;
-	fopen_s(&fp, filename, "wb");
-	if (!fp) DETOUR_ERROR(NMIO, "Filename '%s' can't be opened", filename);
+	fopen_s(&fp, filename.c_str(), "wb");
+	if (!fp) NAVMESHIO_ERROR(NavMeshStatus::IO, "Filename '%s' can't be opened\n", filename.c_str());
 
 	// Store header.
 	NavMeshSetHeader header;
@@ -296,25 +325,27 @@ int SerializeNavMesh(const char* dir, const char* ID, const dtNavMesh* navMesh)
 	}
 	fclose(fp);
 
-	DETOUR_LOG("NavMesh '%s' saved as '%s'", ID, filename);
-	return NMSUCCESS;
+	DETOUR_LOG("%.3fms\n", timer.elapsed());
+	return NavMeshStatus::SUCCESS;
 }
 
 //  +-----------------------------------------------------------------------------+
 //  |  DeserializeNavMesh                                                         |
 //  |  Loads a serialized NavMesh from storage and checks for errors.       LH2'19|
 //  +-----------------------------------------------------------------------------+
-int DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh*& navmesh)
+NavMeshStatus DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh*& navmesh)
 {
+
 	// Opening file
-	char filename[128];
-	sprintf_s(filename, "%s%s.navmesh", dir, ID);
-	if (!FileExists(filename))
-		DETOUR_ERROR(NMIO, "NavMesh file '%s' does not exist", filename);
+	Timer timer;
+	std::string filename = std::string(dir) + ID + ".navmesh";
+	DETOUR_LOG("Loading NavMesh '%s'... ", filename.c_str());
+	if (!FileExists(filename.c_str()))
+		NAVMESHIO_ERROR(NavMeshStatus::IO, "NavMesh file '%s' does not exist\n", filename.c_str());
 	FILE* fp;
-	fopen_s(&fp, filename, "rb");
+	fopen_s(&fp, filename.c_str(), "rb");
 	if (!fp)
-		DETOUR_ERROR(NMIO, "NavMesh file '%s' could not be opened", filename);
+		NAVMESHIO_ERROR(NavMeshStatus::IO, "NavMesh file '%s' could not be opened\n", filename.c_str());
 
 	// Reading header
 	NavMeshSetHeader header;
@@ -322,17 +353,17 @@ int DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh*& navmesh)
 	if (readLen != 1)
 	{
 		fclose(fp);
-		DETOUR_ERROR(NMIO, "NavMesh file '%s' is corrupted", filename);
+		NAVMESHIO_ERROR(NavMeshStatus::IO, "NavMesh file '%s' is corrupted\n", filename.c_str());
 	}
 	if (header.magic != NAVMESHSET_MAGIC)
 	{
 		fclose(fp);
-		DETOUR_ERROR(NMIO, "NavMesh file '%s' is corrupted", filename);
+		NAVMESHIO_ERROR(NavMeshStatus::IO, "NavMesh file '%s' is corrupted\n", filename.c_str());
 	}
 	if (header.version != NAVMESHSET_VERSION)
 	{
 		fclose(fp);
-		DETOUR_ERROR(NMIO, "NavMesh file '%s' has the wrong navmesh set version", filename);
+		NAVMESHIO_ERROR(NavMeshStatus::IO, "NavMesh file '%s' has the wrong navmesh set version\n", filename.c_str());
 	}
 
 	// Initializing navmesh with header info
@@ -340,14 +371,14 @@ int DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh*& navmesh)
 	if (!navmesh)
 	{
 		fclose(fp);
-		DETOUR_ERROR(NMDETOUR & NMALLOCATION, "NavMesh for '%s' could not be allocated", ID);
+		NAVMESHIO_ERROR(NavMeshStatus::DT | NavMeshStatus::MEM, "NavMesh for '%s' could not be allocated\n", ID);
 	}
 	dtStatus status = navmesh->init(&header.params);
 	if (dtStatusFailed(status))
 	{
 		fclose(fp);
 		dtFreeNavMesh(navmesh);
-		DETOUR_ERROR(NMDETOUR & NMCREATION, "NavMesh for '%s' failed to initialize", ID);
+		NAVMESHIO_ERROR(NavMeshStatus::DT | NavMeshStatus::INIT, "NavMesh for '%s' failed to initialize\n", ID);
 	}
 
 	// Reading tiles
@@ -360,7 +391,7 @@ int DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh*& navmesh)
 		{
 			fclose(fp);
 			dtFreeNavMesh(navmesh);
-			DETOUR_ERROR(NMIO, "NavMesh file '%s' is corrupted", filename);
+			NAVMESHIO_ERROR(NavMeshStatus::IO, "NavMesh file '%s' is corrupted\n", filename.c_str());
 		}
 		if (!tileHeader.tileRef || !tileHeader.dataSize) break;
 
@@ -374,34 +405,14 @@ int DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh*& navmesh)
 			dtFree(data);
 			dtFreeNavMesh(navmesh);
 			fclose(fp);
-			DETOUR_ERROR(NMIO, "NavMesh file '%s' is corrupted", filename);
+			NAVMESHIO_ERROR(NavMeshStatus::IO, "NavMesh file '%s' is corrupted\n", filename.c_str());
 		}
 		navmesh->addTile(data, tileHeader.dataSize, DT_TILE_FREE_DATA, tileHeader.tileRef, 0);
 	}
 	fclose(fp);
 
-	DETOUR_LOG("NavMesh '%s' loaded from '%s'", ID, filename);
-	return NMSUCCESS;
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  CreateNavMeshQuery                                                         |
-//  |  Creates NavMesQuery from a navmesh and checks for errors.            LH2'19|
-//  +-----------------------------------------------------------------------------+
-int GetNavMeshQuery(dtNavMesh* navmesh, dtNavMeshQuery** query)
-{
-	*query = dtAllocNavMeshQuery();
-	if (!*query)
-	{
-		DETOUR_ERROR(NMDETOUR & NMALLOCATION, "NavMesh Query could not be allocated");
-	}
-	dtStatus status = (*query)->init(navmesh, DETOUR_MAX_NAVMESH_NODES);
-	if (dtStatusFailed(status))
-	{
-		dtFreeNavMeshQuery(*query);
-		DETOUR_ERROR(NMDETOUR & NMALLOCATION, "Could not init Detour navmesh query");
-	}
-	return NMSUCCESS;
+	DETOUR_LOG("%.3fms\n", timer.elapsed());
+	return NavMeshStatus::SUCCESS;
 }
 
 } // namespace Lighthouse2

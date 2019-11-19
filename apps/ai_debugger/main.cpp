@@ -57,6 +57,7 @@ void PrepareScene()
 	int meshID = renderer->AddMesh("nav_test.obj", "data\\", 1.0f);
 	renderer->GetScene()->meshes[meshID]->name = "Input Mesh";
 	int instID = renderer->AddInstance(meshID, mat4::Identity());
+	int instID2 = renderer->AddInstance(meshID, mat4::Translate(0, 0, 30));
 	int rootNode = renderer->FindNode( "RootNode (gltf orientation matrix)" );
 	renderer->SetNodeTransform( rootNode, mat4::RotateX( -PI / 2 ) );
 	//int lightMat = renderer->AddMaterial( make_float3( 100, 100, 80 ) );

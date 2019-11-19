@@ -73,10 +73,13 @@ void NavMeshShader::DrawGL() const
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddNavMeshToScene()
 {
+	printf("Adding NavMesh assets to scene...\n");
+	Timer timer;
 	AddPolysToScene();
 	AddVertsToScene();
 	AddEdgesToScene();
 	AddOMCsToScene();
+	printf("NavMesh assets added in %.3fms\n", timer.elapsed());
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -773,13 +776,23 @@ void NavMeshShader::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 void NavMeshShader::SaveAsMesh(NavMeshNavigator* navmesh)
 {
 	// Opening file
+	Timer timer;
 	const char* ID = navmesh->GetID();
 	std::string filename = m_dir + m_meshFileName;
+	printf("Saving navmesh as wavefront in '%s'... ", filename.c_str());
 	FILE* f;
 	fopen_s(&f, filename.c_str(), "w");
-	if (!f) printf("File '%s' could not be opened", filename.c_str());
+	if (!f)
+	{
+		printf("ERROR: File '%s' could not be opened\n", filename.c_str());
+		return;
+	}
 	const dtNavMesh* mesh = navmesh->GetDetourMesh();
-	if (!mesh) printf("Navmesh '%s' can't be saved as mesh, navmesh is null", ID);
+	if (!mesh)
+	{
+		printf("ERROR: navmesh is null\n", ID);
+		return;
+	}
 
 	// Writing header
 	fprintf(f, "#\n# Wavefront OBJ file\n");
@@ -795,7 +808,7 @@ void NavMeshShader::SaveAsMesh(NavMeshNavigator* navmesh)
 	}
 
 	fclose(f);
-	printf("NavMesh mesh saved as '%s'", filename.c_str());
+	printf("%.3fms\n", timer.elapsed());
 }
 
 } // namespace lighthouse2

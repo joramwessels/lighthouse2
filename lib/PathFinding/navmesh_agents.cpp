@@ -80,7 +80,7 @@ bool Agent::UpdateMovement(float deltaTime)
 bool Agent::UpdateNavigation(float deltaTime)
 {
 	if (!m_pathEnd) return false;
-	if (!m_navmesh->FindPathConstSize(m_rb->m_pos, *m_pathEnd, m_path.data(), m_pathCount, m_reachable, m_maxPathCount))
+	if (m_navmesh->FindPathConstSize(m_rb->m_pos, *m_pathEnd, m_path.data(), m_pathCount, m_reachable, m_maxPathCount).Success())
 		m_targetIdx = 0;
 	for (int i = m_pathCount; i < m_maxPathCount; i++) m_path[i] = m_path[m_pathCount-1];
 	return true;

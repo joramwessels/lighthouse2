@@ -17,18 +17,15 @@
 
 #include <vector>
 
-//#ifdef PATHFINDINGBUILD
-	#include "DetourNavMeshQuery.h" // dtNavMesh, dtNavMeshQuery, dtQueryFilter
-//#endif
+#include "DetourNavMeshQuery.h" // dtNavMesh, dtNavMeshQuery, dtQueryFilter
 
-#include "system.h"	// float3
-#include "navmesh_common.h"		// NavMeshError, DETOUR_MAX_NAVMESH_NODES, NMINPUT
+#include "system.h"			// float3
+#include "navmesh_common.h"	// NavMeshStatus, DETOUR_MAX_NAVMESH_NODES
 
 namespace lighthouse2 {
 
-int SerializeNavMesh(const char* dir, const char* ID, const dtNavMesh* navmesh);
-int DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh*& navmesh);
-int GetNavMeshQuery(dtNavMesh* navmesh, dtNavMeshQuery** query);
+NavMeshStatus SerializeNavMesh(const char* dir, const char* ID, const dtNavMesh* navmesh);
+NavMeshStatus DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh*& navmesh);
 
 static const dtQueryFilter s_filter; // default empty filter
 
@@ -41,36 +38,36 @@ class NavMeshNavigator
 public:
 
 	// constructor/destructor
-	NavMeshNavigator(const char* dir, const char* ID) : m_ID(ID) { m_errorCode = Load(dir, ID); };
-	NavMeshNavigator(dtNavMesh* navmesh, const char* ID="NO_ID") : m_ID(ID)
+	NavMeshNavigator(const char* dir, const char* ID, NavMeshStatus* errorCode=0) : m_ID(ID)
 	{
-		if (!navmesh) m_errorCode = NavMeshError(NMINPUT,
-			"NavMeshNavigator was initialized with a nullpointer navmesh");
-		else
-		{
-			m_navmesh = navmesh;
-			m_errorCode = GetNavMeshQuery(m_navmesh, &m_query);
-			m_owner = false;
-		}
+		NavMeshStatus status = Load(dir, ID);
+		if (errorCode) *errorCode = status;
+	};
+	NavMeshNavigator(dtNavMesh& navmesh, const char* ID="DEFAULT_ID", NavMeshStatus* errorCode=0) : m_ID(ID), m_navmesh(&navmesh)
+	{
+		NavMeshStatus status = CreateNavMeshQuery();
+		if (errorCode) *errorCode = status;
+		m_owner = false;
 	}
 	~NavMeshNavigator() { Clean(); };
 
-	int Load(const char* dir, const char* ID)
+	NavMeshStatus Load(const char* dir, const char* ID)
 	{
-		m_errorCode = DeserializeNavMesh(dir, ID, m_navmesh);
-		if (m_errorCode) return m_errorCode;
-		m_errorCode = GetNavMeshQuery(m_navmesh, &m_query);
+		if (m_navmesh) Clean();
+		NavMeshStatus status = DeserializeNavMesh(dir, ID, m_navmesh);
+		if (status.Failed()) return status;
 		m_owner = true;
-		return m_errorCode;
+		status = CreateNavMeshQuery();
+		return status;
 	}
 
-	struct PathNode { float3 pos; const dtPoly* poly; }; // poly is nullptr if not on a poly
+	struct PathNode { float3 pos; const dtPoly* poly; }; // dtPoly* is nullptr if not on a poly
 
-	int FindNearestPoly(float3 pos, dtPolyRef& polyID, float3& polyPos) const;
-	int FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float3& nearestPoint, bool* posOverPoly=0);
-	int FindPathConstSize(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount=64, const dtQueryFilter* filter=&s_filter);
-	int FindPathConstSize_Legacy(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount = 64, const dtQueryFilter* filter = &s_filter);
-	int FindPath(float3 start, float3 end, std::vector<PathNode>& path, bool& reachable, int maxCount=64);
+	NavMeshStatus FindNearestPoly(float3 pos, dtPolyRef& polyID, float3& polyPos) const;
+	NavMeshStatus FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float3& nearestPoint, bool* posOverPoly=0) const;
+	NavMeshStatus FindPathConstSize(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount=64, const dtQueryFilter* filter=&s_filter) const;
+	NavMeshStatus FindPathConstSize_Legacy(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount = 64, const dtQueryFilter* filter=&s_filter) const;
+	NavMeshStatus FindPath(float3 start, float3 end, std::vector<PathNode>& path, bool& reachable, int maxCount=64) const;
 	void Clean();
 
 	inline const dtNavMesh* GetDetourMesh() const { return m_navmesh; };
@@ -79,11 +76,12 @@ public:
 
 protected:
 	std::string m_ID;
-	int m_errorCode;		 // error code of the last error
 	bool m_owner;			 // owner of the dtNavMesh
 	dtNavMesh* m_navmesh = 0;
 	dtNavMeshQuery* m_query = 0;
 	float m_polyFindExtention[3] = { 5.0f, 5.0f, 5.0f }; // Half the search area for FindNearestPoly calls
+
+	int NavMeshNavigator::CreateNavMeshQuery();
 };
 
 } // namespace Lighthouse2

@@ -40,7 +40,7 @@ public:
 		m_vertSet |= V0SET;
 		m_shader->SetPathStart(&m_v0);
 		if (m_vertSet == BOTHSET && m_navmesh)
-			if (!m_navmesh->FindPath(m_v0, m_v1, m_path, m_reachable))
+			if (m_navmesh->FindPath(m_v0, m_v1, m_path, m_reachable).Success())
 				m_shader->SetPath(&m_path);
 	}
 
@@ -54,7 +54,7 @@ public:
 		m_vertSet |= V1SET;
 		m_shader->SetPathEnd(&m_v1);
 		if (m_vertSet == BOTHSET && m_navmesh)
-			if (!m_navmesh->FindPath(m_v0, m_v1, m_path, m_reachable))
+			if (m_navmesh->FindPath(m_v0, m_v1, m_path, m_reachable).Success())
 				m_shader->SetPath(&m_path);
 	}
 

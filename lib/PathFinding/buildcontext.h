@@ -45,7 +45,7 @@ public:
 	};
 
 	// Dumps the log to stdout.
-	void dumpLog(const char* format, ...);
+	std::string GetBuildStats();
 	// Returns number of log messages.
 	int getLogCount() const { return m_messageCount; };
 	// Returns log message text.
@@ -107,18 +107,20 @@ void BuildContext::doStopTimer(const rcTimerLabel label)
 //  |  BuildContext::dumpLog                                                      |
 //  |  Prints all logged messages to stdout.                                LH2'19|
 //  +-----------------------------------------------------------------------------+
-void BuildContext::dumpLog(const char* format, ...)
+std::string BuildContext::GetBuildStats()
 {
-	// Print header.
-	va_list ap;
-	__crt_va_start(ap, format);
-	vprintf(format, ap);
-	__crt_va_end(ap);
+	// Logging timestamp for Detour data (not included in Recast logging)
+	int t = getAccumulatedTime(RC_TIMER_TEMP);
+	log(RC_LOG_PROGRESS, "- Creating Detour data:\t%.2fms\t(%.1f%%)",
+		t / 1000.0f, t*100.0f / getAccumulatedTime(RC_TIMER_TOTAL));
 
 	// Print messages
+	std::string buildStats;
 	const int TAB_STOPS[4] = { 28, 36, 44, 52 };
-	for (int i = 0; i < m_messageCount; ++i)
+	for (int i = 0; i <= m_messageCount; ++i)
 	{
+		if (i == m_messageCount - 2) i++; // skip [last - 2]
+		else if (i == m_messageCount) i -= 2; // print skipped log last
 		const char* msg = m_messages[i] + 1;
 		int n = 0;
 		while (*msg)
@@ -132,19 +134,24 @@ void BuildContext::dumpLog(const char* format, ...)
 						count = TAB_STOPS[j] - n;
 						break;
 					}
-				while (--count) { putchar(' '); n++; }
+				while (--count) { buildStats += ' '; n++; }
+			}
+			else if (*msg == '%')
+			{
+				buildStats += "%%";
 			}
 			else
 			{
-				putchar(*msg);
+				buildStats += *msg;
 				n++;
 			}
 			msg++;
 		}
-		putchar('\n');
+		buildStats += '\n';
+		if (i == m_messageCount - 2) break; // stop loop
 	}
-
 	resetLog();
+	return buildStats;
 }
 
 } // namespace lighthouse2

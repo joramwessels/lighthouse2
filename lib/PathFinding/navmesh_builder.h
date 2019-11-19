@@ -20,8 +20,8 @@
 //#endif
 
 #include "rendersystem.h"	   // HostScene, HostMesh, HostTri, float3, int3, FileExists
+#include "navmesh_common.h"    // NavMeshStatus
 #include "navmesh_navigator.h" // NavMeshNavigator, SerializeNavMesh, DeserializeNavMesh
-#include "navmesh_common.h"    // NMSUCCESS, NavMeshError
 
 namespace lighthouse2 {
 
@@ -118,11 +118,10 @@ public:
 	NavMeshBuilder(const char* dir);
 	~NavMeshBuilder() { Cleanup(); };
 
-	int Build(HostScene* scene);
-	int Serialize() { return Serialize(m_dir, m_config.m_id.c_str()); };
-	int Deserialize() { return Deserialize(m_dir, m_config.m_id.c_str()); };
+	NavMeshStatus Build(HostScene* scene);
+	NavMeshStatus Serialize() { return Serialize(m_dir, m_config.m_id.c_str()); };
+	NavMeshStatus Deserialize() { return Deserialize(m_dir, m_config.m_id.c_str()); };
 	void Cleanup();
-	void DumpLog() const;
 
 	void AddOffMeshConnection(float3 v0, float3 v1, float radius, bool unidirectional);
 	void ApplyChanges() { if (m_pmesh && m_dmesh) CreateDetourData(); };
@@ -135,8 +134,8 @@ public:
 	const char* GetDir() const { return m_dir; };
 	NavMeshConfig* GetConfig() { return &m_config; };
 	dtNavMesh* GetMesh() const { return m_navMesh; };
-	int GetError() { return m_errorCode; };
-	NavMeshNavigator* GetNavigator() const { return new NavMeshNavigator(m_navMesh, m_config.m_id.c_str()); };
+	NavMeshStatus GetStatus() { return m_status; };
+	NavMeshNavigator* GetNavigator() const { return new NavMeshNavigator(*m_navMesh, m_config.m_id.c_str()); };
 
 protected:
 
@@ -153,7 +152,7 @@ protected:
 	rcPolyMesh* m_pmesh;			// The polygon mesh
 	rcPolyMeshDetail* m_dmesh;		// The detailed polygon mesh
 	dtNavMesh* m_navMesh;			// The final navmesh as used by Detour
-	int m_errorCode;
+	NavMeshStatus m_status;
 
 	// Runtime additions
 	std::vector<float3> m_offMeshVerts; // (v0, v1) * nConnections

@@ -440,13 +440,12 @@ void TW_CALL BuildNavMesh(void *data)
 {
 	if (s_guiMode != GUI_MODE_BUILD) return;
 
-	builderErrorStatus = NMSUCCESS;
+	builderErrorStatus = false;
 	ClearNavMesh();
 	ConvertConfigToVoxels();
 	ConvertConfigToWorld();
 	navMeshBuilder->Build(renderer->GetScene());
-	navMeshBuilder->DumpLog();
-	builderErrorStatus = (bool)navMeshBuilder->GetError();
+	builderErrorStatus = navMeshBuilder->GetStatus().Failed();
 	if (builderErrorStatus) return;
 	RefreshNavigator();
 	*camMoved = true;
@@ -458,12 +457,10 @@ void TW_CALL BuildNavMesh(void *data)
 //  +-----------------------------------------------------------------------------+
 void TW_CALL SaveNavMesh(void *data)
 {
-	builderErrorStatus = NMSUCCESS;
+	builderErrorStatus = false;
 	ConvertConfigToVoxels();
 	ConvertConfigToWorld();
-	navMeshBuilder->Serialize();
-	navMeshBuilder->DumpLog();
-	builderErrorStatus = (bool)navMeshBuilder->GetError();
+	builderErrorStatus = navMeshBuilder->Serialize().Failed();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -474,11 +471,9 @@ void TW_CALL LoadNavMesh(void *data)
 {
 	if (s_guiMode != GUI_MODE_BUILD) return;
 
-	builderErrorStatus = NMSUCCESS;
+	builderErrorStatus = false;
 	ClearNavMesh();
-	navMeshBuilder->Deserialize();
-	navMeshBuilder->DumpLog();
-	builderErrorStatus = (bool)navMeshBuilder->GetError();
+	builderErrorStatus = navMeshBuilder->Deserialize().Failed();
 	if (builderErrorStatus) return;
 	ConvertConfigToWorld();
 	RefreshNavigator();
