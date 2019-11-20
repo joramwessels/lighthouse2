@@ -20,14 +20,22 @@
 #include "DetourNavMeshQuery.h" // dtNavMesh, dtNavMeshQuery, dtQueryFilter
 
 #include "system.h"			// float3
-#include "navmesh_common.h"	// NavMeshStatus, DETOUR_MAX_NAVMESH_NODES
+#include "navmesh_common.h"	// NavMeshError, NavMeshStatus, NavMeshAreaMapping, NavMeshFlagMapping, DETOUR_MAX_NAVMESH_NODES
 
 namespace lighthouse2 {
 
 NavMeshStatus SerializeNavMesh(const char* dir, const char* ID, const dtNavMesh* navmesh);
 NavMeshStatus DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh*& navmesh);
 
-static const dtQueryFilter s_filter; // default empty filter
+static dtQueryFilter DefaultFilter()
+{
+	dtQueryFilter filter;
+	filter.setIncludeFlags(USHRT_MAX);
+	filter.setExcludeFlags(0);
+	for (int i = 0; i < NavMeshAreaMapping::maxAreas; i++) filter.setAreaCost(i, 1.0f);
+	return filter;
+}
+static const dtQueryFilter s_filter = DefaultFilter(); // default empty filter, includes all flags
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshNavigator                                                           |
@@ -51,15 +59,26 @@ public:
 	}
 	~NavMeshNavigator() { Clean(); };
 
+	//  +-----------------------------------------------------------------------------+
+	//  |  NavMeshNavigator::Load                                                     |
+	//  |  Loads a navmesh from storage and initializes the query.              LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	NavMeshStatus Load(const char* dir, const char* ID)
 	{
 		if (m_navmesh) Clean();
+		std::string configfile = std::string(dir) + ID + PF_NAVMESH_CONFIG_FILE_EXTENTION;
+		NavMeshConfig config;
+		config.Load(configfile.c_str());
+		m_flags = config.m_flags;
+		m_areas = config.m_areas;
 		NavMeshStatus status = DeserializeNavMesh(dir, ID, m_navmesh);
 		if (status.Failed()) return status;
 		m_owner = true;
 		status = CreateNavMeshQuery();
 		return status;
 	}
+
+	void SetFlagAndAreaMappings(NavMeshFlagMapping flags, NavMeshAreaMapping areas) { m_flags = flags; m_areas = areas; };
 
 	struct PathNode { float3 pos; const dtPoly* poly; }; // dtPoly* is nullptr if not on a poly
 
@@ -70,16 +89,22 @@ public:
 	NavMeshStatus FindPath(float3 start, float3 end, std::vector<PathNode>& path, bool& reachable, int maxCount=64) const;
 	void Clean();
 
+	dtQueryFilter GetFilter(std::vector<std::string> includes, std::vector<std::string> excludes) const;
 	inline const dtNavMesh* GetDetourMesh() const { return m_navmesh; };
 	inline const dtPoly* GetPoly(dtPolyRef ref) const;
 	inline const char* GetID() const { return m_ID.c_str(); };
 
+	void SetPolyFlags(dtPolyRef poly, unsigned short flags) { m_navmesh->setPolyFlags(poly, flags); };
+	void SetAreaType(dtPolyRef poly, unsigned char area) { m_navmesh->setPolyArea(poly, area); };
+
 protected:
-	std::string m_ID;
-	bool m_owner;			 // owner of the dtNavMesh
-	dtNavMesh* m_navmesh = 0;
-	dtNavMeshQuery* m_query = 0;
-	float m_polyFindExtention[3] = { 5.0f, 5.0f, 5.0f }; // Half the search area for FindNearestPoly calls
+	std::string m_ID;			 // A unique string identifier
+	bool m_owner;				 // Whether this is the owner of the dtNavMesh
+	dtNavMesh* m_navmesh = 0;    // The navmesh data
+	dtNavMeshQuery* m_query = 0; // Detour object handling pathfinding queries
+	NavMeshFlagMapping m_flags;  // Maps polygon flags to labels
+	NavMeshAreaMapping m_areas;  // Maps polygon area types to labels
+	const float m_polyFindExtention[3] = { 5.0f, 5.0f, 5.0f }; // Half the search area for FindNearestPoly calls
 
 	int NavMeshNavigator::CreateNavMeshQuery();
 };

@@ -358,12 +358,12 @@ int NavMeshBuilder::CreateDetourData()
 	unsigned char* navData = 0;
 	int navDataSize = 0;
 
-	// Update poly flags from areas.
+	// Update poly flags from areas. // TODO: should be removed, but breaks navigator functions if I do
 	for (int i = 0; i < m_pmesh->npolys; ++i)
 	{
 		if (m_pmesh->areas[i] == RC_WALKABLE_AREA)
 			m_pmesh->areas[i] = SAMPLE_POLYAREA_GROUND;
-
+	
 		if (m_pmesh->areas[i] == SAMPLE_POLYAREA_GROUND ||
 			m_pmesh->areas[i] == SAMPLE_POLYAREA_GRASS ||
 			m_pmesh->areas[i] == SAMPLE_POLYAREA_ROAD)
@@ -379,7 +379,6 @@ int NavMeshBuilder::CreateDetourData()
 			m_pmesh->flags[i] = SAMPLE_POLYFLAGS_WALK | SAMPLE_POLYFLAGS_DOOR;
 		}
 	}
-
 
 	dtNavMeshCreateParams params;
 	memset(&params, 0, sizeof(params));
@@ -448,7 +447,7 @@ int NavMeshBuilder::Serialize(const char* dir, const char* ID)
 	if (m_status.Failed()) return NavMeshStatus::INPUT;
 
 	// Saving config file
-	std::string configfile = std::string(dir) + ID + ".config";
+	std::string configfile = std::string(dir) + ID + PF_NAVMESH_CONFIG_FILE_EXTENTION;
 	m_config.Save(configfile.c_str());
 
 	// Saving dtNavMesh
@@ -468,9 +467,8 @@ int NavMeshBuilder::Deserialize(const char* dir, const char* ID)
 	Cleanup();
 
 	// Loading config file
-	std::string configfile = std::string(dir) + ID + ".config";
+	std::string configfile = std::string(dir) + ID + PF_NAVMESH_CONFIG_FILE_EXTENTION;
 	m_config.Load(configfile.c_str());
-	m_config.m_id = ID; // strings aren't loaded correctly
 
 	// Loading dtNavMesh
 	m_status = DeserializeNavMesh(dir, ID, m_navMesh);

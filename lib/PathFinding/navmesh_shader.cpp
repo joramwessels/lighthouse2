@@ -59,6 +59,7 @@ void NavMeshShader::DrawGL() const
 	if (m_agentSelect) DrawAgentHighlightGL();
 	if (m_agentSelect) DrawAgentImpulse();
 
+	if (!m_excludedPolygons.empty()) DrawExcludedPolygons();
 	if (m_path && !m_path->empty()) PlotPath();
 	if (m_pathStart || m_pathEnd) DrawPathMarkers();
 }
@@ -323,21 +324,63 @@ void NavMeshShader::DrawAgentImpulse() const
 	DrawShapeOnScreen(screen, colors, GL_LINES, 5.0f);
 }
 
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::SetExcludedPolygons                                         |
+//  |  Sets the polygons that are excluded by the filter.                   LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::SetExcludedPolygons(const NavMeshNavigator* navmesh, short flags)
+{
+	if (!flags) return m_excludedPolygons.clear();
+	for (int i = 0; i < navmesh->GetDetourMesh()->getMaxTiles(); i++)
+	{
+		const dtMeshTile* tile = navmesh->GetDetourMesh()->getTile(i);
+		if (!tile->header) return; // invalid tile
+		for (int j = 0; j < tile->header->polyCount; j++)
+		{
+			const dtPoly* poly = &tile->polys[j];
+			if (poly->flags & flags || !(poly->flags)) m_excludedPolygons.push_back(poly);
+		}
+	}
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::DrawExcludedPolygons                                        |
+//  |  Highlights the polygons excluded by the filter.                      LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::DrawExcludedPolygons() const
+{
+	for (auto p : m_excludedPolygons)
+	{
+		std::vector<float3> world;
+		std::vector<float2> screen(p->vertCount);
+		std::vector<float4> colors(p->vertCount, m_excludedColor);
+		for (int i = 0; i < p->vertCount; i++)
+			world.push_back(*m_verts[p->verts[i]].pos);
+		m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), (int)world.size());
+
+		DrawShapeOnScreen(screen, colors, GL_TRIANGLE_FAN);
+	}
+}
+
 
 
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::SelectPoly                                                  |
-//  |  Highlights a polygon given a world position and a navmesh navigator. LH2'19|
+//  |  Highlights a polygon given a world position and a navmesh navigator.       |
+//  |  Returns a const pointer to the original of the selected poly.        LH2'19|
 //  +-----------------------------------------------------------------------------+
-const dtPoly* NavMeshShader::SelectPoly(float3 pos, NavMeshNavigator* navmesh)
+NavMeshShader::Poly* NavMeshShader::SelectPoly(int triangleID)
 {
 	Deselect();
-	if (!navmesh) { m_polySelect = 0; return 0; }
-	dtPolyRef ref;
-	float3 posOnPoly;
-	navmesh->FindNearestPoly(pos, ref, posOnPoly);
-	return m_polySelect = navmesh->GetPoly(ref);
+	//if (!navmesh) { m_polySelect = 0; return 0; }
+	//dtPolyRef ref;
+	//float3 posOnPoly;
+	//navmesh->FindNearestPoly(pos, ref, posOnPoly);
+	//return m_polySelect = new Poly{ navmesh->GetPoly(ref), (int)ref };
+	for (int i = 0; i < (int)m_polys.size(); i++)
+		for (int t : m_polys[i].triIDs) if (t == triangleID)
+			return m_polySelect = &m_polys[i];
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -347,10 +390,10 @@ const dtPoly* NavMeshShader::SelectPoly(float3 pos, NavMeshNavigator* navmesh)
 void NavMeshShader::DrawPolyHighlightGL() const
 {
 	std::vector<float3> world;
-	std::vector<float2> screen(m_polySelect->vertCount);
-	std::vector<float4> colors(m_polySelect->vertCount, m_highLightColor);
-	for (int i = 0; i < m_polySelect->vertCount; i++)
-		world.push_back(*m_verts[m_polySelect->verts[i]].pos);
+	std::vector<float2> screen(m_polySelect->poly->vertCount);
+	std::vector<float4> colors(m_polySelect->poly->vertCount, m_highLightColor);
+	for (int i = 0; i < m_polySelect->poly->vertCount; i++)
+		world.push_back(*m_verts[m_polySelect->poly->verts[i]].pos);
 	m_renderer->GetCamera()->WorldToScreenPos(world.data(), screen.data(), (int)world.size());
 
 	DrawShapeOnScreen(screen, colors, GL_TRIANGLE_FAN);
@@ -417,7 +460,8 @@ Agent* NavMeshShader::SelectAgent(int instanceID)
 	Deselect();
 	if (instanceID < 0) return 0;
 	for (size_t i = 0; i < m_agents.size(); i++)
-		if (m_agents[i].instID == instanceID) return (m_agentSelect = &m_agents[i])->agent;
+		if (m_agents[i].instID == instanceID)
+			return (m_agentSelect = new ShaderAgent(m_agents[i]))->agent;
 	return 0;
 }
 
@@ -579,7 +623,7 @@ void NavMeshShader::Clean()
 //  |  NavMeshShader::AddEdgeToEdgesAndPreventDuplicates                          |
 //  |  Helper function for NavMeshShader::ExtractVertsAndEdges.             LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, const dtPoly* poly)
+void NavMeshShader::AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, dtPolyRef poly)
 {
 	for (std::vector<Edge>::iterator i = m_edges.begin(); i != m_edges.end(); i++)
 		if ((i->v1 == v1 && i->v2 == v2) || (i->v1 == v2 && i->v2 == v1))
@@ -605,7 +649,7 @@ void NavMeshShader::ExtractVertsAndEdges(const dtNavMesh* mesh)
 	m_verts.reserve(totalVerts); // total amount of verts
 	m_edges.reserve(totalVerts); // at least this many edges
 
-	int tileBaseIdx = 0, nVerts, nDetail, nOMC;
+	int tileBaseIdx = 0, triCount = 0, nVerts, nDetail, nOMC;
 	for (int a = 0; a < mesh->getMaxTiles(); a++) if (mesh->getTile(a)->header)
 	{
 		const dtMeshTile* tile = mesh->getTile(a);
@@ -626,19 +670,26 @@ void NavMeshShader::ExtractVertsAndEdges(const dtNavMesh* mesh)
 		}
 
 
-		// Adding Vert polygon associations and Edges
+		// Adding Vert polygon associations, Edges, and Polys
+		dtPolyRef refBase = mesh->getPolyRefBase(tile);
 		for (int b = 0; b < tile->header->polyCount; b++)
 		{
 			const dtPoly* poly = &tile->polys[b];
+			dtPolyRef ref = refBase + b;
 			if (poly->getType() == DT_POLYTYPE_OFFMESH_CONNECTION) continue;
+
+			// Adding poly and collecting triangle IDs
+			m_polys.push_back(Poly{ poly, (int)ref });
+			for (int c = 0; c < tile->detailMeshes[b].triCount; c++)
+				m_polys.back().triIDs.push_back(triCount++); // NOTE: depends on .obj file writing of faces
 
 			for (int c = 0; c < poly->vertCount; c++) // for every poly vert
 			{
-				m_verts[tileBaseIdx + poly->verts[c]].polys.push_back(Poly{ poly });
+				m_verts[tileBaseIdx + poly->verts[c]].polys.push_back(ref);
 				if (c < poly->vertCount-1) // adding the first n-1 edges
-					AddEdgeToEdgesAndPreventDuplicates(tileBaseIdx + poly->verts[c], tileBaseIdx + poly->verts[c + 1], poly);
+					AddEdgeToEdgesAndPreventDuplicates(tileBaseIdx + poly->verts[c], tileBaseIdx + poly->verts[c + 1], ref);
 				else // adding the last edge connecting the first vertex
-					AddEdgeToEdgesAndPreventDuplicates(tileBaseIdx + poly->verts[c], tileBaseIdx + poly->verts[0], poly);
+					AddEdgeToEdgesAndPreventDuplicates(tileBaseIdx + poly->verts[c], tileBaseIdx + poly->verts[0], ref);
 			}
 		}
 
@@ -649,13 +700,15 @@ void NavMeshShader::ExtractVertsAndEdges(const dtNavMesh* mesh)
 		{
 			const dtOffMeshConnection* omc = &tile->offMeshCons[j];
 			omcPoly.omc = omc;
+			omcPoly.ref = refBase + omc->poly;
 			v1 = tileBaseIdx + nVerts + nDetail + (j * 2);
 			v2 = tileBaseIdx + nVerts + nDetail + (j * 2) + 1;
 			m_verts.push_back({ (float3*)omc->pos, v1 });
-			m_verts.back().polys.push_back(omcPoly);
+			m_verts.back().polys.push_back(omcPoly.ref);
 			m_verts.push_back({ (float3*)(omc->pos+3), v2 });
-			m_verts.back().polys.push_back(omcPoly);
+			m_verts.back().polys.push_back(omcPoly.ref);
 			m_edges.push_back({ v1, v2, (int)m_edges.size(), -1 });
+			m_polys.push_back(omcPoly);
 		}
 
 		m_vertOffsets.push_back(int3{ tileBaseIdx, tileBaseIdx + nVerts, tileBaseIdx + nVerts + nDetail });
@@ -693,6 +746,7 @@ void NavMeshShader::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 	fprintf(f, "vt 0 0\n");
 	fprintf(f, "vt 0 1\n");
 	fprintf(f, "vt 1 1\n");
+	fprintf(f, "# 3 texture vertices\n\n");
 
 	// Writing normals
 	int normCount = 0;
@@ -747,6 +801,7 @@ void NavMeshShader::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 		const dtPolyDetail pd = tile->detailMeshes[i];
 		for (int j = 0; j < pd.triCount; ++j)
 		{
+			// tri vertices are indices of poly.verts, poly.verts holds the actual indices
 			const unsigned char* tri = &tile->detailTris[(pd.triBase + j) * 4];
 
 			// Find the three vertex indices
@@ -754,7 +809,8 @@ void NavMeshShader::WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 			for (int k = 0; k < 3; ++k)
 			{
 				if (tri[k] < poly.vertCount) v[k] = poly.verts[tri[k]];
-				else v[k] = pd.vertBase + tri[k];
+				else // poly.verts indices beyond the vert count refer to the detail verts
+					v[k] = tile->header->vertCount + pd.vertBase + (tri[k] - poly.vertCount);
 			}
 
 			// Write the face to the file

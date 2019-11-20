@@ -45,6 +45,7 @@ public:
 
 	void SetTarget(float3* target) { if (m_pathEndOwner && m_pathEnd) delete m_pathEnd; m_pathEnd = target; m_pathEndOwner = false; }
 	void SetTarget(float3 target) { if (m_pathEndOwner && m_pathEnd) *m_pathEnd = target; else m_pathEnd =  new float3(target);  m_pathEndOwner = true; };
+	void SetFilter(dtQueryFilter filter) { m_filter = filter; };
 	bool UpdateMovement(float deltaTime);
 	bool UpdateNavigation(float deltaTime);
 	void Clean() { m_pathCount = 0; m_alive = false; };
@@ -52,6 +53,7 @@ public:
 	void Kill() { m_alive = false; m_rb->Kill(); };
 	bool isAlive() const { return m_alive; };
 
+	dtQueryFilter* GetFilter() { return &m_filter; };
 	mat4 GetTransform() const { return m_rb->GetTransform(); };
 	const float3* GetPos() const { return &m_rb->m_pos; };
 	const float3* GetDir() const { return &m_moveDir; };
@@ -75,6 +77,7 @@ protected:
 	float3* m_pathEnd = 0; // final target, also indicates if it should move at all
 	bool m_alive = true, m_pathEndOwner = false;
 	bool m_reachable = false; // whether a path to the given end target seems possible at this point
+	dtQueryFilter m_filter; // traversal costs and polygon restrictions
 
 	inline float3 SteeringSeek() const { return m_moveDir * m_maxLinVel; };
 	inline float3 SteeringArrival() const { return m_moveDir * m_maxLinVel * (m_nextTarDist / m_arrival); };

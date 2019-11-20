@@ -86,8 +86,8 @@ protected:
 class NavMeshSelectionTool
 {
 public:
-	NavMeshSelectionTool(NavMeshShader* shader, SELECTIONTYPE* selectionType)
-		: m_shader(shader), m_selectionType(selectionType) {};
+	NavMeshSelectionTool(NavMeshShader* shader, NavMeshNavigator*& navigator, SELECTIONTYPE* selectionType)
+		: m_shader(shader), m_navmesh(navigator), m_selectionType(selectionType) {};
 	~NavMeshSelectionTool() {};
 
 	void Deselect()
@@ -96,18 +96,19 @@ public:
 			*m_selectionType == SELECTION_EDGE ||
 			*m_selectionType == SELECTION_POLY)
 		{
+			if (*m_selectionType == SELECTION_POLY) ApplyPolyChanges();
 			m_shader->Deselect();
 			m_selectionID = -1;
 			TwDefine(" Editing/OffMesh visible=false ");
 			TwDefine(" Editing/Detail visible=false ");
-			TwDefine(" Editing/'Poly type' visible=false ");
 			TwDefine(" Editing/'Poly area' visible=false ");
-			TwDefine(" Editing/v0 visible=false ");
+			TwDefine(" Editing/Verts visible=false ");
 			TwDefine(" Editing/v1 visible=false ");
 			TwDefine(" Editing/v2 visible=false ");
 			TwDefine(" Editing/v3 visible=false ");
 			TwDefine(" Editing/v4 visible=false ");
 			TwDefine(" Editing/v5 visible=false ");
+			TwDefine(" Editing/flags visible=false ");
 			*m_selectionType = SELECTION_NONE;
 		}
 	}
@@ -124,6 +125,7 @@ public:
 		TwDefine(" Editing/OffMesh visible=true ");
 		TwDefine(" Editing/Detail visible=true ");
 		m_verts[0] = *m_selectedVert->pos;
+		TwDefine(" Editing/Verts visible=true ");
 		TwDefine(" Editing/v0 visible=true ");
 
 		*m_selectionType = SELECTION_VERT;
@@ -140,56 +142,71 @@ public:
 		TwDefine(" Editing/OffMesh visible=true ");
 		m_verts[0] = *m_shader->GetVertPos(m_selectedEdge->v1);
 		m_verts[1] = *m_shader->GetVertPos(m_selectedEdge->v2);
+		TwDefine(" Editing/Verts visible=true ");
 		TwDefine(" Editing/v0 visible=true ");
 		TwDefine(" Editing/v1 visible=true ");
 
 		*m_selectionType = SELECTION_EDGE;
 	}
 
-	void SelectPoly(float3 pos, NavMeshNavigator* navmesh)
+	void SelectPoly(int triangleID)
 	{
 		Deselect();
-		if (!navmesh) return;
-		m_selectedPoly = m_shader->SelectPoly(pos, navmesh);
+		if (!m_navmesh) return;
+		m_selectedPoly = m_shader->SelectPoly(triangleID);
 		if (!m_selectedPoly) return;
-		m_selectionID = -1; // TODO
+		m_selectionID = m_selectedPoly->ref;
 
-		m_polygonArea = m_selectedPoly->getArea();
-		m_polygonType = m_selectedPoly->getType();
-		TwDefine(" Editing/'Poly type' visible=true ");
+		m_polygonArea = m_selectedPoly->poly->getArea();
+		for (int i = 0; i < NavMeshFlagMapping::maxFlags; i++)
+			m_flags[i] = (m_selectedPoly->poly->flags & (0x1 << i));
+		TwDefine(" Editing/flags visible=true ");
 		TwDefine(" Editing/'Poly area' visible=true ");
-		for (size_t i = 0; i < m_selectedPoly->vertCount; i++)
-			m_verts[i] = *m_shader->GetVertPos(m_selectedPoly->verts[i]);
+		for (size_t i = 0; i < m_selectedPoly->poly->vertCount; i++)
+			m_verts[i] = *m_shader->GetVertPos(m_selectedPoly->poly->verts[i]);
+		TwDefine(" Editing/Verts visible=true ");
 		TwDefine(" Editing/v0 visible=true ");
 		TwDefine(" Editing/v1 visible=true ");
 		TwDefine(" Editing/v2 visible=true ");
-		if (m_selectedPoly->vertCount > 3) TwDefine(" Editing/v3 visible=true ");
-		if (m_selectedPoly->vertCount > 4) TwDefine(" Editing/v4 visible=true ");
-		if (m_selectedPoly->vertCount > 5) TwDefine(" Editing/v5 visible=true ");
+		if (m_selectedPoly->poly->vertCount > 3) TwDefine(" Editing/v3 visible=true ");
+		if (m_selectedPoly->poly->vertCount > 4) TwDefine(" Editing/v4 visible=true ");
+		if (m_selectedPoly->poly->vertCount > 5) TwDefine(" Editing/v5 visible=true ");
 
 		*m_selectionType = SELECTION_POLY;
+	}
+
+	void ApplyPolyChanges()
+	{
+		// Apply flags and area type
+		unsigned short polygonFlags = 0;
+		for (int i = 0; i < NavMeshFlagMapping::maxFlags; i++) if (m_flags[i])
+			polygonFlags |= (0x1 << i);
+		m_navmesh->SetPolyFlags(m_selectedPoly->ref, polygonFlags);
+		m_navmesh->SetAreaType(m_selectedPoly->ref, m_polygonArea);
 	}
 
 	const int* GetSelectionID() const { return &m_selectionID; };
 	const float3* GetVert(int idx) const { if (idx < 0 || idx > 5) { return 0; } return &m_verts[idx]; };
 	const bool* GetIsOffMesh() const { return &m_isOffMesh; };
 	const bool* GetIsDetail() const { return &m_isDetail; };
-	const int* GetPolyArea() const { return &m_polygonArea; };
-	const int* GetPolyType() const { return &m_polygonType; };
+	uint* GetPolyArea() { return &m_polygonArea; };
+	bool* GetPolyFlag(int idx) { return &m_flags[idx]; };
 
 protected:
 	NavMeshShader* m_shader;
+	NavMeshNavigator*& m_navmesh;
 	SELECTIONTYPE* m_selectionType;
 	const float3 origin = float3{ 0, 0, 0 };
 
 	int m_selectionID = -1;
 	float3 m_verts[6] = { origin, origin, origin, origin, origin, origin };
 	bool m_isOffMesh = false, m_isDetail = false;
-	int m_polygonArea = 0, m_polygonType = 0;
+	uint m_polygonArea = 0;
+	bool m_flags[NavMeshFlagMapping::maxFlags];
 
 	NavMeshShader::Vert* m_selectedVert;
 	NavMeshShader::Edge* m_selectedEdge;
-	const dtPoly* m_selectedPoly;
+	NavMeshShader::Poly* m_selectedPoly;
 };
 
 // EOF

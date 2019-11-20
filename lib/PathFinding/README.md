@@ -85,6 +85,8 @@ To fascilitate graphical navmesh editing, the shader can add-, move-, and remove
 * Add code documentation to readme ❗
 
 #### NavMeshBuilder
+* building
+    * give builder closure that automatically annotates polygons based on parameters
 * off-mesh connections
     * debug m_navmesh recalculation ❗
     * test saving/loading ❗
@@ -94,14 +96,14 @@ To fascilitate graphical navmesh editing, the shader can add-, move-, and remove
 
 #### NavMeshNavigator / Agent
 * BUG: when close to unreachable goal (above), path update plans vertical path
+* Don't call 'arrive' behavior on every path corner
+* Add behavior (flee/follow)
 
 
 #### NavMeshShader
-* BUG: when agent selected, placing another agent, m_agentSelect->agent = 0 ❗
 * BUG: instances won't delete ❗
 * BUG: agents/vertices won't select after rebuild
     * instIDs differ
-* BUG: big triangle spanning two islets when climb is too high ❗
 * make meshes transparent
 * off-mesh connections
     * BUG: OMC edge wrong mesh? ❗

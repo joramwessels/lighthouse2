@@ -17,7 +17,8 @@
 
 #include "tinyxml2.h" // configuration saving and -loading
 
-#include "navmesh_builder.h"
+#include "system.h" // make_float3
+#include "navmesh_common.h"
 
 namespace lighthouse2 {
 
@@ -127,8 +128,6 @@ void NavMeshConfig::Save(const char* filename) const
 {
 	tinyxml2::XMLDocument doc;
 	tinyxml2::XMLNode* root = doc.NewElement("configurations");
-	tinyxml2::XMLNode* bmin = doc.NewElement("bmin");
-	tinyxml2::XMLNode* bmax = doc.NewElement("bmax");
 	doc.InsertFirstChild(root);
 
 	((tinyxml2::XMLElement*)root->InsertEndChild(doc.NewElement("width")))->SetText(m_width);
@@ -138,14 +137,16 @@ void NavMeshConfig::Save(const char* filename) const
 
 	((tinyxml2::XMLElement*)root->InsertEndChild(doc.NewElement("cs")))->SetText(m_cs);
 	((tinyxml2::XMLElement*)root->InsertEndChild(doc.NewElement("ch")))->SetText(m_ch);
+	tinyxml2::XMLNode* bmin = doc.NewElement("bmin");
 	root->InsertEndChild(bmin);
-	((tinyxml2::XMLElement*)bmin->InsertEndChild(doc.NewElement("x")))->SetText(m_bmin.x);
-	((tinyxml2::XMLElement*)bmin->InsertEndChild(doc.NewElement("y")))->SetText(m_bmin.y);
-	((tinyxml2::XMLElement*)bmin->InsertEndChild(doc.NewElement("z")))->SetText(m_bmin.z);
+		((tinyxml2::XMLElement*)bmin->InsertEndChild(doc.NewElement("x")))->SetText(m_bmin.x);
+		((tinyxml2::XMLElement*)bmin->InsertEndChild(doc.NewElement("y")))->SetText(m_bmin.y);
+		((tinyxml2::XMLElement*)bmin->InsertEndChild(doc.NewElement("z")))->SetText(m_bmin.z);
+	tinyxml2::XMLNode* bmax = doc.NewElement("bmax");
 	root->InsertEndChild(bmax);
-	((tinyxml2::XMLElement*)bmax->InsertEndChild(doc.NewElement("x")))->SetText(m_bmax.x);
-	((tinyxml2::XMLElement*)bmax->InsertEndChild(doc.NewElement("y")))->SetText(m_bmax.y);
-	((tinyxml2::XMLElement*)bmax->InsertEndChild(doc.NewElement("z")))->SetText(m_bmax.z);
+		((tinyxml2::XMLElement*)bmax->InsertEndChild(doc.NewElement("x")))->SetText(m_bmax.x);
+		((tinyxml2::XMLElement*)bmax->InsertEndChild(doc.NewElement("y")))->SetText(m_bmax.y);
+		((tinyxml2::XMLElement*)bmax->InsertEndChild(doc.NewElement("z")))->SetText(m_bmax.z);
 
 	((tinyxml2::XMLElement*)root->InsertEndChild(doc.NewElement("walkableSlopeAngle")))->SetText(m_walkableSlopeAngle);
 	((tinyxml2::XMLElement*)root->InsertEndChild(doc.NewElement("walkableClimb")))->SetText(m_walkableClimb);
@@ -168,6 +169,25 @@ void NavMeshConfig::Save(const char* filename) const
 
 	((tinyxml2::XMLElement*)root->InsertEndChild(doc.NewElement("printBuildStats")))->SetText(m_printBuildStats);
 	((tinyxml2::XMLElement*)root->InsertEndChild(doc.NewElement("ID")))->SetText(m_id.c_str());
+
+	tinyxml2::XMLNode* areas = doc.NewElement("areas");
+	root->InsertEndChild(areas);
+		((tinyxml2::XMLElement*)areas->InsertEndChild(doc.NewElement("count")))->SetText(m_areas.labels.size());
+		tinyxml2::XMLNode* arealabels = doc.NewElement("labels");
+		areas->InsertEndChild(arealabels);
+			for (auto l : m_areas.labels)
+				((tinyxml2::XMLElement*)arealabels->InsertEndChild(doc.NewElement("item")))->SetText(l.c_str());
+		tinyxml2::XMLNode* defaultCosts = doc.NewElement("defaultCosts");
+		areas->InsertEndChild(defaultCosts);
+			for (auto c : m_areas.defaultCosts)
+				((tinyxml2::XMLElement*)defaultCosts->InsertEndChild(doc.NewElement("item")))->SetText(c);
+	tinyxml2::XMLNode* flags = doc.NewElement("flags");
+	root->InsertEndChild(flags);
+		((tinyxml2::XMLElement*)flags->InsertEndChild(doc.NewElement("count")))->SetText(m_flags.labels.size());
+		tinyxml2::XMLNode* flaglabels = doc.NewElement("labels");
+		flags->InsertEndChild(flaglabels);
+		for (auto l : m_flags.labels)
+			((tinyxml2::XMLElement*)flaglabels->InsertEndChild(doc.NewElement("item")))->SetText(l.c_str());
 
 	doc.SaveFile(filename);
 }
@@ -219,6 +239,49 @@ void NavMeshConfig::Load(const char* filename)
 
 	if (root->FirstChildElement("printBuildStats")) root->FirstChildElement("printBuildStats")->QueryBoolText(&m_printBuildStats);
 	if (root->FirstChildElement("ID")) m_id = root->FirstChildElement("ID")->FirstChild()->Value();
+
+	tinyxml2::XMLElement* item;
+	int areaCount = 0, flagCount = 0;
+	if (root->FirstChildElement("areas") && root->FirstChildElement("areas")->FirstChildElement("count"))
+		root->FirstChildElement("areas")->FirstChildElement("count")->QueryIntText(&areaCount);
+	if (areaCount > 0)
+	{
+		m_areas.labels.resize(areaCount);
+		if (root->FirstChildElement("areas")->FirstChildElement("labels"))
+		{
+			item = root->FirstChildElement("areas")->FirstChildElement("labels")->FirstChildElement("item");
+			for (int i = 0; i < areaCount; i++)
+			{
+				if (item) m_areas.labels[i] = item->FirstChild()->Value(); else break;
+				item = item->NextSiblingElement("item");
+			}
+		}
+		m_areas.defaultCosts.resize(areaCount);
+		if (root->FirstChildElement("areas")->FirstChildElement("defaultCosts"))
+		{
+			item = root->FirstChildElement("areas")->FirstChildElement("defaultCosts")->FirstChildElement("item");
+			for (int i = 0; i < areaCount; i++)
+			{
+				if (item) item->QueryFloatText(&m_areas.defaultCosts[i]); else break;
+				item = item->NextSiblingElement("item");
+			}
+		}
+	}
+	if (root->FirstChildElement("flags") && root->FirstChildElement("flags")->FirstChildElement("count"))
+		root->FirstChildElement("flags")->FirstChildElement("count")->QueryIntText(&flagCount);
+	if (flagCount > 0)
+	{
+		m_flags.labels.resize(flagCount);
+		if (root->FirstChildElement("flags")->FirstChildElement("labels"))
+		{
+			item = root->FirstChildElement("flags")->FirstChildElement("labels")->FirstChildElement("item");
+			for (int i = 0; i < flagCount; i++)
+			{
+				if (item) m_flags.labels[i] = item->FirstChild()->Value(); else break;
+				item = item->NextSiblingElement("item");
+			}
+		}
+	}
 }
 
 } // namespace lighthouse2

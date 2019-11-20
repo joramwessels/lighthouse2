@@ -43,16 +43,9 @@ static bool *camMoved, *hasFocus, *leftClicked, *rightClicked;
 static int2 *probeCoords = 0;
 static uint *scrwidth = 0, *scrheight = 0;
 
-// UI objects
+// General
 static NavMeshNavigator* navMeshNavigator = 0;
 static NavMeshShader* navMeshShader = 0;
-static OffMeshConnectionTool* s_omcTool = 0;
-static NavMeshSelectionTool* s_navmeshTool = 0;
-static AgentNavigationTool* s_agentTool = 0;
-static PathDrawingTool* s_pathTool = 0;
-static TwBar* settingsBar = 0, *buildBar = 0, *editBar = 0, *debugBar = 0;
-
-// GUI state
 static int GUI_MODE_BUILD = 0, GUI_MODE_EDIT = 1, GUI_MODE_DEBUG = 2; // AntTweakBar callback needs pointer
 static int s_guiMode = GUI_MODE_BUILD;
 static const int alphaActive = 220, alphaPassive = 80;
@@ -61,22 +54,30 @@ static bool leftClickLastFrame = false, rightClickLastFrame = false;
 static bool ctrlClickLastFrame = false, shiftClickLastFrame = false, altClickLastFrame = false;
 
 // Settings bar
+static TwBar* settingsBar = 0;
 static CoreStats coreStats;
 static float mraysincl = 0, mraysexcl = 0;
 static std::string meshName;
-static int probMeshID = -1, probeInstID = -1, probeTriID = -1;
-static float3 probedPos;
+static int probeMeshID = -1, probeInstID = -1, probeTriID = -1;
+static float3 probePos;
 
 // Build bar
+static TwBar* buildBar = 0;
 static NavMeshConfig* config;
 static bool builderErrorStatus = false;
 static float s_agentHeight, s_agentRadius, s_agentClimb;
 static float s_minRegionArea, s_mergeRegionArea, s_maxEdgeLen;
 
 // Edit bar
+static TwBar* editBar = 0;
+static OffMeshConnectionTool* s_omcTool = 0;
+static NavMeshSelectionTool* s_navmeshTool = 0;
 static bool s_editChanges = false;
 
 // Debug bar
+static TwBar* debugBar = 0;
+static AgentNavigationTool* s_agentTool = 0;
+static PathDrawingTool* s_pathTool = 0;
 static mat4 agentScale;
 
 // Forward declarations
@@ -110,9 +111,9 @@ static void InitGUI(RenderAPI *a_renderer, NavMeshBuilder *a_builder, PhysicsPla
 
 	navMeshShader = new NavMeshShader(renderer, "data\\ai\\");
 	s_omcTool = new OffMeshConnectionTool(navMeshBuilder, navMeshShader);
-	s_navmeshTool = new NavMeshSelectionTool(navMeshShader, &selectionType);
+	s_navmeshTool = new NavMeshSelectionTool(navMeshShader, navMeshNavigator, &selectionType);
 	s_pathTool = new PathDrawingTool(navMeshShader, navMeshNavigator);
-	s_agentTool = new AgentNavigationTool(navMeshShader, s_pathTool, &selectionType);
+	s_agentTool = new AgentNavigationTool(navMeshShader, navMeshNavigator, s_pathTool, &selectionType);
 
 	InitAntTweakBars();
 	InitFPSPrinter();
@@ -182,12 +183,8 @@ static void RemoveDebugAssets()
 //  +-----------------------------------------------------------------------------+
 static void RemoveEditAssets()
 {
+	navMeshShader->Deselect();
 	s_omcTool->Clear();
-	if (selectionType == SELECTION_VERT || selectionType == SELECTION_EDGE || selectionType == SELECTION_POLY)
-	{
-		navMeshShader->Deselect();
-		selectionType = SELECTION_NONE;
-	}
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -223,10 +220,6 @@ static void RefreshNavigator()
 	float height = config->m_walkableHeight * config->m_ch; // voxels to world units
 	agentScale = mat4::Scale(make_float3(radius * 2, height, radius * 2));
 }
-
-
-
-
 
 //  +-----------------------------------------------------------------------------+
 //  |  ConvertConfigToVoxels                                                      |
@@ -265,11 +258,11 @@ static void HandleMouseInputEditMode()
 	// Instance selecting (SHIFT) (L-CLICK)
 	if (leftClickLastFrame && shiftClickLastFrame)
 	{
-		if (probeInstID > 0 && navMeshShader->isNavMesh(probMeshID))
+		if (probeInstID > 0 && navMeshShader->isNavMesh(probeMeshID))
 		{
-			if (navMeshShader->isVert(probMeshID)) s_navmeshTool->SelectVert(probeInstID);
-			else if (navMeshShader->isEdge(probMeshID)) s_navmeshTool->SelectEdge(probeInstID);
-			else if (navMeshShader->isPoly(probMeshID)) s_navmeshTool->SelectPoly(probedPos, navMeshNavigator);
+			if (navMeshShader->isVert(probeMeshID)) s_navmeshTool->SelectVert(probeInstID);
+			else if (navMeshShader->isEdge(probeMeshID)) s_navmeshTool->SelectEdge(probeInstID);
+			else if (navMeshShader->isPoly(probeMeshID)) s_navmeshTool->SelectPoly(probeTriID);
 			else s_navmeshTool->Deselect();
 		}
 		else s_navmeshTool->Deselect();
@@ -278,8 +271,8 @@ static void HandleMouseInputEditMode()
 	// Adding off-mesh connections (CTRL)
 	if (ctrlClickLastFrame)
 	{
-		if (leftClickLastFrame) s_omcTool->SetStart(probedPos);
-		else if (rightClickLastFrame) s_omcTool->SetEnd(probedPos);
+		if (leftClickLastFrame) s_omcTool->SetStart(probePos);
+		else if (rightClickLastFrame) s_omcTool->SetEnd(probePos);
 	}
 }
 
@@ -292,41 +285,32 @@ static void HandleMouseInputDebugMode()
 	// Agent placement (SHIFT) (R-CLICK)
 	if (rightClickLastFrame && shiftClickLastFrame)
 	{
-		if (navMeshShader->isPoly(probMeshID))
+		if (navMeshShader->isPoly(probeMeshID))
 		{
-			RigidBody* rb = rigidBodies->AddRB(agentScale, mat4::Identity(), mat4::Translate(probedPos));
+			RigidBody* rb = rigidBodies->AddRB(agentScale, mat4::Identity(), mat4::Translate(probePos));
 			Agent* agent = navMeshAgents->AddAgent(navMeshNavigator, rb);
 			navMeshShader->AddAgentToScene(agent);
 		}
 	}
 
-	// Agent selecting (SHIFT) (L-CLICK)
+	// Selecting (SHIFT) (L-CLICK)
 	if (leftClickLastFrame && shiftClickLastFrame)
 	{
-		if (navMeshShader->isAgent(probMeshID)) // selecting
-		{
-			s_pathTool->Clear();
-			Agent* agent = navMeshShader->SelectAgent(probeInstID);
-			s_agentTool->SelectAgent(agent);
-		}
-		else if (selectionType == SELECTION_AGENT) // deselecting
-		{
-			s_agentTool->Clear();
-			selectionType = SELECTION_NONE;
-		}
+		if (navMeshShader->isAgent(probeMeshID)) s_agentTool->SelectAgent(probeInstID);
+		else if (selectionType == SELECTION_AGENT) s_agentTool->Clear(); // deselect previous agent
 	}
 
 	// Setting path start/end (CTRL)
-	if (ctrlClickLastFrame && navMeshShader->isNavMesh(probMeshID))
+	if (ctrlClickLastFrame && navMeshShader->isNavMesh(probeMeshID))
 	{
 		if (selectionType == SELECTION_AGENT)
 		{
-			if (rightClickLastFrame) s_agentTool->SetTarget(probedPos);
+			if (rightClickLastFrame) s_agentTool->SetTarget(probePos);
 		}
 		else if (selectionType != SELECTION_AGENT)
 		{
-			if (leftClickLastFrame) s_pathTool->SetStart(probedPos);
-			if (rightClickLastFrame) s_pathTool->SetEnd(probedPos);
+			if (leftClickLastFrame) s_pathTool->SetStart(probePos);
+			if (rightClickLastFrame) s_pathTool->SetEnd(probePos);
 		}
 	}
 }
@@ -365,15 +349,15 @@ static bool HandleInput(float frameTime)
 			// Identify probed instance
 			probeInstID = coreStats.probedInstid;
 			probeTriID = coreStats.probedTriid;
-			probMeshID = renderer->GetInstanceMeshID(probeInstID);
-			meshName = renderer->GetMesh(probMeshID)->name;
+			probeMeshID = renderer->GetInstanceMeshID(probeInstID);
+			meshName = renderer->GetMesh(probeMeshID)->name;
 
 			// Get 3D probe position
 			ViewPyramid p = camera->GetView();
 			float3 unitRight = (p.p2 - p.p1) / *scrwidth;
 			float3 unitDown = (p.p3 - p.p1) / *scrheight;
 			float3 pixelLoc = p.p1 + probeCoords->x * unitRight + probeCoords->y * unitDown;
-			probedPos = camera->position + normalize(pixelLoc - camera->position) * coreStats.probedDist;
+			probePos = camera->position + normalize(pixelLoc - camera->position) * coreStats.probedDist;
 		}
 
 		if (s_guiMode == GUI_MODE_EDIT) HandleMouseInputEditMode();
@@ -495,10 +479,11 @@ void TW_CALL CleanNavMesh(void *data)
 //  |  TW_CALL ApplyChanges                                                       |
 //  |  Callback function for AntTweakBar button.                            LH2'19|
 //  +-----------------------------------------------------------------------------+
-void TW_CALL ApplyChanges(void *data)
+void TW_CALL ApplyEditChanges(void *data)
 {
 	if (s_guiMode != GUI_MODE_EDIT) return;
-	RefreshNavigator();
+	//RefreshNavigator(); // TODO: this would remove changes
+	s_navmeshTool->ApplyPolyChanges();
 	*camMoved = true;
 }
 
@@ -521,6 +506,17 @@ void TW_CALL KillAgent(void *data)
 {
 	if (s_guiMode != GUI_MODE_DEBUG) return;
 	s_agentTool->RemoveSelectedAgent();
+	*camMoved = true;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  TW_CALL ApplyAgentChanges                                                  |
+//  |  Callback function for AntTweakBar button.                            LH2'19|
+//  +-----------------------------------------------------------------------------+
+void TW_CALL ApplyAgentChanges(void *data)
+{
+	if (s_guiMode != GUI_MODE_DEBUG) return;
+	s_agentTool->ApplyChanges();
 	*camMoved = true;
 }
 
@@ -637,10 +633,10 @@ void RefreshSettingsBar()
 
 	// create opened probing block
 	TwAddVarRO(settingsBar, "Mesh", TW_TYPE_STDSTRING, &meshName, "group='probing'");
-	TwAddVarRO(settingsBar, "Mesh ID", TW_TYPE_INT32, &probMeshID, "group='probing'");
+	TwAddVarRO(settingsBar, "Mesh ID", TW_TYPE_INT32, &probeMeshID, "group='probing'");
 	TwAddVarRO(settingsBar, "Inst ID", TW_TYPE_INT32, &probeInstID, "group='probing'");
 	TwAddVarRO(settingsBar, "Tri ID", TW_TYPE_INT32, &probeTriID, "group='probing'");
-	TwAddVarRO(settingsBar, "Pos", float3Type, &probedPos, "group='probing'");
+	TwAddVarRO(settingsBar, "Pos", float3Type, &probePos, "group='probing'");
 	TwSetParam(settingsBar, "probing", "opened", TW_PARAM_INT32, 1, &closed);
 }
 
@@ -747,6 +743,10 @@ void RefreshEditBar()
 		{ SELECTION_AGENT, "Agent" }
 	};
 	TwType objectSelectionTypeType = TwDefineEnum("SelectionType", objectSelectionType, 5);
+	std::vector<TwEnumVal> polyAreaList;
+	for (int i = 0; i < config->m_areas.labels.size(); i++)
+		polyAreaList.push_back({ i, config->m_areas.labels[i].c_str() });
+	TwType polygonAreaType = TwDefineEnum("polygonAreaType", polyAreaList.data(), polyAreaList.size());
 
 	TwAddButton(editBar, "Activate EDIT mode", SwitchGUIMode, &GUI_MODE_EDIT, " label='Switch to EDIT mode' ");
 	TwAddSeparator(editBar, "editactivateseparator", "");
@@ -756,21 +756,27 @@ void RefreshEditBar()
 	TwAddVarRO(editBar, "ID", TW_TYPE_INT32, s_navmeshTool->GetSelectionID(), "");
 	TwAddVarRO(editBar, "OffMesh", TW_TYPE_BOOL8, s_navmeshTool->GetIsOffMesh(), " visible=false ");
 	TwAddVarRO(editBar, "Detail", TW_TYPE_BOOL8, s_navmeshTool->GetIsDetail(), " visible=false ");
-	TwAddVarRO(editBar, "Poly type", TW_TYPE_INT32, s_navmeshTool->GetPolyArea(), " visible=false ");
-	TwAddVarRO(editBar, "Poly area", TW_TYPE_INT32, s_navmeshTool->GetPolyType(), " visible=false ");
+
+	TwAddSeparator(editBar, "editseparator1", "");
+	TwAddVarRW(editBar, "Poly area", polygonAreaType, s_navmeshTool->GetPolyArea(), " visible=false ");
+
+	// create flags block
+	for (int i=0; i < config->m_flags.labels.size(); i++)
+		TwAddVarRW(editBar, config->m_flags.labels[i].c_str(), TW_TYPE_BOOL8, s_navmeshTool->GetPolyFlag(i), " group='flags' ");
+	TwDefine(" Editing/flags visible=false opened=false ");
 
 	// create verts block
-	TwAddVarRO(editBar, "v0", float3Type, s_navmeshTool->GetVert(0), "group='Verts' visible=false ");
-	TwAddVarRO(editBar, "v1", float3Type, s_navmeshTool->GetVert(1), "group='Verts' visible=false ");
-	TwAddVarRO(editBar, "v2", float3Type, s_navmeshTool->GetVert(2), "group='Verts' visible=false ");
-	TwAddVarRO(editBar, "v3", float3Type, s_navmeshTool->GetVert(3), "group='Verts' visible=false ");
-	TwAddVarRO(editBar, "v4", float3Type, s_navmeshTool->GetVert(4), "group='Verts' visible=false ");
-	TwAddVarRO(editBar, "v5", float3Type, s_navmeshTool->GetVert(5), "group='Verts' visible=false ");
-	TwSetParam(editBar, "Verts", "opened", TW_PARAM_INT32, 1, &closed);
+	TwAddVarRO(editBar, "v0", float3Type, s_navmeshTool->GetVert(0), "group='Verts' ");
+	TwAddVarRO(editBar, "v1", float3Type, s_navmeshTool->GetVert(1), "group='Verts' ");
+	TwAddVarRO(editBar, "v2", float3Type, s_navmeshTool->GetVert(2), "group='Verts' ");
+	TwAddVarRO(editBar, "v3", float3Type, s_navmeshTool->GetVert(3), "group='Verts' ");
+	TwAddVarRO(editBar, "v4", float3Type, s_navmeshTool->GetVert(4), "group='Verts' ");
+	TwAddVarRO(editBar, "v5", float3Type, s_navmeshTool->GetVert(5), "group='Verts' ");
+	TwDefine(" Editing/Verts visible=false opened=false ");
 
 	// saving
 	TwAddSeparator(editBar, "editsaveseparator1", "");
-	TwAddButton(editBar, "Apply", ApplyChanges, NULL, " label='Apply Changes' ");
+	TwAddButton(editBar, "Apply", ApplyEditChanges, NULL, " label='Apply Changes' ");
 	TwAddSeparator(editBar, "editsaveseparator2", "");
 	TwAddButton(editBar, "Discard", DiscardChanges, NULL, " label='Discard Changes' ");
 	TwAddSeparator(editBar, "editsaveseparator3", "");
@@ -808,6 +814,18 @@ void RefreshDebugBar()
 	// create agent block
 	TwSetParam(debugBar, "agent", "opened", TW_PARAM_INT32, 1, &opened);
 
+	// create flags block
+	for (int i = 0; i < config->m_flags.labels.size(); i++)
+		TwAddVarRW(debugBar, config->m_flags.labels[i].c_str(), TW_TYPE_BOOL8, s_agentTool->GetFilterFlag(i), " group='flags' ");
+	TwDefine(" Debugging/flags visible=false opened=false ");
+
+	// create movement cost block
+	for (int i = 0; i < config->m_areas.labels.size(); i++)
+		TwAddVarRW(debugBar, config->m_areas.labels[i].c_str(), TW_TYPE_FLOAT, s_agentTool->GetAreaCost(i), " group='area cost' ");
+	TwDefine(" Debugging/'area cost' visible=false opened=false ");
+
+	TwAddSeparator(debugBar, "applychangesseparator", "");
+	TwAddButton(debugBar, "Apply changes", ApplyAgentChanges, NULL, "");
 	TwAddSeparator(debugBar, "deleteagentseparator", "");
 	TwAddButton(debugBar, "Delete agent", KillAgent, NULL, "");
 	TwAddSeparator(debugBar, "pauseseparator1", "");

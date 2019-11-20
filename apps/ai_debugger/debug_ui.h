@@ -83,9 +83,9 @@ protected:
 	NavMeshShader* m_shader;
 	NavMeshNavigator*& m_navmesh; // navMeshNavigator in main_ui can reallocate
 
-	float3 m_v0, m_v1;
+	float3 m_v0 = float3{ 0, 0, 0 }, m_v1 = float3{ 0, 0, 0 };
 	std::vector<NavMeshNavigator::PathNode> m_path;
-	bool m_reachable;
+	bool m_reachable = false;
 	enum { V0SET = 0x1, V1SET = 0x2, BOTHSET = 0x3, NONESET = 0x0 };
 	unsigned char m_vertSet = NONESET;
 };
@@ -97,28 +97,44 @@ protected:
 class AgentNavigationTool
 {
 public:
-	AgentNavigationTool(NavMeshShader* shader, PathDrawingTool* pathTool, SELECTIONTYPE* selectionType)
-		: m_shader(shader), m_pathTool(pathTool), m_selectionType(selectionType) {};
+	AgentNavigationTool(NavMeshShader* shader, NavMeshNavigator*& navmesh, PathDrawingTool* pathTool, SELECTIONTYPE* selectionType)
+		: m_shader(shader), m_navmesh(navmesh), m_pathTool(pathTool), m_selectionType(selectionType) {};
 	~AgentNavigationTool() {};
 
 	//  +-----------------------------------------------------------------------------+
 	//  |  AgentNavigationTool::SelectAgent                                           |
 	//  |  Selects an agent, highlights the instance, and plots its path.       LH2'19|
 	//  +-----------------------------------------------------------------------------+
-	void SelectAgent(Agent* agent)
+	void SelectAgent(int InstID)
 	{
-		if (agent == m_agent) return; // nothing changed
 		Clear();
-		if (!agent) return;
-		m_agent = agent;
+		m_agent = m_shader->SelectAgent(InstID);
+		if (!m_agent) return;
 		*m_selectionType = SELECTION_AGENT;
 
-		if (agent->GetTarget()) // if it's already moving
+		// set polygon filter
+		TwDefine(" Debugging/flags visible=true ");
+		for (int i = 0; i < NavMeshFlagMapping::maxFlags; i++)
+		{
+			m_filterFlags[i] = (m_agent->GetFilter()->getIncludeFlags() & (0x1 << i));
+			if (m_agent->GetFilter()->getExcludeFlags() & (0x1 << i)) m_filterFlags[i] = false;
+		}
+		TwDefine(" Debugging/'area cost' visible=true ");
+		for (int i = 0; i < NavMeshAreaMapping::maxAreas; i++)
+			m_areaCosts[i] = m_agent->GetFilter()->getAreaCost(i);
+
+		// shade excluded polygons
+		unsigned short includes = 0;
+		for (int i = 0; i < NavMeshFlagMapping::maxFlags; i++)
+			if (m_filterFlags[i]) includes |= (0x1 << i);
+		m_shader->SetExcludedPolygons(m_navmesh, ~includes);
+
+		if (m_agent->GetTarget()) // if it's already moving
 		{
 			m_pathSet = true;
-			m_pathTool->SetStart(*agent->GetPos());
-			m_pathTool->SetEnd(*agent->GetTarget());
-			m_shader->SetPath(agent->GetPath());
+			m_pathTool->SetStart(*m_agent->GetPos());
+			m_pathTool->SetEnd(*m_agent->GetTarget());
+			m_shader->SetPath(m_agent->GetPath());
 		}
 		else // if it's standing still
 		{
@@ -163,20 +179,46 @@ public:
 		if (m_agent) // if there was an agent selected at all
 		{
 			m_shader->Deselect();
+			m_shader->SetExcludedPolygons(0, 0);
 			m_pathTool->Clear();
 			*m_selectionType = SELECTION_NONE;
 		}
 		m_agent = 0;
 		m_pathSet = false;
+		TwDefine(" Debugging/flags visible=false ");
+		TwDefine(" Debugging/'area cost' visible=false ");
 	}
+
+	void ApplyChanges()
+	{
+		if (m_agent)
+		{
+			// Applying filter changes
+			dtQueryFilter* filter = m_agent->GetFilter();
+			unsigned short includes = 0;
+			for (int i = 0; i < NavMeshFlagMapping::maxFlags; i++) 
+				if (m_filterFlags[i]) includes |= (0x1 << i);
+			filter->setIncludeFlags(includes);
+			filter->setExcludeFlags(~includes);
+			m_shader->SetExcludedPolygons(m_navmesh, ~includes);
+			for (int i = 0; i < NavMeshAreaMapping::maxAreas; i++)
+				filter->setAreaCost(i, m_areaCosts[i]);
+		}
+	}
+
+	bool* GetFilterFlag(int idx) { return &m_filterFlags[idx]; };
+	float* GetAreaCost(int idx) { return &m_areaCosts[idx]; };
 
 protected:
 	NavMeshShader* m_shader;
+	NavMeshNavigator*& m_navmesh;
 	PathDrawingTool* m_pathTool;
 	SELECTIONTYPE* m_selectionType;
 
 	Agent* m_agent = 0;
 	bool m_pathSet = false;
+	bool m_filterFlags[NavMeshFlagMapping::maxFlags];
+	float m_areaCosts[NavMeshAreaMapping::maxAreas];
 };
 
 // EOF

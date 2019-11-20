@@ -47,9 +47,9 @@ public:
 	};
 	~NavMeshShader() {};
 
-	union Poly { const dtPoly* poly; const dtOffMeshConnection* omc; };
-	struct Vert { float3* pos; int idx = -1, instID = -1; std::vector<Poly> polys; };
-	struct Edge { int v1 = -1, v2 = -1, idx = -1, instID = -1; const dtPoly *poly1 = 0, *poly2 = 0; };
+	struct Poly { union { const dtPoly* poly; const dtOffMeshConnection* omc; }; int ref = -1; std::vector<int> triIDs; };
+	struct Vert { float3* pos; int idx = -1, instID = -1; std::vector<dtPolyRef> polys; };
+	struct Edge { int v1 = -1, v2 = -1, idx = -1, instID = -1; dtPolyRef poly1 = 0, poly2 = 0; };
 	struct OMC { const dtOffMeshConnection* omc; int v1InstID = -1, v2InstID = -1, edgeInstID = -1; };
 
 	void UpdateMesh(NavMeshNavigator* navmesh);
@@ -82,10 +82,16 @@ public:
 	void AddAgentToScene(Agent* agent);
 	void RemoveAgentFromScene(Agent* agent);
 	void RemoveAllAgents();
+	void SetExcludedPolygons(const NavMeshNavigator* navmesh, short flags);
 
 	// Object selection
-	void Deselect() { m_vertSelect = 0; m_edgeSelect = 0; m_polySelect = 0; m_agentSelect = 0; };
-	const dtPoly* SelectPoly(float3 pos, NavMeshNavigator* navmesh);
+	void Deselect()
+	{
+		m_vertSelect = 0; m_edgeSelect = 0;
+		if (m_agentSelect) delete m_agentSelect;
+		m_agentSelect = 0; m_polySelect = 0;
+	};
+	Poly* SelectPoly(int triangleID);
 	Vert* SelectVert(int instanceID);
 	Edge* SelectEdge(int instanceID);
 	Agent* SelectAgent(int instanceID);
@@ -121,10 +127,11 @@ private:
 	// NavMesh representation
 	std::vector<Vert> m_verts; // (verts, detailVerts, offMeshVerts) * nTiles
 	std::vector<Edge> m_edges; // (edges, offMeshEdges) * nTiles
+	std::vector<Poly> m_polys;
 	std::vector<OMC> m_OMCs;
 	std::vector<int3> m_vertOffsets; // idx offset of (poly, detail, omc) verts per tile
 	void ExtractVertsAndEdges(const dtNavMesh* navmesh);
-	void AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, const dtPoly* poly);
+	void AddEdgeToEdgesAndPreventDuplicates(int v1, int v2, dtPolyRef poly);
 
 	// Scene shading
 	int m_polyMeshID = -1, m_polyInstID = -1;
@@ -147,12 +154,15 @@ private:
 	struct ShaderAgent { int instID = -1; Agent* agent; };
 	std::vector<ShaderAgent> m_agents;
 	void DrawAgentImpulse() const;
+	void DrawExcludedPolygons() const;
+	std::vector<const dtPoly*> m_excludedPolygons;
+	const float4 m_excludedColor = { 1.0f, 0, 0, .5f };
 
 	// Object selecting / highlighting
-	const dtPoly* m_polySelect = 0;
+	Poly* m_polySelect = 0;
 	Vert* m_vertSelect = 0;
 	Edge* m_edgeSelect = 0;
-	ShaderAgent* m_agentSelect = 0;
+	ShaderAgent* m_agentSelect = 0; // points to a copy of the ShaderAgent
 	void DrawPolyHighlightGL() const;
 	void DrawVertHighlightGL() const;
 	void DrawEdgeHighlightGL() const;

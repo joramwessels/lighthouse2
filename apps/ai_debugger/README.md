@@ -58,6 +58,7 @@ To add an agent, hold SHIFT while right clicking anywhere on the navmesh. Hold S
 ## Backlog
 
 * clean up main_ui.h ❗
+    * add main_ui.cpp and remove 'static' modifiers
 
 #### Building
 * extensive QA testing for all build params
@@ -73,14 +74,14 @@ To add an agent, hold SHIFT while right clicking anywhere on the navmesh. Hold S
 * off-mesh connections
     * make OMCs visible and editable in the edit menu (radius, directionality)
 * edit menu
-    * add polygon flags/areas ❗
+    * BUG: polygons without flags aren't highlighted as excluded ❗
 
 #### Debugging
 * BUG: agent pos/dir/target can't be tracked bc the pointer keeps changing
 * add agent editing (dtQueryFilter, speed)
 
 #### UI
-* excluding probed meshes from navmesh generation
+* excluding probed meshes from navmesh generation in settings menu
 * add mouse movement
     * middle mouse draggin for up/down
     * right mouse dragging for rotation (except when CTRL SHIFT)

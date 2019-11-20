@@ -15,7 +15,7 @@
 
 #include <stdio.h> // fopen_s, sprintf_s, fclose, fwrite
 
-#include "rendersystem.h"		// FileExists
+#include "rendersystem.h" // FileExists
 
 #include "navmesh_navigator.h"
 
@@ -241,6 +241,23 @@ void NavMeshNavigator::Clean()
 }
 
 //  +-----------------------------------------------------------------------------+
+//  |  NavMeshNavigator::GetFilter                                                |
+//  |  Creates a navigation filter using the given include/exclude labels.        |
+//  |  Excluded flags override included flags, default is excluded.         LH2'19|
+//  +-----------------------------------------------------------------------------+
+dtQueryFilter NavMeshNavigator::GetFilter(std::vector<std::string> includes, std::vector<std::string> excludes) const
+{
+	short incl = 0, excl = 0;
+	for (auto i = includes.begin(); i != includes.end(); i++) incl |= m_flags[i->c_str()];
+	for (auto i = excludes.begin(); i != excludes.end(); i++) excl |= m_flags[i->c_str()];
+	dtQueryFilter filter;
+	filter.setIncludeFlags(incl);
+	filter.setExcludeFlags(excl);
+	for (int i = 0; i < m_areas.defaultCosts.size(); i++) filter.setAreaCost(i, m_areas.defaultCosts[i]);
+	return filter;
+}
+
+//  +-----------------------------------------------------------------------------+
 //  |  NavMeshNavigator::GetPoly                                                  |
 //  |  Returns a polygon pointer given its detour reference.                LH2'19|
 //  +-----------------------------------------------------------------------------+
@@ -289,7 +306,7 @@ NavMeshStatus SerializeNavMesh(const char* dir, const char* ID, const dtNavMesh*
 
 	// Opening navmesh file for writing
 	Timer timer;
-	std::string filename = std::string(dir) + ID + ".navmesh";
+	std::string filename = std::string(dir) + ID + PF_NAVMESH_FILE_EXTENTION;
 	DETOUR_LOG("Saving NavMesh '%s'... ", filename.c_str());
 	if (!navMesh) NAVMESHIO_ERROR(NavMeshStatus::INPUT | NavMeshStatus::DT, "Can't serialize '%s', dtNavMesh is nullptr\n", ID);
 	FILE* fp;
@@ -338,7 +355,7 @@ NavMeshStatus DeserializeNavMesh(const char* dir, const char* ID, dtNavMesh*& na
 
 	// Opening file
 	Timer timer;
-	std::string filename = std::string(dir) + ID + ".navmesh";
+	std::string filename = std::string(dir) + ID + PF_NAVMESH_FILE_EXTENTION;
 	DETOUR_LOG("Loading NavMesh '%s'... ", filename.c_str());
 	if (!FileExists(filename.c_str()))
 		NAVMESHIO_ERROR(NavMeshStatus::IO, "NavMesh file '%s' does not exist\n", filename.c_str());

@@ -57,7 +57,7 @@ void PrepareScene()
 	int meshID = renderer->AddMesh("nav_test.obj", "data\\", 1.0f);
 	renderer->GetScene()->meshes[meshID]->name = "Input Mesh";
 	int instID = renderer->AddInstance(meshID, mat4::Identity());
-	int instID2 = renderer->AddInstance(meshID, mat4::Translate(0, 0, 30));
+	//int instID2 = renderer->AddInstance(meshID, mat4::Translate(0, 0, 30));
 	int rootNode = renderer->FindNode( "RootNode (gltf orientation matrix)" );
 	renderer->SetNodeTransform( rootNode, mat4::RotateX( -PI / 2 ) );
 	//int lightMat = renderer->AddMaterial( make_float3( 100, 100, 80 ) );
@@ -67,11 +67,21 @@ void PrepareScene()
 
 	// Navmesh builder
 	navMeshBuilder = new NavMeshBuilder("data\\ai\\");
-	navMeshBuilder->GetConfig()->SetCellSize(.3f, .2f);
-	navMeshBuilder->GetConfig()->SetAgentInfo(10.0f, 10, 2, 2);
-	navMeshBuilder->GetConfig()->SetPolySettings(12, 1.3f, 8.0f, 20.0f, 6);
-	navMeshBuilder->GetConfig()->SetDetailPolySettings(6.0f, 1.0f);
-	navMeshBuilder->GetConfig()->m_printBuildStats = true;
+	NavMeshConfig* config = navMeshBuilder->GetConfig();
+	config->SetCellSize(.3f, .2f);
+	config->SetAgentInfo(10.0f, 10, 2, 2);
+	config->SetPolySettings(12, 1.3f, 8.0f, 20.0f, 6);
+	config->SetDetailPolySettings(6.0f, 1.0f);
+	config->m_printBuildStats = true;
+	config->AddAreaType("GROUND");
+	config->AddAreaType("ROAD");
+	config->AddAreaType("STAIRS");
+	config->AddAreaType("WATER");
+	config->AddAreaType("DOOR");
+	config->AddFlag("WALK");
+	config->AddFlag("CLIMB");
+	config->AddFlag("JUMP");
+	config->AddFlag("SWIM");
 
 	rigidBodies = new PhysicsPlaceholder(maxAgents);
 	navMeshAgents = new NavMeshAgents(maxAgents, maxAgentPathSize, agentUpdateInterval);
