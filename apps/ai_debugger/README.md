@@ -77,7 +77,7 @@ To add an agent, hold SHIFT while right clicking anywhere on the navmesh. Hold S
     * BUG: polygons without flags aren't highlighted as excluded ❗
 
 #### Debugging
-* BUG: agent pos/dir/target can't be tracked bc the pointer keeps changing
+* BUG: add two agents, delete one, add another -> selecting one now highlights the other
 * add agent editing (dtQueryFilter, speed)
 
 #### UI

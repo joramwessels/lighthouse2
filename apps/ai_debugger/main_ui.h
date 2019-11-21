@@ -57,6 +57,7 @@ static bool ctrlClickLastFrame = false, shiftClickLastFrame = false, altClickLas
 static TwBar* settingsBar = 0;
 static CoreStats coreStats;
 static float mraysincl = 0, mraysexcl = 0;
+static SELECTIONTYPE probeType = SELECTION_NONE;
 static std::string meshName;
 static int probeMeshID = -1, probeInstID = -1, probeTriID = -1;
 static float3 probePos;
@@ -141,7 +142,7 @@ static void DrawGUI(float deltaTime)
 
 //  +-----------------------------------------------------------------------------+
 //  |  PostPhysicsUpdate                                                          |
-//  |  Updates the GUI after the physics have updated.                      LH2'19|
+//  |  Updates the GUI after the physics have updated and before rendering. LH2'19|
 //  +-----------------------------------------------------------------------------+
 static void PostPhysicsUpdate(float deltaTime)
 {
@@ -165,13 +166,8 @@ static void PostRenderUpdate(float deltaTime)
 //  +-----------------------------------------------------------------------------+
 static void RemoveDebugAssets()
 {
-	if (selectionType == SELECTION_AGENT)
-	{
-		selectionType = SELECTION_NONE;
-		s_agentTool->Clear(); // deselects the shader
-	}
+	if (selectionType == SELECTION_AGENT) s_agentTool->Clear();
 	s_pathTool->Clear();
-
 	navMeshShader->RemoveAllAgents();
 	rigidBodies->Clean();
 	navMeshAgents->Clean();
@@ -258,13 +254,9 @@ static void HandleMouseInputEditMode()
 	// Instance selecting (SHIFT) (L-CLICK)
 	if (leftClickLastFrame && shiftClickLastFrame)
 	{
-		if (probeInstID > 0 && navMeshShader->isNavMesh(probeMeshID))
-		{
-			if (navMeshShader->isVert(probeMeshID)) s_navmeshTool->SelectVert(probeInstID);
-			else if (navMeshShader->isEdge(probeMeshID)) s_navmeshTool->SelectEdge(probeInstID);
-			else if (navMeshShader->isPoly(probeMeshID)) s_navmeshTool->SelectPoly(probeTriID);
-			else s_navmeshTool->Deselect();
-		}
+		if (probeType == SELECTION_VERT) s_navmeshTool->SelectVert(probeInstID);
+		else if (probeType == SELECTION_EDGE) s_navmeshTool->SelectEdge(probeInstID);
+		else if (probeType == SELECTION_POLY) s_navmeshTool->SelectPoly(probeTriID);
 		else s_navmeshTool->Deselect();
 	}
 
@@ -285,7 +277,7 @@ static void HandleMouseInputDebugMode()
 	// Agent placement (SHIFT) (R-CLICK)
 	if (rightClickLastFrame && shiftClickLastFrame)
 	{
-		if (navMeshShader->isPoly(probeMeshID))
+		if (probeType = SELECTION_POLY)
 		{
 			RigidBody* rb = rigidBodies->AddRB(agentScale, mat4::Identity(), mat4::Translate(probePos));
 			Agent* agent = navMeshAgents->AddAgent(navMeshNavigator, rb);
@@ -296,12 +288,12 @@ static void HandleMouseInputDebugMode()
 	// Selecting (SHIFT) (L-CLICK)
 	if (leftClickLastFrame && shiftClickLastFrame)
 	{
-		if (navMeshShader->isAgent(probeMeshID)) s_agentTool->SelectAgent(probeInstID);
+		if (probeType = SELECTION_AGENT) s_agentTool->SelectAgent(probeInstID); // selecting
 		else if (selectionType == SELECTION_AGENT) s_agentTool->Clear(); // deselect previous agent
 	}
 
 	// Setting path start/end (CTRL)
-	if (ctrlClickLastFrame && navMeshShader->isNavMesh(probeMeshID))
+	if (ctrlClickLastFrame && (probeType == SELECTION_POLY || probeType == SELECTION_EDGE || probeType == SELECTION_VERT))
 	{
 		if (selectionType == SELECTION_AGENT)
 		{
@@ -338,6 +330,7 @@ static bool HandleInput(float frameTime)
 	if (GetAsyncKeyState(VK_DOWN)) { changed = true; camera->TranslateTarget(make_float3(0, rotateSpeed, 0)); }
 	if (GetAsyncKeyState(VK_LEFT)) { changed = true; camera->TranslateTarget(make_float3(-rotateSpeed, 0, 0)); }
 	if (GetAsyncKeyState(VK_RIGHT)) { changed = true; camera->TranslateTarget(make_float3(rotateSpeed, 0, 0)); }
+	probeType = SELECTION_NONE;
 
 	// Probing results are one frame delayed due to camera refresh
 	if (leftClickLastFrame || rightClickLastFrame)
@@ -349,9 +342,13 @@ static bool HandleInput(float frameTime)
 			// Identify probed instance
 			probeInstID = coreStats.probedInstid;
 			probeTriID = coreStats.probedTriid;
-			probeMeshID = renderer->GetInstanceMeshID(probeInstID);
+			probeMeshID = renderer->GetTriangleMesh(probeInstID, probeTriID);
+			if (navMeshShader->isPoly(probeMeshID)) probeType = SELECTION_POLY;
+			else if (navMeshShader->isAgent(probeMeshID)) probeType = SELECTION_AGENT;
+			else if (navMeshShader->isVert(probeMeshID)) probeType = SELECTION_VERT;
+			else if (navMeshShader->isEdge(probeMeshID)) probeType = SELECTION_EDGE;
 			meshName = renderer->GetMesh(probeMeshID)->name;
-
+			
 			// Get 3D probe position
 			ViewPyramid p = camera->GetView();
 			float3 unitRight = (p.p2 - p.p1) / *scrwidth;
@@ -746,7 +743,7 @@ void RefreshEditBar()
 	std::vector<TwEnumVal> polyAreaList;
 	for (int i = 0; i < config->m_areas.labels.size(); i++)
 		polyAreaList.push_back({ i, config->m_areas.labels[i].c_str() });
-	TwType polygonAreaType = TwDefineEnum("polygonAreaType", polyAreaList.data(), polyAreaList.size());
+	TwType polygonAreaType = TwDefineEnum("polygonAreaType", polyAreaList.data(), (uint)polyAreaList.size());
 
 	TwAddButton(editBar, "Activate EDIT mode", SwitchGUIMode, &GUI_MODE_EDIT, " label='Switch to EDIT mode' ");
 	TwAddSeparator(editBar, "editactivateseparator", "");

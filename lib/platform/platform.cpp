@@ -154,7 +154,7 @@ void DrawShapeOnScreen(std::vector<float2> verts, std::vector<float4> colors, ui
 	glBindVertexArray(vboID);
 	glPointSize(width);
 	glLineWidth(width);
-	glDrawArrays(GLshape, 0, verts.size());
+	glDrawArrays(GLshape, 0, (GLsizei)verts.size());
 	glBindVertexArray(0);
 	CheckGL();
 	glDisable(GL_BLEND);

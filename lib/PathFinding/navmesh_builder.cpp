@@ -71,20 +71,19 @@ NavMeshBuilder::NavMeshBuilder(const char* dir) : m_dir(dir)
 NavMeshStatus NavMeshBuilder::Build(HostScene* scene)
 {
 	m_status = NavMeshStatus::SUCCESS;
-	if (!scene || scene->scene.empty())
+	if (!scene || scene->rootNodes.empty())
 		RECAST_ERROR(NavMeshStatus::RC | NavMeshStatus::INPUT, "HostScene is nullptr\n");
 
 	// Extracting triangle soup
-	const std::vector<int> instances = scene->instances;
-	const std::vector<HostMesh*> meshes = scene->meshes;
+	//const std::vector<int> instances = scene->rootNodes;
+	const std::vector<HostMesh*> meshes = scene->meshPool;
+	//const std::vector<HostNode*> nodes = scene->nodePool;
 	std::vector<HostTri> hostTris;
-	const HostNode* node;
 	std::vector<float3> vertices;
 	std::vector<int3> triangles;
 	int nTri = 0, instancesExcluded = 0;
-	for (int i = 0; i < (int)instances.size(); i++) // for every instance
+	for (const HostNode* node : scene->nodePool) if (node && node->meshID >= 0) // for every instance
 	{
-		node = scene->nodes[instances[i]];
 		if (meshes[node->meshID]->excludeFromNavmesh) // skip if excluded
 		{
 			instancesExcluded++;

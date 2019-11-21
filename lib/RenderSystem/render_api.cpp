@@ -131,6 +131,11 @@ RenderSettings* RenderAPI::GetSettings()
 	return &renderer->settings;
 }
 
+int RenderAPI::GetTriangleMesh(const int coreInstId, const int coreTriId)
+{
+	return renderer->GetTriangleMesh(coreInstId, coreTriId);
+}
+
 int RenderAPI::GetTriangleMaterialID( const int coreInstId, const int coreTriId )
 {
 	return renderer->GetTriangleMaterial( coreInstId, coreTriId );
@@ -152,14 +157,9 @@ HostScene* RenderAPI::GetScene()
 	return renderer->scene;
 }
 
-int RenderAPI::GetInstanceMeshID(int instID)
-{
-	return renderer->scene->nodes[renderer->scene->instances[instID]]->meshID;
-}
-
 HostMesh* RenderAPI::GetMesh(int meshID)
 {
-	return renderer->scene->meshes[meshID];
+	return renderer->scene->meshPool[meshID];
 }
 
 int RenderAPI::FindMaterialID( const char* name )

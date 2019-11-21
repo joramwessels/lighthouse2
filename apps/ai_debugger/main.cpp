@@ -55,9 +55,9 @@ void PrepareScene()
 	// renderer->AddScene( "InterpolationTest.glb", "data\\", mat4::Translate( 0, 2, -5 ) );
 	// renderer->AddScene( "AnimatedMorphCube.glb", "data\\", mat4::Translate( 0, 2, 9 ) );
 	int meshID = renderer->AddMesh("nav_test.obj", "data\\", 1.0f);
-	renderer->GetScene()->meshes[meshID]->name = "Input Mesh";
+	renderer->GetMesh(meshID)->name = "Input Mesh";
 	int instID = renderer->AddInstance(meshID, mat4::Identity());
-	//int instID2 = renderer->AddInstance(meshID, mat4::Translate(0, 0, 30));
+	int instID2 = renderer->AddInstance(meshID, mat4::Translate(0, 0, 30));
 	int rootNode = renderer->FindNode( "RootNode (gltf orientation matrix)" );
 	renderer->SetNodeTransform( rootNode, mat4::RotateX( -PI / 2 ) );
 	//int lightMat = renderer->AddMaterial( make_float3( 100, 100, 80 ) );
@@ -99,10 +99,12 @@ int main()
 	// initialize renderer: pick one
 	renderer = RenderAPI::CreateRenderAPI("RenderCore_Optix7filter");				// OPTIX7 core, with filtering (static scenes only for now)
 	// renderer = RenderAPI::CreateRenderAPI( "rendercore_optix7.dll" );			// OPTIX7 core, best for RTX devices
-	//renderer = RenderAPI::CreateRenderAPI( "rendercore_optixprime_b.dll" );		// OPTIX PRIME, best for pre-RTX CUDA devices
-	// renderer = RenderAPI::CreateRenderAPI( "rendercore_primeref.dll" );			// REFERENCE, for image validation
-	// renderer = RenderAPI::CreateRenderAPI( "rendercore_optixrtx_b.dll" );		// OPTIX6 core, for reference
-	// renderer = RenderAPI::CreateRenderAPI( "rendercore_softrasterizer.dll" );	// RASTERIZER, your only option if not on NVidia
+	// renderer = RenderAPI::CreateRenderAPI( "RenderCore_OptixPrime_B" );			// OPTIX PRIME, best for pre-RTX CUDA devices
+	// renderer = RenderAPI::CreateRenderAPI( "RenderCore_PrimeRef" );				// REFERENCE, for image validation
+	// renderer = RenderAPI::CreateRenderAPI( "RenderCore_SoftRasterizer" );		// RASTERIZER, your only option if not on NVidia
+	// renderer = RenderAPI::CreateRenderAPI( "RenderCore_Minimal" );				// MINIMAL example, to get you started on your own core
+	// renderer = RenderAPI::CreateRenderAPI( "RenderCore_Vulkan_RT" );				// Meir's Vulkan / RTX core
+	// renderer = RenderAPI::CreateRenderAPI( "RenderCore_OptixPrime_BDPT" );		// Peter's OptixPrime / BDPT core
 
 	renderer->DeserializeCamera( "camera.xml" );
 	// initialize scene

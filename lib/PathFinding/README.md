@@ -101,15 +101,13 @@ To fascilitate graphical navmesh editing, the shader can add-, move-, and remove
 
 
 #### NavMeshShader
-* BUG: instances won't delete ❗
 * BUG: agents/vertices won't select after rebuild
-    * instIDs differ
+    * instIDs differ ❗
 * make meshes transparent
 * off-mesh connections
     * BUG: OMC edge wrong mesh? ❗
     * make OMCs added during runtime temporary/removable
     * how to check directionality in `NavMeshShader::AddOMCsToScene` and `NavMeshShader::AddTmpOMC`
-* are calls to SynchronizeSceneData() necessary after add operation?
 * remove old navmesh mesh from render core on `Clear` to save memory
 * why are there no detail verts?
 * OpenGL highlights cost 10-20 fps

@@ -51,11 +51,11 @@ public:
 	void Render( Convergence converge );
 	Camera* GetCamera();
 	RenderSettings* GetSettings();
+	int GetTriangleMesh(const int coreInstId, const int coreTriId);
 	int GetTriangleMaterialID( const int coreInstId, const int coreTriId );
 	HostMaterial* GetTriangleMaterial( const int coreInstId, const int coreTriId );
 	HostMaterial* GetMaterial( const int matId );
 	HostScene* GetScene();
-	int GetInstanceMeshID(int instID);
 	HostMesh* GetMesh(int meshID);
 	int FindNode( const char* name );
 	int FindMaterialID( const char* name );
