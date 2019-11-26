@@ -68,10 +68,11 @@ public:
 		if (m_navmesh) Clean();
 		std::string configfile = std::string(dir) + ID + PF_NAVMESH_CONFIG_FILE_EXTENTION;
 		NavMeshConfig config;
-		config.Load(configfile.c_str());
+		NavMeshStatus status = config.Load(configfile.c_str());
+		if (status.Failed()) return status;
 		m_flags = config.m_flags;
 		m_areas = config.m_areas;
-		NavMeshStatus status = DeserializeNavMesh(dir, ID, m_navmesh);
+		status = DeserializeNavMesh(dir, ID, m_navmesh);
 		if (status.Failed()) return status;
 		m_owner = true;
 		status = CreateNavMeshQuery();

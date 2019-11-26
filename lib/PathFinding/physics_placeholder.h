@@ -22,7 +22,7 @@
 
 namespace lighthouse2 {
 
-static const float s_drag = .2f;
+static const float s_drag = .3f;
 
 //  +-----------------------------------------------------------------------------+
 //  |  RigidBody                                                                  |

@@ -7,13 +7,13 @@ Dependencies:
 
 ![ScreenShot](../../screenshots/ai_debugger.png)
 
-## Usage
+# Usage
 
 You can move the camera using WASD, and rotate using the arrow keys. Hold SHIFT to move faster.
 
 #### Building
 
-Navmeshes can be generated using the 'build' tab. The `NavMeshBuilder` class is automatically given the `HostScene` of the renderer, which is initialized in `main.cpp/PrepareScene()`. Navmesh generation is influenced by multiple configurations, the implications of which are more thoroughly explained in the [Pathfinding documentation](../../lib/PathFinding/README.md). Some parameters you see here are automatically rasterized to voxels before being passed to the builder. The following parameters can be found in the build menu:
+Navmeshes can be generated using the 'build' tab. The `NavMeshBuilder` class is automatically given the `HostScene` of the renderer, which is initialized in `main.cpp/PrepareScene()`. Meshes can be excluded from influencing the navmesh generation in the *Settings* menu (bottom left) under *probing*. The generation process is influenced by multiple configurations, the implications of which are more thoroughly explained in the [Pathfinding documentation](../../lib/PathFinding/README.md). Some parameters you see here are automatically converted from world units to voxels before being passed to the builder. The following parameters can be found in the build menu:
 
 * `AABB min/max`: The bounding box limiting the navmesh. Defaults to the scene bounds when 0.
 * `cell size`: The width and depth of the voxel cells during rasterization.
@@ -42,46 +42,43 @@ Navmeshes can be built, saved, loaded, and cleared with the buttons underneath t
 
 #### Editing
 
-To edit a navmesh, first generate one using the build menu and activate `EDIT` mode using the uppermost button on the edit menu. To select a polygon, edge, or vertex, hold SHIFT and left click the object. The edit menu now displays the details of the object. *(Editing hasn't been implemented yet)*.
+To edit a navmesh, first generate one using the build menu and activate `EDIT` mode using the uppermost button on the edit menu. To select a polygon, edge, or vertex, hold SHIFT and left click the object. The edit menu now displays the details of the object. At this point, only the polygon flags and area type can be edited.
 
-To add an off mesh connection, hold CTRL and left click to set the starting point, then right click to set the end. Once both points have been set, the OMC is added to the builder. You can hit 'Apply Changes'and switch to the debug menu to test it, and then switch back to the edit or build menu to save it.
+To add an off-mesh connection, hold CTRL and left click to set the starting point, then right click to set the end. Once both points have been set, the OMC is added to the builder. You can hit 'Apply Changes'and switch to the debug menu to test it, and then switch back to the edit or build menu to save it. *(off-mesh connections do not work yet)*
 
 #### Debugging
 
 To test the navmesh, activate the debug menu using the uppermost button. Paths can be drawn by holding CTRL. Left click to set the start, right click to set the end.
 
-To add an agent, hold SHIFT while right clicking anywhere on the navmesh. Hold SHIFT and left click to select an agent. When an agent is selected, hold CTRL and right click to give it a target. The debug menu displays all relevant details on the agent and its path.
+To add an agent, hold SHIFT while right clicking anywhere on the navmesh. Hold SHIFT and left click to select an agent. When an agent is selected, hold CTRL and right click to give it a target. The debug menu displays all relevant details on the agent and its path. Unchecking a polygon flag (and applying the changes) will highlight all polygons with that flag red, and make the agent avoid traversing them.
+
+## Code Overview
+Most of the functionality can be found in `main_ui.h`. The `HandleInput` function handles the camera movement and scene probing. Since the probing data is generated during rendering, the function has to wait one frame for the new data to arrive before handling the user input.
+
+The mouse input is is handled according to the current GUI mode (build/edit/debug). `HandleMouseInputEditMode` handles selecting objects and adding off-mesh connections using the `NavMeshSelectionTool` and `OffMeshConnectionTool` respectively. These classes, found in `edit_ui.h`, are merely there for readability and organization. Similarly, `HandleMouseInputDebugMode` handles agent placing, agent selecting, and path drawing using the `PathDrawingTool` and `AgentNavigationTool` found in `debug_ui.h`.
+
+AntTweakBar provides the green menus on screen. The menu variables mostly reference member variables of the several tools. These tools are therefore responsible for keeping the values updated, and saving any actions that didn't directly change the variable itself (e.g. the polygon flags, which are converted to- and from booleans).
 
 <br/>
 <br/>
 
 ## Backlog
 
-* clean up main_ui.h ❗
-    * add main_ui.cpp and remove 'static' modifiers
-
-#### Building
-* extensive QA testing for all build params
-
 #### Editing
-* navmesh editing
+* navmesh pruning
     * spawn unit axis at selected vert/edge
     * add mouse controls to drag unit axis
     * make local copy of changed objects
-        * Make NavMeshShader verts reference this local copy
+        * Make NavMeshShader verts reference the pos of this local copy
         * apply changes in AntTweakBar 'Apply Changes' callback
         * discard changes in AntTweakBar 'Discard Changes' callback
 * off-mesh connections
     * make OMCs visible and editable in the edit menu (radius, directionality)
-* edit menu
-    * BUG: polygons without flags aren't highlighted as excluded ❗
 
 #### Debugging
-* BUG: add two agents, delete one, add another -> selecting one now highlights the other
-* add agent editing (dtQueryFilter, speed)
+* add agent maxSpeed/maxAcceleration editing
 
 #### UI
-* excluding probed meshes from navmesh generation in settings menu
 * add mouse movement
     * middle mouse draggin for up/down
     * right mouse dragging for rotation (except when CTRL SHIFT)

@@ -28,7 +28,7 @@ namespace lighthouse2 {
 
 //  +-----------------------------------------------------------------------------+
 //  |  DrawPolys                                                                  |
-//  |  Draws a vector of polygons to the screen.                            LH2'19|
+//  |  Draws a list of polygons to the screen.                              LH2'19|
 //  +-----------------------------------------------------------------------------+
 void DrawPolys(const std::vector<const dtPoly*> polys, const std::vector<NavMeshShader::Vert> verts, float4 color, const Camera* camera)
 {
@@ -48,7 +48,7 @@ void DrawPolys(const std::vector<const dtPoly*> polys, const std::vector<NavMesh
 
 //  +-----------------------------------------------------------------------------+
 //  |  DrawVerts                                                                  |
-//  |  Draws a vector of vertices to the screen.                            LH2'19|
+//  |  Draws a list of vertices to the screen.                              LH2'19|
 //  +-----------------------------------------------------------------------------+
 void DrawVerts(const std::vector<NavMeshShader::Vert> verts, float4 color, float width, const Camera* camera)
 {
@@ -63,7 +63,7 @@ void DrawVerts(const std::vector<NavMeshShader::Vert> verts, float4 color, float
 
 //  +-----------------------------------------------------------------------------+
 //  |  DrawEdges                                                                  |
-//  |  Draws a vector of edges to the screen.                               LH2'19|
+//  |  Draws a list of edges to the screen.                                 LH2'19|
 //  +-----------------------------------------------------------------------------+
 void DrawEdges(const std::vector<NavMeshShader::Edge> edges, const std::vector<NavMeshShader::Vert> verts, float4 color, float width, const Camera* camera)
 {
@@ -83,7 +83,9 @@ void DrawEdges(const std::vector<NavMeshShader::Edge> edges, const std::vector<N
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::DrawGL                                                      |
-//  |  Draws all applicable GL shapes on the window.                        LH2'19|
+//  |  Draws all applicable GL shapes on the window.                              |
+//  |  Navmesh shading using GL, selection highlighting, agent impulses,          |
+//  |  paths, path beacons, and highlighting inecessible polygons.          LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::DrawGL() const
 {
@@ -143,7 +145,7 @@ void NavMeshShader::DrawAgentImpulse() const
 	if (!m_agentSelect) return;
 	const float4 col = { .1f, .9f, .1f, 1.0f };
 	const RigidBody* rb = m_agentSelect->agent->GetRB();
-	float3 world[2] = { rb->m_pos, rb->m_pos + rb->m_impulse * 10.0f };
+	float3 world[2] = { rb->m_pos, rb->m_pos + rb->m_impulse * m_agentImpulseScale };
 	std::vector<float4> colors{ col, col };
 	std::vector<float2> screen(2);
 	m_renderer->GetCamera()->WorldToScreenPos(world, screen.data(), 2);
@@ -240,8 +242,8 @@ void NavMeshShader::RemoveNavMeshFromScene()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::AddNavMeshToScene                                           |
-//  |  Adds the navmesh triangles to the scene as a single mesh.            LH2'19|
+//  |  NavMeshShader::AddPolysToScene                                             |
+//  |  Adds the navmesh polygons to the scene as a single mesh.             LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddPolysToScene()
 {
@@ -251,8 +253,8 @@ void NavMeshShader::AddPolysToScene()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::RemoveNavMeshFromScene                                      |
-//  |  Removes the navmesh instance and mesh from the scene.                LH2'19|
+//  |  NavMeshShader::RemovePolysFromScene                                        |
+//  |  Removes the navmesh polygons from the scene.                         LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::RemovePolysFromScene()
 {
@@ -265,8 +267,8 @@ void NavMeshShader::RemovePolysFromScene()
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::AddNodesToScene                                             |
-//  |  Adds all precomputed navmesh vertices as spheres to the scene.       LH2'19|
+//  |  NavMeshShader::AddVertsToScene                                             |
+//  |  Add the navmesh vertices to the scene.                               LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddVertsToScene()
 {
@@ -290,7 +292,7 @@ void NavMeshShader::RemoveVertsFromScene()
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::AddEdgesToScene                                             |
-//  |  Adds all precomputed navmesh edges as cylinders to the scene.        LH2'19|
+//  |  Adds the navmesh edges to the scene.                                 LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddEdgesToScene()
 {
@@ -321,7 +323,7 @@ void NavMeshShader::RemoveEdgesFromScene()
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::AddOMCsToScene                                              |
-//  |  Adds all off-mesh connections as cylinders/arrows to the scene.      LH2'19|
+//  |  Adds all off-mesh connections to the scene.                          LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddOMCsToScene()
 {
@@ -333,8 +335,7 @@ void NavMeshShader::AddOMCsToScene()
 		mat4 sca = mat4::Scale(make_float3(m_edgeWidth, len, m_edgeWidth));
 		mat4 rot = mat4::Rotate(cross({ 0, 1, 0 }, v1v2), -acosf(v1v2.y));
 		mat4 tra = mat4::Translate((v1 + v2) / 2);
-		int meshID = (true ? m_directedEdgeMeshID : m_edgeMeshID); // TODO: replace 'true' with a check for bidirectionality
-		i->edgeInstID = m_renderer->AddInstance(meshID, tra * rot * sca);
+		i->edgeInstID = m_renderer->AddInstance(m_edgeMeshID, tra * rot * sca);
 
 		// Add the two verts
 		i->v1InstID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(v1) * mat4::Scale(i->omc->rad));
@@ -434,7 +435,7 @@ void NavMeshShader::RemoveAllAgents()
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::SetExcludedPolygons                                         |
-//  |  Sets the polygons that are excluded by the filter.                   LH2'19|
+//  |  Sets the polygons that are excluded by the agent's filter.           LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::SetExcludedPolygons(const NavMeshNavigator* navmesh, short flags)
 {
@@ -549,7 +550,7 @@ Agent* NavMeshShader::SelectAgent(int instanceID)
 void NavMeshShader::SetTmpVert(float3 pos, float width)
 {
 	RemoveTmpVert();
-	m_tmpVert.pos = new float3(pos);
+	m_tmpVert.pos = new float3(pos); // Vert struct needs a pointer
 	m_tmpVert.instID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(pos) * mat4::Scale(width));
 }
 
@@ -571,8 +572,7 @@ void NavMeshShader::RemoveTmpVert()
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::AddTmpOMC                                                   |
-//  |  Adds a temporary off-mesh connection during runtime.                       |
-//  |  *omc* should be a permanent pointer from the dtNavMesh object.       LH2'19|
+//  |  Adds a temporary off-mesh connection during runtime.                 LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddTmpOMC(float3 v0, float3 v1, float width)
 {
@@ -584,8 +584,7 @@ void NavMeshShader::AddTmpOMC(float3 v0, float3 v1, float width)
 	mat4 sca = mat4::Scale(make_float3(m_edgeWidth, len, m_edgeWidth));
 	mat4 rot = mat4::Rotate(cross({ 0, 1, 0 }, v1v2), -acosf(v1v2.y));
 	mat4 tra = mat4::Translate((v0 + v1) / 2);
-	int meshID = (true ? m_directedEdgeMeshID : m_edgeMeshID); // TODO: replace 'true' with a check for bidirectionality
-	newOMC->edgeInstID = m_renderer->AddInstance(meshID, tra * rot * sca);
+	newOMC->edgeInstID = m_renderer->AddInstance(m_edgeMeshID, tra * rot * sca);
 
 	// Add the two verts
 	newOMC->v1InstID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(v0) * mat4::Scale(width));
@@ -612,7 +611,7 @@ void NavMeshShader::AddTmpOMC(float3 v0, float3 v1, float width)
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::UpdateMesh                                                  |
-//  |  Removes the old navmesh assets and adds the new one.                 LH2'19|
+//  |  Builds a new internal representation based on a new navmesh.         LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::UpdateMesh(NavMeshNavigator* navmesh)
 {
@@ -639,10 +638,29 @@ void AddEdgeToEdgesAndPreventDuplicates(std::vector<NavMeshShader::Edge>& edges,
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::ExtractObjects                                              |
-//  |  Creates an internal representation of verts, edges, and polys.       LH2'19|
+//  |  Creates an internal representation of verts, edges, and polys.             |
+//  |  For every tile, it														  |
+//  |  1) instantiates all Vert instances with a pointer to the corresponding     |
+//  |     vertex position in the dtNavMesh.                                       |
+//  |  2) instantiates all Poly instances with a pointer to the corresponding     |
+//  |     dtPoly in the dtNavMesh, and a list of triangles indices that           |
+//  |     correspond to this polygon. These indices are determined by counting    |
+//  |     the number of triangles that have been assigned, and therefore assumes  |
+//  |     that they were read in the same order as in `WriteTileToMesh`. This is  |
+//  |     a result of separating the two functionalities for readability, and     |
+//  |     making sure that the polygons are added before the OMCs.                |
+//  |  3) hands each Vert a list of dtPolyRefs (IDs) that they're in              |
+//  |  4) instantiates all Edge instances with the indices of both verts,         |
+//  |     as well as two dtPolyRefs to the two polygons they connect.             |
+//  |  5) adds the off-mesh connections last, using the same Vert/Edge/Poly       |
+//  |     struct as polygons, but using the `Poly::omc` member instead of         |
+//  |     `Poly::poly`, which share a union.									  |
+//  |  6) keeps a list of vertex index offsets for normal-, detail-, and OMC      |
+//  |     verts for each tile.                                              LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::ExtractObjects(const dtNavMesh* mesh)
 {
+	// Pre-allocate memory for the verts and edges
 	int totalVerts = 0;
 	for (int a = 0; a < mesh->getMaxTiles(); a++) if (mesh->getTile(a)->header)
 	{
@@ -652,6 +670,7 @@ void NavMeshShader::ExtractObjects(const dtNavMesh* mesh)
 	m_verts.reserve(totalVerts); // total amount of verts
 	m_edges.reserve(totalVerts); // at least this many edges
 
+	// Loop over tiles in the navmesh
 	int tileBaseIdx = 0, triCount = 0, nVerts, nDetail, nOMC;
 	for (int a = 0; a < mesh->getMaxTiles(); a++) if (mesh->getTile(a)->header)
 	{
@@ -672,7 +691,6 @@ void NavMeshShader::ExtractObjects(const dtNavMesh* mesh)
 			m_verts.push_back({ (float3*)v, tileBaseIdx + nVerts + i });
 		}
 
-
 		// Adding Vert polygon associations, Edges, and Polys
 		dtPolyRef refBase = mesh->getPolyRefBase(tile);
 		for (int b = 0; b < tile->header->polyCount; b++)
@@ -691,7 +709,7 @@ void NavMeshShader::ExtractObjects(const dtNavMesh* mesh)
 				m_verts[tileBaseIdx + poly->verts[c]].polys.push_back(ref);
 				if (c < poly->vertCount-1) // adding the first n-1 edges
 					AddEdgeToEdgesAndPreventDuplicates(m_edges, tileBaseIdx + poly->verts[c], tileBaseIdx + poly->verts[c + 1], ref);
-				else // adding the last edge connecting the first vertex
+				else // adding the last edge, connecting the last- and first vertex
 					AddEdgeToEdgesAndPreventDuplicates(m_edges, tileBaseIdx + poly->verts[c], tileBaseIdx + poly->verts[0], ref);
 			}
 		}
@@ -714,6 +732,7 @@ void NavMeshShader::ExtractObjects(const dtNavMesh* mesh)
 			m_polys.push_back(omcPoly);
 		}
 
+		// Keeping track of the vertex offsets
 		m_vertOffsets.push_back(int3{ tileBaseIdx, tileBaseIdx + nVerts, tileBaseIdx + nVerts + nDetail });
 		tileBaseIdx += nVerts + nDetail + nOMC * 2;
 	}
@@ -721,7 +740,7 @@ void NavMeshShader::ExtractObjects(const dtNavMesh* mesh)
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::WriteTileToMesh                                             |
-//  |  Writes the given navmesh tile to the given open file.                LH2'19|
+//  |  Writes the given navmesh tile to the given opened file.              LH2'19|
 //  +-----------------------------------------------------------------------------+
 void WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 {
@@ -779,7 +798,7 @@ void WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 			normalize(n);
 			if (n.y < 0) n = -n; // ensures all normals point up
 
-								 // Write the normal to the file
+			// Write the normal to the file
 			fprintf(f, "vn %.5f %.5f %.5f\n", n.x, n.y, n.z);
 			normCount++;
 		}
@@ -800,7 +819,7 @@ void WriteTileToMesh(const dtMeshTile* tile, FILE* f)
 		const dtPolyDetail pd = tile->detailMeshes[i];
 		for (int j = 0; j < pd.triCount; ++j)
 		{
-			// tri vertices are indices of poly.verts, poly.verts holds the actual indices
+			// triangle vertices (tri[n]) are indices of poly.verts, poly.verts holds the actual indices
 			const unsigned char* tri = &tile->detailTris[(pd.triBase + j) * 4];
 
 			// Find the three vertex indices
@@ -837,6 +856,8 @@ void NavMeshShader::SaveAsMesh(NavMeshNavigator* navmesh)
 	printf("Saving navmesh as wavefront in '%s'... ", filename.c_str());
 	FILE* f;
 	fopen_s(&f, filename.c_str(), "w");
+
+	// Error handling
 	if (!f)
 	{
 		printf("ERROR: File '%s' could not be opened\n", filename.c_str());
@@ -868,7 +889,8 @@ void NavMeshShader::SaveAsMesh(NavMeshNavigator* navmesh)
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::Clean                                                       |
-//  |  Resets the internal NavMesh representation and stops shading it.     LH2'19|
+//  |  Cleans the internal representation and removes assets from the scene.      |
+//  |																		LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::Clean()
 {
@@ -876,10 +898,12 @@ void NavMeshShader::Clean()
 	RemoveNavMeshFromGL();
 	RemoveAllAgents();
 	RemoveTmpVert();
+	RemoveOMCsFromScene();
 
 	Deselect();
 	m_verts.clear();
 	m_edges.clear();
+	m_polys.clear();
 	m_OMCs.clear();
 
 	m_path = 0;

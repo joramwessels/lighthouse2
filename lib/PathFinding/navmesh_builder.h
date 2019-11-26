@@ -15,9 +15,7 @@
 
 #pragma once
 
-//#ifdef PATHFINDINGBUILD
-	#include "Recast.h" // rcContext, rcHeightfield, rcPolyMesh, etc.
-//#endif
+#include "Recast.h" // rcContext, rcHeightfield, rcPolyMesh, etc.
 
 #include "rendersystem.h"	   // HostScene, HostMesh, HostTri, float3, int3, FileExists
 #include "navmesh_common.h"    // NavMeshStatus, NavMeshConfig
@@ -27,7 +25,7 @@ namespace lighthouse2 {
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshBuilder                                                             |
-//  |  A contex in which navmeshes can be build, edited, and saved.         LH2'19|
+//  |  A contex in which navmeshes can be built, edited, and saved.         LH2'19|
 //  +-----------------------------------------------------------------------------+
 class NavMeshBuilder
 {
@@ -97,26 +95,6 @@ protected:
 
 	int Serialize(const char* dir, const char* ID);
 	int Deserialize(const char* dir, const char* ID);
-};
-
-// Area Types // TODO: remove
-enum SamplePolyAreas
-{
-	SAMPLE_POLYAREA_GROUND,
-	SAMPLE_POLYAREA_WATER,
-	SAMPLE_POLYAREA_ROAD,
-	SAMPLE_POLYAREA_DOOR,
-	SAMPLE_POLYAREA_GRASS,
-	SAMPLE_POLYAREA_JUMP,
-};
-enum SamplePolyFlags
-{
-	SAMPLE_POLYFLAGS_WALK = 0x01,		// Ability to walk (ground, grass, road)
-	SAMPLE_POLYFLAGS_SWIM = 0x02,		// Ability to swim (water).
-	SAMPLE_POLYFLAGS_DOOR = 0x04,		// Ability to move through doors.
-	SAMPLE_POLYFLAGS_JUMP = 0x08,		// Ability to jump.
-	SAMPLE_POLYFLAGS_DISABLED = 0x10,	// Disabled polygon
-	SAMPLE_POLYFLAGS_ALL = 0xffff		// All abilities.
 };
 
 } // namespace lighthouse2

@@ -11,17 +11,37 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+
+   The NavMeshShader provides a visual representation of the navmesh
+   and its functionality. An example of a typical use case:
+
+	1) Construct an instance with a pointer to the renderer, and a
+	  directory containing the assets found in (lib/pathfinding/assets)
+		-> `NavMeshShader shader(renderer, directory)`
+
+	2) Give it a NavMeshNavigator -> `shader.UpdateMesh(navmesh)`
+
+	3) Call either `AddNavMeshToScene()` (recommended) or `AddNavMeshToGL()`
+
+	4) Call `DrawGL()` after rendering to do all OpenGL functionality
+
+	5) Call `UpdateAgentPositions()` after the physics update
+		to inform the renderer of the new agent positions
+
 */
 
 #pragma once
 
-//#ifdef PATHFINDINGBUILD
-	#include "DetourNavMesh.h"
-//#endif
+#include "DetourNavMesh.h"
 
 #include "rendersystem.h"		// RenderAPI
 #include "navmesh_navigator.h"  // NavMeshNavigator
 #include "navmesh_agents.h"		// Agent
+
+#define NAVMESH_VERTEX_MESH_FILE "vertex.obj"
+#define NAVMESH_EDGE_MESH_FILE "edge.obj"
+#define NAVMESH_AGENT_MESH_FILE "agent.obj"
 
 namespace lighthouse2 {
 
@@ -36,14 +56,12 @@ public:
 		: m_renderer(renderer), m_dir(dir)
 	{
 		// Initialize meshes
-		m_vertMeshID = m_renderer->AddMesh("vertex.obj", m_dir, 1.0f);
-		m_agentMeshID = m_renderer->AddMesh("agent.obj", m_dir, 1.0f);
-		m_edgeMeshID = m_renderer->AddMesh("edge.obj", m_dir, 1.0f);
-		m_directedEdgeMeshID = m_renderer->AddMesh("arrow.obj", m_dir, 1.0f);
-		m_renderer->GetScene()->meshPool[m_vertMeshID]->name = "Vertex";
-		m_renderer->GetScene()->meshPool[m_agentMeshID]->name = "Agent";
-		m_renderer->GetScene()->meshPool[m_edgeMeshID]->name = "Edge";
-		m_renderer->GetScene()->meshPool[m_directedEdgeMeshID]->name = "DirectedEdge";
+		m_vertMeshID = m_renderer->AddMesh(NAVMESH_VERTEX_MESH_FILE, m_dir, 1.0f);
+		m_edgeMeshID = m_renderer->AddMesh(NAVMESH_EDGE_MESH_FILE, m_dir, 1.0f);
+		m_agentMeshID = m_renderer->AddMesh(NAVMESH_AGENT_MESH_FILE, m_dir, 1.0f);
+		m_renderer->GetScene()->meshPool[m_vertMeshID]->name = "navmesh_vertex";
+		m_renderer->GetScene()->meshPool[m_edgeMeshID]->name = "navmesh_edge";
+		m_renderer->GetScene()->meshPool[m_agentMeshID]->name = "navmesh_agent";
 	};
 	~NavMeshShader() {};
 
@@ -115,17 +133,18 @@ private:
 
 	// GL Drawing
 	bool m_shadePolys = false, m_shadeVerts = false, m_shadeEdges = false;
-	const float m_edgeWidthGL = 5.0f, m_vertWidthGL = 20.0f;  // width of the GL shaded lines (in pixels)
-	const float m_pathWidth = 3.0f, m_beaconWidth = 10.0f;	  // width of the GL shaded lines (in pixels)
-	const float3 m_beaconLen = make_float3(0.0f, 4.0f, 0.0f); // length of the GL shaded path beacons (in pixels)
-	const float4 m_polyColor = { 0, 1.0f, 1.0f, 0.2f };	// color of the GL shaded polys (rgba)
-	const float4 m_vertColor = { 1.0f, 0, 1.0f, 0.2f };	// color of the GL shaded verts (rgba)
-	const float4 m_edgeColor = { 1.0f, 0, 1.0f, 0.2f };	// color of the GL shaded edges (rgba)
-	const float4 m_excludedColor = { 1.0f, 0, 0, .5f }; // color of the excluded polygons (rgba)
-	const float4 m_pathColor = { 1.0f, 0.0f, 0.0f, 0.5f }; // color of the GL shaded path (rgba)
-	const float4 m_beaconStColor = { 0, 1.0f, 0, 1.0f };   // color of the GL shaded path start beacon (rgba)
-	const float4 m_beaconEnColor = { 1.0f, 0, 0, 1.0f };   // color of the GL shaded path end beacon (rgba)
-	const float4 m_highLightColor = { 1.0f, 1.0f, 0.0f, .5f }; // color of highlighted navmesh objects (rgba)
+	const float m_edgeWidthGL = 5.0f, m_vertWidthGL = 20.0f;   // width of the GL shaded lines (in pixels)
+	const float m_pathWidth = 3.0f, m_beaconWidth = 10.0f;	   // width of the GL shaded lines (in pixels)
+	const float m_agentImpulseScale = 5.0f;					   // scale of the GL shaded agent impulse
+	const float3 m_beaconLen = make_float3(0.0f, 4.0f, 0.0f);  // length of the GL shaded path beacons (in pixels)
+	const float4 m_polyColor = { 0, 1.0f, 1.0f, 0.2f };	 // color of the GL shaded polys (rgba)
+	const float4 m_vertColor = { 1.0f, 0, 1.0f, 0.2f };	 // color of the GL shaded verts (rgba)
+	const float4 m_edgeColor = { 1.0f, 0, 1.0f, 0.2f };	 // color of the GL shaded edges (rgba)
+	const float4 m_excludedColor = { 1.0f, 0, 0, .5f };  // color of the excluded polygons (rgba)
+	const float4 m_pathColor = { 1.0f, 0.0f, 0.0f, 0.5f };	// color of the GL shaded path (rgba)
+	const float4 m_beaconStColor = { 0, 1.0f, 0, 1.0f };	// color of the GL shaded path start beacon (rgba)
+	const float4 m_beaconEnColor = { 1.0f, 0, 0, 1.0f };	// color of the GL shaded path end beacon (rgba)
+	const float4 m_highLightColor = { 1.0f, 1.0f, 0.0f, .5f };	// color of highlighted navmesh objects (rgba)
 	void DrawAgentHighlightGL() const;
 	void DrawAgentImpulse() const;
 	void PlotPath() const;
@@ -133,8 +152,7 @@ private:
 
 	// HostScene Management
 	int m_polyMeshID = -1, m_polyInstID = -1;
-	int m_vertMeshID = -1, m_edgeMeshID = -1;
-	int m_directedEdgeMeshID = -1, m_agentMeshID = -1;
+	int m_vertMeshID = -1, m_edgeMeshID = -1, m_agentMeshID = -1;
 	std::string m_meshFileName;
 	const std::string m_matFileName = "navmesh.mtl";
 	const float m_vertWidth = .3f, m_edgeWidth = .1f; // in world coordinates

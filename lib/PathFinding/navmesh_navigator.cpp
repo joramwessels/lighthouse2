@@ -30,7 +30,7 @@ namespace lighthouse2 {
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshNavigator::FindPathConstSize                                        |
 //  |  Wrapper for the Detour findPath function. Finds a path of PathNodes.       |
-//  |  *path* and *count* are the output (both preallocated).		     		  |
+//  |  *path* and *count* are the main output (preallocated).			   		  |
 //  |  *reachable* specifies whether the end poly matches the last path poly.     |
 //  |  *maxCount* specifies the maximum path length in nodes.               LH2'19|
 //  +-----------------------------------------------------------------------------+
@@ -99,11 +99,13 @@ NavMeshStatus NavMeshNavigator::FindPathConstSize(float3 start, float3 end, Path
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshNavigator::FindPathConstSize                                        |
+//  |  NavMeshNavigator::FindPathConstSize_Legacy                                 |
 //  |  Wrapper for the Detour findPath function. Finds a path of PathNodes.       |
 //  |  *path* and *count* are the output (both preallocated).		     		  |
 //  |  *reachable* specifies whether the end poly matches the last path poly.     |
-//  |  *maxCount* specifies the maximum path length in nodes.               LH2'19|
+//  |  *maxCount* specifies the maximum path length in nodes.                     |
+//  |																			  |
+//  |  NOTE: This implementation returns a non-smoothed path.				LH2'19|
 //  +-----------------------------------------------------------------------------+
 NavMeshStatus NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount, const dtQueryFilter* filter) const
 {
@@ -187,8 +189,8 @@ NavMeshStatus NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 en
 //  |  NavMeshNavigator::FindPath                                                 |
 //  |  Finds the shortest path from start to end.                                 |
 //  |  *path* is std::vector of world positions to be filled.                     |
-//  |  *distToEnd* is the error between the last position and the target.         |
-//  |  *maxCount* specifies the number of allocated elements.               LH2'19|
+//  |  *reachable* indicates if the target seems reachable (true if unknown).     |
+//  |  *maxCount* specifies the maximum number of path nodes.               LH2'19|
 //  +-----------------------------------------------------------------------------+
 NavMeshStatus NavMeshNavigator::FindPath(float3 start, float3 end, std::vector<PathNode>& path, bool& reachable, int maxCount) const
 {
@@ -218,7 +220,7 @@ NavMeshStatus NavMeshNavigator::FindClosestPointOnPoly(dtPolyRef polyID, float3 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshNavigator::FindNearestPoly                                          |
 //  |  Finds the polygon closest to the specified position. *polyID* and          |
-//  |  *polyPos* are the ouput. The position on the polygon is optional.    LH2'19|
+//  |  *polyPos* are the ouput. The position of the polygon is optional.    LH2'19|
 //  +-----------------------------------------------------------------------------+
 NavMeshStatus NavMeshNavigator::FindNearestPoly(float3 pos, dtPolyRef& polyID, float3& polyPos) const
 {
@@ -243,13 +245,15 @@ void NavMeshNavigator::Clean()
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshNavigator::GetFilter                                                |
 //  |  Creates a navigation filter using the given include/exclude labels.        |
-//  |  Excluded flags override included flags, default is excluded.         LH2'19|
+//  |  Excluded flags override included flags, default is excluded.               |
+//  |  Passing two empty vectors will include all flags.                    LH2'19|
 //  +-----------------------------------------------------------------------------+
 dtQueryFilter NavMeshNavigator::GetFilter(std::vector<std::string> includes, std::vector<std::string> excludes) const
 {
 	short incl = 0, excl = 0;
 	for (auto i = includes.begin(); i != includes.end(); i++) incl |= m_flags[i->c_str()];
 	for (auto i = excludes.begin(); i != excludes.end(); i++) excl |= m_flags[i->c_str()];
+	if (includes.empty() && excludes.empty()) incl = USHRT_MAX; // include all
 	dtQueryFilter filter;
 	filter.setIncludeFlags(incl);
 	filter.setExcludeFlags(excl);

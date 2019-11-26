@@ -22,7 +22,6 @@
 #include "buildcontext.h"	   // BuildContext
 #include "navmesh_builder.h"
 
-//#define RECAST_ERROR(X, Y, ...) return Error(RC_LOG_ERROR, X, (std::string("AI ERROR: ") + Y).c_str(), __VA_ARGS__)
 #define RECAST_ERROR(X, ...) return NavMeshError(&m_status, X, "ERROR NavMeshBuilder: ", __VA_ARGS__)
 #define RECAST_LOG(...) NavMeshError(0, NavMeshStatus::SUCCESS, "", __VA_ARGS__)
 
@@ -75,9 +74,7 @@ NavMeshStatus NavMeshBuilder::Build(HostScene* scene)
 		RECAST_ERROR(NavMeshStatus::RC | NavMeshStatus::INPUT, "HostScene is nullptr\n");
 
 	// Extracting triangle soup
-	//const std::vector<int> instances = scene->rootNodes;
 	const std::vector<HostMesh*> meshes = scene->meshPool;
-	//const std::vector<HostNode*> nodes = scene->nodePool;
 	std::vector<HostTri> hostTris;
 	std::vector<float3> vertices;
 	std::vector<int3> triangles;
@@ -357,26 +354,12 @@ int NavMeshBuilder::CreateDetourData()
 	unsigned char* navData = 0;
 	int navDataSize = 0;
 
-	// Update poly flags from areas. // TODO: should be removed, but breaks navigator functions if I do
+	// Initialize flags and area types
 	for (int i = 0; i < m_pmesh->npolys; ++i)
 	{
-		if (m_pmesh->areas[i] == RC_WALKABLE_AREA)
-			m_pmesh->areas[i] = SAMPLE_POLYAREA_GROUND;
-	
-		if (m_pmesh->areas[i] == SAMPLE_POLYAREA_GROUND ||
-			m_pmesh->areas[i] == SAMPLE_POLYAREA_GRASS ||
-			m_pmesh->areas[i] == SAMPLE_POLYAREA_ROAD)
-		{
-			m_pmesh->flags[i] = SAMPLE_POLYFLAGS_WALK;
-		}
-		else if (m_pmesh->areas[i] == SAMPLE_POLYAREA_WATER)
-		{
-			m_pmesh->flags[i] = SAMPLE_POLYFLAGS_SWIM;
-		}
-		else if (m_pmesh->areas[i] == SAMPLE_POLYAREA_DOOR)
-		{
-			m_pmesh->flags[i] = SAMPLE_POLYFLAGS_WALK | SAMPLE_POLYFLAGS_DOOR;
-		}
+		m_pmesh->flags[i] = 0x1;
+		m_pmesh->areas[i] = 0;
+		// TODO: insert call to callback that sets flags depending on area type
 	}
 
 	dtNavMeshCreateParams params;

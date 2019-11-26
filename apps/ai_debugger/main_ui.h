@@ -30,7 +30,7 @@ enum SELECTIONTYPE { SELECTION_NONE, SELECTION_POLY, SELECTION_EDGE, SELECTION_V
 #include "edit_ui.h"
 #include "debug_ui.h"
 
-namespace AI_UI {
+namespace MAIN_UI {
 
 // Shared objects
 static RenderAPI* renderer = 0;
@@ -39,7 +39,7 @@ static PhysicsPlaceholder* rigidBodies = 0;
 static NavMeshAgents* navMeshAgents = 0;
 
 // Shared variables
-static bool *camMoved, *hasFocus, *leftClicked, *rightClicked;
+static bool *camMoved, *hasFocus, *leftClicked, *rightClicked, *paused;
 static int2 *probeCoords = 0;
 static uint *scrwidth = 0, *scrheight = 0;
 
@@ -58,9 +58,11 @@ static TwBar* settingsBar = 0;
 static CoreStats coreStats;
 static float mraysincl = 0, mraysexcl = 0;
 static SELECTIONTYPE probeType = SELECTION_NONE;
+static bool excludeMeshRO = false;
 static std::string meshName;
 static int probeMeshID = -1, probeInstID = -1, probeTriID = -1;
 static float3 probePos;
+static float fpsSmoothed = 1.0f, fpsSmoothFactor = 0.1f;
 
 // Build bar
 static TwBar* buildBar = 0;
@@ -93,9 +95,13 @@ void ConvertConfigToWorld();
 //  |  Prepares a basic user interface.                                     LH2'19|
 //  +-----------------------------------------------------------------------------+
 static void InitGUI(RenderAPI *a_renderer, NavMeshBuilder *a_builder, PhysicsPlaceholder *a_physics, NavMeshAgents *a_agents,
-	bool &a_camMoved, bool &a_hasFocus, bool &a_leftClicked, bool &a_rightClicked, int2 &a_probeCoords, uint &a_scrwidth, uint &a_scrheight)
+	bool &a_camMoved, bool &a_hasFocus, bool &a_leftClicked, bool &a_rightClicked, bool &a_paused, int2 &a_probeCoords, uint &a_scrwidth, uint &a_scrheight)
 {
 	// init pointers to main
+	//
+	// NOTE: this isn't necessary using the current header structure,
+	//       but it does clarify which main.cpp variables are being used
+	//
 	renderer = a_renderer;
 	navMeshBuilder = a_builder;
 	rigidBodies = a_physics;
@@ -104,10 +110,11 @@ static void InitGUI(RenderAPI *a_renderer, NavMeshBuilder *a_builder, PhysicsPla
 	hasFocus = &a_hasFocus;
 	leftClicked = &a_leftClicked;
 	rightClicked = &a_rightClicked;
+	paused = &a_paused;
 	probeCoords = &a_probeCoords;
 	scrwidth = &a_scrwidth;
 	scrheight = &a_scrheight;
-	config = a_builder->GetConfig();
+	config = navMeshBuilder->GetConfig();
 	ConvertConfigToWorld();
 
 	navMeshShader = new NavMeshShader(renderer, "data\\ai\\");
@@ -135,8 +142,13 @@ static void ShutDown()
 //  +-----------------------------------------------------------------------------+
 static void DrawGUI(float deltaTime)
 {
+	// Menu FPS counter
+	float fps = (int)(1.0f / deltaTime);
+	fpsSmoothed = (1 - fpsSmoothFactor) * fpsSmoothed + fpsSmoothFactor * fps;
+	if (fpsSmoothFactor > 0.05f) fpsSmoothFactor -= 0.05f;
+
 	navMeshShader->DrawGL();
-	PrintFPS(deltaTime);
+	//PrintFPS(deltaTime);
 	TwDraw();
 }
 
@@ -158,7 +170,19 @@ static void PostRenderUpdate(float deltaTime)
 	coreStats = renderer->GetCoreStats();
 	mraysincl = coreStats.totalRays / (coreStats.renderTime * 1000);
 	mraysexcl = coreStats.totalRays / (coreStats.traceTime0 * 1000);
+
+	// saving mesh exclusion bool
+	if (probeMeshID > 0)
+		renderer->GetMesh(probeMeshID)->excludeFromNavmesh = excludeMeshRO;
 }
+
+
+
+
+
+
+
+
 
 //  +-----------------------------------------------------------------------------+
 //  |  RemoveEditAssets                                                           |
@@ -245,6 +269,12 @@ static void ConvertConfigToWorld()
 	s_maxEdgeLen = config->m_maxEdgeLen = config->m_cs;
 }
 
+
+
+
+
+
+
 //  +-----------------------------------------------------------------------------+
 //  |  HandleMouseInputEditMode                                                   |
 //  |  Process mouse input when in EDIT mode.                               LH2'19|
@@ -263,8 +293,9 @@ static void HandleMouseInputEditMode()
 	// Adding off-mesh connections (CTRL)
 	if (ctrlClickLastFrame)
 	{
-		if (leftClickLastFrame) s_omcTool->SetStart(probePos);
-		else if (rightClickLastFrame) s_omcTool->SetEnd(probePos);
+		// DEBUG: feature doesn't work yet
+		//if (leftClickLastFrame) s_omcTool->SetStart(probePos);
+		//else if (rightClickLastFrame) s_omcTool->SetEnd(probePos);
 	}
 }
 
@@ -280,8 +311,7 @@ static void HandleMouseInputDebugMode()
 		if (probeType = SELECTION_POLY)
 		{
 			RigidBody* rb = rigidBodies->AddRB(agentScale, mat4::Identity(), mat4::Translate(probePos));
-			Agent* agent = navMeshAgents->AddAgent(navMeshNavigator, rb);
-			navMeshShader->AddAgentToScene(agent);
+			if (rb) navMeshShader->AddAgentToScene(navMeshAgents->AddAgent(navMeshNavigator, rb));
 		}
 	}
 
@@ -340,14 +370,16 @@ static bool HandleInput(float frameTime)
 		if (ctrlClickLastFrame || shiftClickLastFrame)
 		{
 			// Identify probed instance
-			probeInstID = coreStats.probedInstid;
+			probeInstID = coreStats.probedInstid; // core inst ID
 			probeTriID = coreStats.probedTriid;
 			probeMeshID = renderer->GetTriangleMesh(probeInstID, probeTriID);
+			probeInstID = renderer->GetTriangleNode(probeInstID, probeTriID); // node ID
 			if (navMeshShader->isPoly(probeMeshID)) probeType = SELECTION_POLY;
 			else if (navMeshShader->isAgent(probeMeshID)) probeType = SELECTION_AGENT;
 			else if (navMeshShader->isVert(probeMeshID)) probeType = SELECTION_VERT;
 			else if (navMeshShader->isEdge(probeMeshID)) probeType = SELECTION_EDGE;
 			meshName = renderer->GetMesh(probeMeshID)->name;
+			excludeMeshRO = renderer->GetMesh(probeMeshID)->excludeFromNavmesh;
 			
 			// Get 3D probe position
 			ViewPyramid p = camera->GetView();
@@ -629,12 +661,19 @@ void RefreshSettingsBar()
 	TwSetParam(settingsBar, "camera", "opened", TW_PARAM_INT32, 1, &closed);
 
 	// create opened probing block
+	TwAddVarRW(settingsBar, "Mesh excluded", TW_TYPE_BOOL8, &excludeMeshRO,
+		" group='probing' help='Set to true if instances with this mesh should not influence navmesh generation' ");
+	TwAddSeparator(settingsBar, "meshexcludedseparator", " group='probing' ");
 	TwAddVarRO(settingsBar, "Mesh", TW_TYPE_STDSTRING, &meshName, "group='probing'");
 	TwAddVarRO(settingsBar, "Mesh ID", TW_TYPE_INT32, &probeMeshID, "group='probing'");
 	TwAddVarRO(settingsBar, "Inst ID", TW_TYPE_INT32, &probeInstID, "group='probing'");
 	TwAddVarRO(settingsBar, "Tri ID", TW_TYPE_INT32, &probeTriID, "group='probing'");
 	TwAddVarRO(settingsBar, "Pos", float3Type, &probePos, "group='probing'");
 	TwSetParam(settingsBar, "probing", "opened", TW_PARAM_INT32, 1, &closed);
+
+	// FPS counter
+	TwAddSeparator(settingsBar, "fpsseparator", "");
+	TwAddVarRO(settingsBar, "FPS", TW_TYPE_FLOAT, &fpsSmoothed, " precision=1 ");
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -826,7 +865,7 @@ void RefreshDebugBar()
 	TwAddSeparator(debugBar, "deleteagentseparator", "");
 	TwAddButton(debugBar, "Delete agent", KillAgent, NULL, "");
 	TwAddSeparator(debugBar, "pauseseparator1", "");
-	TwAddVarRW(debugBar, "PAUSE", TW_TYPE_BOOL8, &paused, "");
+	TwAddVarRW(debugBar, "PAUSE", TW_TYPE_BOOL8, paused, "");
 	TwAddSeparator(debugBar, "pauseseparator2", "");
 }
 

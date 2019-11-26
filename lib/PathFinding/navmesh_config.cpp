@@ -196,13 +196,15 @@ void NavMeshConfig::Save(const char* filename) const
 //  |  NavMeshConfig::Load                                                        |
 //  |  Loads an XML configurations file from storage.                       LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshConfig::Load(const char* filename)
+NavMeshStatus NavMeshConfig::Load(const char* filename)
 {
 	tinyxml2::XMLDocument doc;
 	tinyxml2::XMLError result = doc.LoadFile(filename);
-	if (result != tinyxml2::XML_SUCCESS) return;
+	if (result != tinyxml2::XML_SUCCESS)
+		return NavMeshError(0, NavMeshStatus::IO, "", "Config file '%s' could not be opened\n", filename);
 	tinyxml2::XMLNode* root = doc.FirstChildElement("configurations");
-	if (root == nullptr) return;
+	if (root == nullptr)
+		return NavMeshError(0, NavMeshStatus::INIT, "", "tinyXML2 errored while loading config file '%s'\n", filename);
 
 	if (root->FirstChildElement("width")) root->FirstChildElement("width")->QueryIntText(&m_width);
 	if (root->FirstChildElement("height")) root->FirstChildElement("height")->QueryIntText(&m_height);
@@ -240,6 +242,7 @@ void NavMeshConfig::Load(const char* filename)
 	if (root->FirstChildElement("printBuildStats")) root->FirstChildElement("printBuildStats")->QueryBoolText(&m_printBuildStats);
 	if (root->FirstChildElement("ID")) m_id = root->FirstChildElement("ID")->FirstChild()->Value();
 
+	// Loading m_area
 	tinyxml2::XMLElement* item;
 	int areaCount = 0, flagCount = 0;
 	if (root->FirstChildElement("areas") && root->FirstChildElement("areas")->FirstChildElement("count"))
@@ -267,6 +270,8 @@ void NavMeshConfig::Load(const char* filename)
 			}
 		}
 	}
+
+	// Loading m_flags
 	if (root->FirstChildElement("flags") && root->FirstChildElement("flags")->FirstChildElement("count"))
 		root->FirstChildElement("flags")->FirstChildElement("count")->QueryIntText(&flagCount);
 	if (flagCount > 0)
@@ -282,6 +287,8 @@ void NavMeshConfig::Load(const char* filename)
 			}
 		}
 	}
+
+	return NavMeshStatus::SUCCESS;
 }
 
 } // namespace lighthouse2

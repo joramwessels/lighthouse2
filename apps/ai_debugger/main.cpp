@@ -49,20 +49,20 @@ static const int maxAgentPathSize = 8;
 //  +-----------------------------------------------------------------------------+
 void PrepareScene()
 {
-	// initialize scene
-	//renderer->AddScene( "scene.gltf", "data\\pica\\", mat4::Translate( 0, -10.2f, 0 ) );
-	// renderer->AddScene( "CesiumMan.glb", "data\\", mat4::Translate( 0, -2, -9 ) );
-	// renderer->AddScene( "InterpolationTest.glb", "data\\", mat4::Translate( 0, 2, -5 ) );
-	// renderer->AddScene( "AnimatedMorphCube.glb", "data\\", mat4::Translate( 0, 2, 9 ) );
-	int meshID = renderer->AddMesh("nav_test.obj", "data\\", 1.0f);
-	renderer->GetMesh(meshID)->name = "Input Mesh";
-	int instID = renderer->AddInstance(meshID, mat4::Identity());
-	int instID2 = renderer->AddInstance(meshID, mat4::Translate(0, 0, 30));
+	// The Pica scene
+	renderer->AddScene( "scene.gltf", "data\\pica\\", mat4::Translate( 0, -10.2f, 0 ) );
+
+	//// The Recast test scene
+	//int meshID = renderer->AddMesh("nav_test.obj", "data\\", 1.0f);
+	//renderer->GetMesh(meshID)->name = "Input Mesh";
+	//int instID = renderer->AddInstance(meshID, mat4::Identity());
+	//int instID2 = renderer->AddInstance(meshID, mat4::Translate(0, 0, 50));
+
 	int rootNode = renderer->FindNode( "RootNode (gltf orientation matrix)" );
 	renderer->SetNodeTransform( rootNode, mat4::RotateX( -PI / 2 ) );
-	//int lightMat = renderer->AddMaterial( make_float3( 100, 100, 80 ) );
-	//int lightQuad = renderer->AddQuad( make_float3( 0, -1, 0 ), make_float3( 0, 26.0f, 0 ), 6.9f, 6.9f, lightMat );
-	//renderer->AddInstance( lightQuad );
+	int lightMat = renderer->AddMaterial( make_float3( 100, 100, 80 ) );
+	int lightQuad = renderer->AddQuad( make_float3( 0, -1, 0 ), make_float3( 0, 26.0f, 0 ), 6.9f, 6.9f, lightMat );
+	renderer->AddInstance( lightQuad );
 	renderer->AddDirectionalLight(make_float3(-1), make_float3(255));
 
 	// Navmesh builder
@@ -110,7 +110,7 @@ int main()
 	// initialize scene
 	PrepareScene();
 	// initialize ui
-	AI_UI::InitGUI(renderer, navMeshBuilder, rigidBodies, navMeshAgents, camMoved, hasFocus, leftClicked, rightClicked, probeCoords, scrwidth, scrheight);
+	MAIN_UI::InitGUI(renderer, navMeshBuilder, rigidBodies, navMeshAgents, camMoved, hasFocus, leftClicked, rightClicked, paused, probeCoords, scrwidth, scrheight);
 	// set initial window size
 	ReshapeWindowCallback( 0, SCRWIDTH, SCRHEIGHT );
 	// enter main loop
@@ -136,15 +136,15 @@ int main()
 		timer.reset();
 		// Physics
 		if (!paused) posChanges = rigidBodies->Update(deltaTime);
-		if (posChanges) AI_UI::PostPhysicsUpdate(deltaTime);
+		if (posChanges) MAIN_UI::PostPhysicsUpdate(deltaTime);
 		// render
 		renderer->Render( c );
-		AI_UI::PostRenderUpdate(deltaTime);
+		MAIN_UI::PostRenderUpdate(deltaTime);
 		// AI
 		if (!paused) navMeshAgents->UpdateAgentMovement(deltaTime);
 		if (!paused) navMeshAgents->UpdateAgentBehavior(deltaTime); // only updates at a regular interval
 		// UI
-		if (AI_UI::HandleInput( deltaTime )) camMoved = true;
+		if (MAIN_UI::HandleInput( deltaTime )) camMoved = true;
 		// postprocess
 		shader->Bind();
 		shader->SetInputTexture( 0, "color", renderTarget );
@@ -152,14 +152,14 @@ int main()
 		DrawQuad();
 		shader->Unbind();
 		// draw ui
-		AI_UI::DrawGUI(deltaTime);
+		MAIN_UI::DrawGUI(deltaTime);
 		// finalize
 		glfwSwapBuffers( window );
 		// terminate
 		if (!running) break;
 	}
 	// clean up
-	AI_UI::ShutDown();
+	MAIN_UI::ShutDown();
 	renderer->SerializeCamera( "camera.xml" );
 	renderer->Shutdown();
 	glfwDestroyWindow( window );

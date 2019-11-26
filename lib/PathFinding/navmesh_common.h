@@ -250,7 +250,7 @@ struct NavMeshConfig
 
 	void ScaleSettings(float scale);
 	void Save(const char* filename) const;
-	void Load(const char* filename);
+	NavMeshStatus Load(const char* filename);
 };
 
 } // namespace Lighthouse2

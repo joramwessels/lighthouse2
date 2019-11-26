@@ -18,8 +18,7 @@
 #include <stdlib.h>
 #include <vector>
 
-//#include "common_types.h" // float3
-#include "system.h" // float3
+#include "system.h"				 // float3
 #include "physics_placeholder.h" // RigidBody
 
 namespace lighthouse2 {
@@ -38,6 +37,7 @@ public:
 		m_path.reserve(maxPathSize);
 		m_path.resize(maxPathSize); // count is kept using m_pathCount
 		m_pathCount = m_targetIdx = 0;
+		m_filter = navmesh->GetFilter({}, {});
 	};
 	Agent(Agent&&) = default;
 	Agent& operator=(Agent&&) = default;
@@ -68,6 +68,7 @@ protected:
 	float m_nextTarDist = 0.0f; // distance to the next target
 	float m_maxLinVel = 6.0f, m_maxLinAcc = 1.0f;
 	float m_arrival = 2.5f; // distance at which to slow down
+	float m_targetReached = 1.0f; // distance at which to switch to the next target
 
 	NavMeshNavigator* m_navmesh;
 	int m_maxPathCount;

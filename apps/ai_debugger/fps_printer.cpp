@@ -16,7 +16,7 @@
 #include "platform.h" // Shader
 #include "camera.h"
 
-namespace AI_UI {
+namespace MAIN_UI {
 
 // FPS printer globals
 GLTexture* digit[10], *hud;

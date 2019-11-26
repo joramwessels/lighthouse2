@@ -20,8 +20,6 @@
 
 namespace lighthouse2 {
 
-static const float s_agentTargetReachedDistance = 1.0f;
-
 //  +-----------------------------------------------------------------------------+
 //  |  Agent::UpdateMovement                                                      |
 //  |  Called after every physics update to update the direction.           LH2'19|
@@ -37,11 +35,11 @@ bool Agent::UpdateMovement(float deltaTime)
 		m_rb->AddImpulse(steering);
 		return false;
 	}
-
+	
 	// Check distance to target
 	m_moveDir = m_path[m_targetIdx].pos - m_rb->m_pos;
 	m_nextTarDist = length(m_moveDir);
-	if (m_nextTarDist < s_agentTargetReachedDistance) // target reached
+	if (m_nextTarDist < m_targetReached) // target reached
 	{
 		if (m_targetIdx < m_pathCount - 1)
 		{
@@ -52,9 +50,12 @@ bool Agent::UpdateMovement(float deltaTime)
 		else
 		{
 			// out of targets
-			for (int i = 0; i < m_pathCount-1; i++) m_path[i] = m_path[m_pathCount-1];
-			if (length(m_path[m_pathCount-1].pos - *m_pathEnd) < s_agentTargetReachedDistance)
+			for (int i = 0; i < m_pathCount-1; i++) m_path[i] = m_path[m_pathCount-1]; // set all path nodes to target
+			if (length(m_path[m_pathCount - 1].pos - *m_pathEnd) < m_targetReached)
+			{
+				if (m_pathEndOwner) delete m_pathEnd;
 				m_pathEnd = 0; // final target reached
+			}
 		}
 	}
 	m_moveDir = m_moveDir / m_nextTarDist;
@@ -121,7 +122,7 @@ Agent* NavMeshAgents::AddAgent(NavMeshNavigator* navmesh, RigidBody* rb)
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshAgents::AddAgent                                                    |
+//  |  NavMeshAgents::RemoveAgent                                                 |
 //  |  Kills the specified agent.                                           LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshAgents::RemoveAgent(Agent* agent)
