@@ -51,6 +51,7 @@ public:
 	void Render( Convergence converge );
 	Camera* GetCamera();
 	RenderSettings* GetSettings();
+	int GetTriangleNode(const int coreInstId, const int coreTriId);
 	int GetTriangleMesh(const int coreInstId, const int coreTriId);
 	int GetTriangleMaterialID( const int coreInstId, const int coreTriId );
 	HostMaterial* GetTriangleMaterial( const int coreInstId, const int coreTriId );

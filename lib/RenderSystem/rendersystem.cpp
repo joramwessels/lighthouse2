@@ -272,6 +272,22 @@ int RenderSystem::GetTriangleMesh( const int coreInstId, const int coreTriId )
 }
 
 //  +-----------------------------------------------------------------------------+
+//  |  RenderSystem::GetTriangleNode                                              |
+//  |  Retrieve the id of the host-side node that the specified triangle belongs  |
+//  |  to. Input is the 'instance id' and 'core tri id' reported by the core for  |
+//  |  a mouse click.                                                       LH2'19|
+//  +-----------------------------------------------------------------------------+
+int RenderSystem::GetTriangleNode(const int coreInstId, const int coreTriId)
+{
+	// see the notes at the top of host_scene.h for the relation between host nodes and core instances.
+	if (coreTriId == -1) return -1; // probed the skydome
+	if (coreInstId > instances.size()) return -1; // should not happen
+	int nodeId = instances[coreInstId]; // lookup the node id for the core instance
+	if (nodeId > scene->nodePool.size()) return -1; // should not happen
+	return nodeId; // return the id
+}
+
+//  +-----------------------------------------------------------------------------+
 //  |  RenderSystem::Shutdown                                                     |
 //  |  Free all resources.                                                  LH2'19|
 //  +-----------------------------------------------------------------------------+
