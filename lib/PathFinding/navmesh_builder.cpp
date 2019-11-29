@@ -354,12 +354,12 @@ int NavMeshBuilder::CreateDetourData()
 	unsigned char* navData = 0;
 	int navDataSize = 0;
 
-	// Initialize flags and area types
-	for (int i = 0; i < m_pmesh->npolys; ++i)
+	// Initialize flags and area types (on clean build only)
+	if (!m_navMesh) for (int i = 0; i < m_pmesh->npolys; ++i)
 	{
 		m_pmesh->flags[i] = 0x1;
 		m_pmesh->areas[i] = 0;
-		// TODO: insert call to callback that sets flags depending on area type
+		// TODO: insert call to callback that automatically sets flags depending on area type?
 	}
 
 	dtNavMeshCreateParams params;
@@ -377,6 +377,7 @@ int NavMeshBuilder::CreateDetourData()
 	params.detailTris = m_dmesh->tris;
 	params.detailTriCount = m_dmesh->ntris;
 
+	// Adding off-mesh connections added during last edit
 	if (!m_offMeshFlags.empty())
 	{
 		params.offMeshConCount = (int)m_offMeshFlags.size();
@@ -400,7 +401,7 @@ int NavMeshBuilder::CreateDetourData()
 	if (!dtCreateNavMeshData(&params, &navData, &navDataSize))
 		RECAST_ERROR(NavMeshStatus::DT | NavMeshStatus::INIT, "Could not build Detour navmesh\n");
 
-	if (m_navMesh) dtFreeNavMesh(m_navMesh);
+	if (m_navMesh) dtFreeNavMesh(m_navMesh); // DEBUG: does this free pmesh and dmesh?
 	m_navMesh = dtAllocNavMesh();
 	if (!m_navMesh)
 	{
@@ -489,10 +490,33 @@ void NavMeshBuilder::Cleanup()
 }
 
 //  +-----------------------------------------------------------------------------+
+//  |  NavMeshBuilder::SetPolyFlags                                               |
+//  |  Sets the flags of the specified polygon for both the current dtNavMesh,    |
+//  |  as well as the dtPolyMesh. This way, new dtNavMesh instances will also     |
+//  |  include these changes (except for clean rebuilds).                   LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshBuilder::SetPolyFlags(dtPolyRef ref, unsigned short flags)
+{
+	m_navMesh->setPolyFlags(ref, flags);
+	m_pmesh->flags[ref] = flags; // DEBUG: does this work with multiple tiles?
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshBuilder::SetPolyArea                                                |
+//  |  Sets the area of the specified polygon for both the current dtNavMesh,     |
+//  |  as well as the dtPolyMesh. This way, new dtNavMesh instances will also     |
+//  |  include these changes (except for clean rebuilds).                   LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshBuilder::SetPolyArea(dtPolyRef ref, unsigned char area)
+{
+	m_navMesh->setPolyArea(ref, area);
+	m_pmesh->areas[ref] = area; // DEBUG: does this work with multiple tiles?
+}
+
+//  +-----------------------------------------------------------------------------+
 //  |  NavMeshBuilder::AddOffMeshConnection                                       |
-//  |  Adds an off-mesh connection edge to the navmesh.                           |
-//  |  If the connection is unidirectional (e.g. ziplines, jump downs)            |
-//  |  vertex 0 leads to vertex 1.                                          LH2'19|
+//  |  Adds an off-mesh connection edge to the navmesh. If the connection is      |
+//  |  unidirectional (e.g. ziplines, jump downs) v0 leads to v1.           LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::AddOffMeshConnection(float3 v0, float3 v1, float radius, bool unidirectional)
 {
@@ -503,6 +527,21 @@ void NavMeshBuilder::AddOffMeshConnection(float3 v0, float3 v1, float radius, bo
 	m_offMeshFlags.push_back(0);
 	m_offMeshUserIDs.push_back((unsigned int)m_offMeshFlags.size());
 	m_offMeshDirection.push_back((unidirectional ? 0 : DT_OFFMESH_CON_BIDIR));
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshBuilder::DiscardChanges                                             |
+//  |  Discards the pending changes that haven't yet been applied. This works     |
+//  |  for navmesh pruning and OMCs, but not for flags/areas.               LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshBuilder::DiscardChanges()
+{
+	m_offMeshVerts.clear();
+	m_offMeshRadii.clear();
+	m_offMeshAreas.clear();
+	m_offMeshFlags.clear();
+	m_offMeshUserIDs.clear();
+	m_offMeshDirection.clear();
 }
 
 } // namespace lighthouse2

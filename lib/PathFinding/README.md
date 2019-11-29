@@ -80,7 +80,7 @@ The generation procedure itself consists of 5 parts.
 4) **Polygon Creation**: converting these regions into connected convex polygons, represented by two meshes: the *polygon mesh* and the *detail mesh*. The polygon mesh is a crude representation of traversability and polygon connections, which is used for pathfinding. The detail mesh stores the exact surface height of each point on the polygon.
 5) **Creating `dtNavMesh`**: combining these two meshes into one navmesh that can be used by Detour. When the pmesh and dmesh have been manually edited, or when off-mesh connections have been added with `NavMeshBuilder::AddOffMeshConnection`, this last step has to be redone to refresh the Detour data. Hence, editing the navmesh requires the pmesh and dmesh to still be there (see the `m_keepInterResults` configuration).
 
-Any `HostMesh` can be prevented from influencing the navmesh generation by setting `HostMesh::excludeFromNavmesh` to true.
+Any `HostMesh` can be prevented from influencing the navmesh generation by setting `HostMesh::excludeFromNavmesh` to true. The builder is also in charge of editing the navmesh. Polygon flags and -area types can be set with `NavMeshBuilder::SetPolyFlags` and `NavMeshBuilder::SetPolyArea` respectively, which immediately applies the changes to the current `dtNavMesh`. Off-mesh connections can be added with `NavMeshBuilder::AddOffMeshConnection`, but require a call to `NavMeshBuilder::ApplyChanges` before the changes take effect. Alternatively, these pending changes can be discarded using `NavMeshBuilder::DiscardChanges`.
 
 If an error occurs during the generation process, the internal error status is updated there and then. Any subprocesses called after that will not commence if the error status is unsuccessful, cutting the process short. Any allocated memory is freed before returning the error status to the user.  
 More info on the navmesh generation can be found in the official [Recast documentation](http://masagroup.github.io/recastdetour/group__recast.html).
@@ -137,7 +137,7 @@ The shader has individual Add- and Remove functions for polygons, edges, vertice
 
 Paths can be drawn by passing a pointer to a precalculated path to `NavMeshShader::SetPath`. Similarly, the path start- and end beacon can be set by passing the `float3` pointers to `NavMeshShader::SetPathStart` and `NavMeshShader::SetPathEnd`. The shader will automatically detect changes to any of the data.
 
-To fascilitate graphical navmesh editing, the shader can add-, move-, and remove one temporary vertex with `NavMeshShader::SetTmpVert` and `NavMeshShader::RemoveTmpVert`, as well as add off-mesh connections during rutime with `NavMeshShader::AddTmpOMC`.
+To fascilitate graphical navmesh editing, the shader can add-, move-, and remove one temporary vertex with `NavMeshShader::SetTmpVert` and `NavMeshShader::RemoveTmpVert`, as well as add off-mesh connections during rutime with `NavMeshShader::AddTmpOMC`. Temporary OMCs are shaded using GL, and only become assets when the changes are applied. The temporary OMCs will then be removed from the shader, and a new navigator including the added OMCs will be added to the scene as normal.
 
 **Internal Representation**  
 The shader keeps an internal representation of the navmesh, which points to various objects within the `dtNavMesh` of the `NavMeshNavigator`.
@@ -163,27 +163,30 @@ The vertices and edges are created individually and store the instanceIDs in the
 ## Backlog
 
 #### NavMeshBuilder
-* building
-    * give builder closure that automatically annotates polygons based on parameters (`CreateDetourData`)
-* off-mesh connections
-    * debug m_navmesh recalculation ❗
-    * test saving/loading ❗
-* pruning
-    * find out how to apply changes to vertices
+* BUG: OMCs are part of dtNavMesh but can't be traversed by agent ❗
+* BUG: flags/areas are gone after refresh navigator ❗
+* give builder closure that automatically annotates polygons based on parameters (`CreateDetourData`)
+* navmesh pruning
+    * apply vert changes to `m_pmesh` (or `m_dmesh` for detail verts)
     * save/load `m_pmesh` and `m_dmesh` to allow editing of loaded projects
 
 #### NavMeshNavigator / Agent
-* BUG: when close to unreachable goal (above), path update plans vertical path
+* BUG: when close to unreachable goal above the agent, path update plans vertical path
+    * Project movement impulse on navmesh floor to prevent flying?
+        * Or is that up to the physics?
 * Don't call 'arrive' behavior on every path corner?
 * Add behavior (flee/follow)
 
 
 #### NavMeshShader
-* BUG: polygons without flags aren't highlighted as excluded
 * make meshes transparent
-* off-mesh connections
-    * make OMCs added during runtime temporary/removable
-    * how to check directionality in `NavMeshShader::AddOMCsToScene` and `NavMeshShader::AddTmpOMC`
+* show OMC directionality somehow
 * remove old navmesh mesh from render core on `RemovePolysFromScene` to save memory
 * OpenGL highlights cost 10-20 fps
 * BUG: OpenGL shading fails when the camera is too close (when a vertex is behind the camera) (`Camera::WorldToScreenPos` issue)
+* BUG: random crashes when adding tmp OMCs using assets (solved by using GL shading)
+    * no sensible call stack
+    * execution stops after `TwDraw()` in `DrawGUI`, or SynchScene
+    * two verts + edge are shaded
+    * before applying changes
+    * adding instances in `NavMeshShader::AddTmpOMC` seems to trigger it

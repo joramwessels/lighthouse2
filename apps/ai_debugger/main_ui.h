@@ -119,7 +119,7 @@ static void InitGUI(RenderAPI *a_renderer, NavMeshBuilder *a_builder, PhysicsPla
 
 	navMeshShader = new NavMeshShader(renderer, "data\\ai\\");
 	s_omcTool = new OffMeshConnectionTool(navMeshBuilder, navMeshShader);
-	s_navmeshTool = new NavMeshSelectionTool(navMeshShader, navMeshNavigator, &selectionType);
+	s_navmeshTool = new NavMeshSelectionTool(navMeshShader, navMeshBuilder, &selectionType);
 	s_pathTool = new PathDrawingTool(navMeshShader, navMeshNavigator);
 	s_agentTool = new AgentNavigationTool(navMeshShader, navMeshNavigator, s_pathTool, &selectionType);
 
@@ -225,12 +225,14 @@ static void ClearNavMesh()
 
 //  +-----------------------------------------------------------------------------+
 //  |  RefreshNavigator                                                           |
-//  |  Refreshes the NavMeshNavigator and updates the agent size.           LH2'19|
+//  |  Refreshes the Navigator and Shader, and updates the agent size.      LH2'19|
 //  +-----------------------------------------------------------------------------+
 static void RefreshNavigator()
 {
 	// Get navigator
 	if (navMeshNavigator) delete navMeshNavigator;
+	s_omcTool->Clear();
+	s_navmeshTool->Deselect();
 	navMeshNavigator = navMeshBuilder->GetNavigator();
 	navMeshShader->UpdateMesh(navMeshNavigator);
 	navMeshShader->AddNavMeshToScene();
@@ -293,9 +295,8 @@ static void HandleMouseInputEditMode()
 	// Adding off-mesh connections (CTRL)
 	if (ctrlClickLastFrame)
 	{
-		// DEBUG: feature doesn't work yet
-		//if (leftClickLastFrame) s_omcTool->SetStart(probePos);
-		//else if (rightClickLastFrame) s_omcTool->SetEnd(probePos);
+		if (leftClickLastFrame) s_omcTool->SetStart(probePos);
+		else if (rightClickLastFrame) s_omcTool->SetEnd(probePos);
 	}
 }
 
@@ -511,19 +512,21 @@ void TW_CALL CleanNavMesh(void *data)
 void TW_CALL ApplyEditChanges(void *data)
 {
 	if (s_guiMode != GUI_MODE_EDIT) return;
-	//RefreshNavigator(); // TODO: this would remove changes
 	s_navmeshTool->ApplyPolyChanges();
+	//navMeshBuilder->ApplyChanges();
+	//RefreshNavigator();
 	*camMoved = true;
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  TW_CALL DiscardChanges (TODO)                                              |
+//  |  TW_CALL DiscardChanges                                                     |
 //  |  Callback function for AntTweakBar button.                            LH2'19|
 //  +-----------------------------------------------------------------------------+
 void TW_CALL DiscardChanges(void *data)
 {
 	if (s_guiMode != GUI_MODE_EDIT) return;
-	printf("DiscardChanges hasn't been implemented yet.\n"); // DEBUG
+	s_omcTool->Clear();
+	s_navmeshTool->DiscardPolyChanges();
 	*camMoved = true;
 }
 
@@ -586,7 +589,7 @@ void TW_CALL SwitchGUIMode(void *data)
 		if (!navMeshBuilder->HasIntermediateResults())
 		{
 			builderErrorStatus = true;
-			printf("Edit mode requires internal build data. Build a new navmesh to edit it.\n");
+			printf("ERROR: Edit mode requires internal build data. Build a new navmesh to edit it.\n");
 			return;
 		}
 		TwSetParam(buildBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
@@ -598,7 +601,7 @@ void TW_CALL SwitchGUIMode(void *data)
 		if (navMeshBuilder->IsClean())
 		{
 			builderErrorStatus = true;
-			printf("No navmesh to debug. Build/load a navmesh to test it.\n");
+			printf("ERROR: No navmesh to debug. Build/load a navmesh to test it.\n");
 			return;
 		}
 		TwSetParam(buildBar, NULL, "alpha", TW_PARAM_INT32, 1, &alphaPassive);
@@ -846,9 +849,6 @@ void RefreshDebugBar()
 	TwAddVarRO(debugBar, "End", float3Type, s_pathTool->GetEnd(), "group='path'");
 	TwAddVarRO(debugBar, "Reachable", TW_TYPE_BOOL8, s_pathTool->GetReachable(), "group='path'");
 	TwSetParam(debugBar, "path", "opened", TW_PARAM_INT32, 1, &opened);
-
-	// create agent block
-	TwSetParam(debugBar, "agent", "opened", TW_PARAM_INT32, 1, &opened);
 
 	// create flags block
 	for (int i = 0; i < config->m_flags.labels.size(); i++)

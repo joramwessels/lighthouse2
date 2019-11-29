@@ -250,7 +250,7 @@ void NavMeshNavigator::Clean()
 //  +-----------------------------------------------------------------------------+
 dtQueryFilter NavMeshNavigator::GetFilter(std::vector<std::string> includes, std::vector<std::string> excludes) const
 {
-	short incl = 0, excl = 0;
+	unsigned short incl = 0, excl = 0;
 	for (auto i = includes.begin(); i != includes.end(); i++) incl |= m_flags[i->c_str()];
 	for (auto i = excludes.begin(); i != excludes.end(); i++) excl |= m_flags[i->c_str()];
 	if (includes.empty() && excludes.empty()) incl = USHRT_MAX; // include all

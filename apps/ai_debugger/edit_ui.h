@@ -59,7 +59,13 @@ public:
 	//  |  OffMeshConnectionTool::Clear                                               |
 	//  |  Resets the internal state and removes any leftovers.                 LH2'19|
 	//  +-----------------------------------------------------------------------------+
-	void Clear() { m_vertSet = NONESET; m_shader->RemoveTmpVert(); }
+	void Clear()
+	{
+		m_vertSet = NONESET;
+		m_shader->RemoveTmpVert();
+		m_shader->RemoveTmpOMCs();
+		m_builder->DiscardChanges();
+	}
 
 protected:
 	NavMeshBuilder* m_builder;
@@ -73,12 +79,14 @@ protected:
 
 	//  +-----------------------------------------------------------------------------+
 	//  |  OffMeshConnectionTool::AddToScene                                          |
-	//  |  Adds a new off-mesh connection to the builder and shader.            LH2'19|
+	//  |  Adds a new off-mesh connection to the builder and shader.				  |
+	//  |  Requires an 'Apply Changes' rebuild for it to take effect.           LH2'19|
 	//  +-----------------------------------------------------------------------------+
 	void AddToScene()
 	{
 		m_builder->AddOffMeshConnection(m_v0, m_v1, m_defaultVertWidth, m_defaultDirectionality);
-		Clear();
+		m_vertSet = NONESET;
+		m_shader->RemoveTmpVert();
 		m_shader->AddTmpOMC(m_v0, m_v1, m_defaultVertWidth);
 	}
 };
@@ -86,19 +94,26 @@ protected:
 class NavMeshSelectionTool
 {
 public:
-	NavMeshSelectionTool(NavMeshShader* shader, NavMeshNavigator*& navigator, SELECTIONTYPE* selectionType)
-		: m_shader(shader), m_navmesh(navigator), m_selectionType(selectionType) {};
+	NavMeshSelectionTool(NavMeshShader* shader, NavMeshBuilder*& builder, SELECTIONTYPE* selectionType)
+		: m_shader(shader), m_builder(builder), m_selectionType(selectionType) {};
 	~NavMeshSelectionTool() {};
 
+	//  +-----------------------------------------------------------------------------+
+	//  |  NavMeshSelectionTool::Deselect                                             |
+	//  |  Deselects the previous selection, if any.                            LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void Deselect()
 	{
 		if (*m_selectionType == SELECTION_VERT ||
 			*m_selectionType == SELECTION_EDGE ||
 			*m_selectionType == SELECTION_POLY)
 		{
-			if (*m_selectionType == SELECTION_POLY) ApplyPolyChanges();
+			//if (*m_selectionType == SELECTION_POLY) ApplyPolyChanges(); // NOTE: convenient, but non consistent with OMCs
 			m_shader->Deselect();
 			m_selectionID = -1;
+			m_selectedVert = 0;
+			m_selectedEdge = 0;
+			m_selectedPoly = 0;
 			TwDefine(" Editing/OffMesh visible=false ");
 			TwDefine(" Editing/Detail visible=false ");
 			TwDefine(" Editing/'Poly area' visible=false ");
@@ -113,6 +128,10 @@ public:
 		}
 	}
 
+	//  +-----------------------------------------------------------------------------+
+	//  |  NavMeshSelectionTool::SelectVert                                           |
+	//  |  Selects the vert of the given instance ID (if it belongs to a vert). LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void SelectVert(int instID)
 	{
 		Deselect();
@@ -131,6 +150,10 @@ public:
 		*m_selectionType = SELECTION_VERT;
 	}
 
+	//  +-----------------------------------------------------------------------------+
+	//  |  NavMeshSelectionTool::SelectEdge                                           |
+	//  |  Selects the edge of the given instance ID (if it belongs to an edge) LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void SelectEdge(int instID)
 	{
 		Deselect();
@@ -149,10 +172,13 @@ public:
 		*m_selectionType = SELECTION_EDGE;
 	}
 
+	//  +-----------------------------------------------------------------------------+
+	//  |  NavMeshSelectionTool::SelectPoly                                           |
+	//  |  Selects the poly of the given triangle ID (if it belongs to a poly). LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void SelectPoly(int triangleID)
 	{
 		Deselect();
-		if (!m_navmesh) return;
 		m_selectedPoly = m_shader->SelectPoly(triangleID);
 		if (!m_selectedPoly) return;
 		m_selectionID = m_selectedPoly->ref;
@@ -175,14 +201,30 @@ public:
 		*m_selectionType = SELECTION_POLY;
 	}
 
+	//  +-----------------------------------------------------------------------------+
+	//  |  NavMeshSelectionTool::ApplyPolyChanges                                     |
+	//  |  Applies the changes made to the flags and area type of this poly.    LH2'19|
+	//  +-----------------------------------------------------------------------------+
 	void ApplyPolyChanges()
 	{
-		// Apply flags and area type
+		if (!m_selectedPoly) return;
 		unsigned short polygonFlags = 0;
 		for (int i = 0; i < NavMeshFlagMapping::maxFlags; i++) if (m_flags[i])
 			polygonFlags |= (0x1 << i);
-		m_navmesh->SetPolyFlags(m_selectedPoly->ref, polygonFlags);
-		m_navmesh->SetAreaType(m_selectedPoly->ref, m_polygonArea);
+		m_builder->SetPolyFlags(m_selectedPoly->ref, polygonFlags);
+		m_builder->SetPolyArea(m_selectedPoly->ref, m_polygonArea);
+	}
+
+	//  +-----------------------------------------------------------------------------+
+	//  |  NavMeshSelectionTool::DiscardPolyChanges                                   |
+	//  |  Discards the changes made to the flags and area type of this poly.   LH2'19|
+	//  +-----------------------------------------------------------------------------+
+	void DiscardPolyChanges()
+	{
+		if (!m_selectedPoly) return;
+		m_polygonArea = m_selectedPoly->poly->getArea();
+		for (int i = 0; i < NavMeshFlagMapping::maxFlags; i++)
+			m_flags[i] = (m_selectedPoly->poly->flags & (0x1 << i));
 	}
 
 	const int* GetSelectionID() const { return &m_selectionID; };
@@ -194,7 +236,7 @@ public:
 
 protected:
 	NavMeshShader* m_shader;
-	NavMeshNavigator*& m_navmesh;
+	NavMeshBuilder*& m_builder;
 	SELECTIONTYPE* m_selectionType;
 	const float3 origin = float3{ 0, 0, 0 };
 
@@ -204,9 +246,9 @@ protected:
 	uint m_polygonArea = 0;
 	bool m_flags[NavMeshFlagMapping::maxFlags];
 
-	NavMeshShader::Vert* m_selectedVert;
-	NavMeshShader::Edge* m_selectedEdge;
-	NavMeshShader::Poly* m_selectedPoly;
+	NavMeshShader::Vert* m_selectedVert = 0;
+	NavMeshShader::Edge* m_selectedEdge = 0;
+	NavMeshShader::Poly* m_selectedPoly = 0;
 };
 
 // EOF

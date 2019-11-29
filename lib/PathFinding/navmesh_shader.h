@@ -81,12 +81,10 @@ public:
 	void AddPolysToScene();
 	void AddVertsToScene();
 	void AddEdgesToScene();
-	void AddOMCsToScene();
 	void RemoveNavMeshFromScene();
 	void RemovePolysFromScene();
 	void RemoveVertsFromScene();
 	void RemoveEdgesFromScene();
-	void RemoveOMCsFromScene();
 
 	// Agents & Paths
 	void UpdateAgentPositions();
@@ -101,10 +99,10 @@ public:
 	// Internal Representation
 	void UpdateMesh(NavMeshNavigator* navmesh);
 	void Clean();
-	struct Poly { union { const dtPoly* poly; const dtOffMeshConnection* omc; }; int ref = -1; std::vector<int> triIDs; };
-	struct Vert { float3* pos; int idx = -1, instID = -1; std::vector<dtPolyRef> polys; };
+	struct Poly { union { const dtPoly* poly = 0; const dtOffMeshConnection* omc; }; int ref = -1; std::vector<int> triIDs; };
+	struct Vert { float3* pos = 0; int idx = -1, instID = -1; std::vector<dtPolyRef> polys; };
 	struct Edge { int v1 = -1, v2 = -1, idx = -1, instID = -1; dtPolyRef poly1 = 0, poly2 = 0; };
-	struct OMC { const dtOffMeshConnection* omc; int v1InstID = -1, v2InstID = -1, edgeInstID = -1; };
+	struct OMC { const dtOffMeshConnection* omc = 0; int v1InstID = -1, v2InstID = -1, edgeInstID = -1; };
 	bool isNormalVert(int idx) const { for (auto i : m_vertOffsets) { if (idx >= i.x && idx < i.y) return true; } return false; };
 	bool isDetailVert(int idx) const { for (auto i : m_vertOffsets) { if (idx >= i.y && idx < i.z) return true; } return false; };
 	bool isOffMeshVert(int idx) const { if (isNormalVert(idx)) { return false; } if (isDetailVert(idx)) { return false; } return true; };
@@ -126,6 +124,7 @@ public:
 	void SetTmpVert(float3 pos, float vertWidth=.5f);
 	void RemoveTmpVert();
 	void AddTmpOMC(float3 v0, float3 v1, float vertWidth);
+	void RemoveTmpOMCs();
 
 private:
 	RenderAPI* m_renderer;
@@ -149,6 +148,7 @@ private:
 	void DrawAgentImpulse() const;
 	void PlotPath() const;
 	void DrawPathMarkers() const;
+	void DrawTmpOMCs() const;
 
 	// HostScene Management
 	int m_polyMeshID = -1, m_polyInstID = -1;
@@ -170,6 +170,8 @@ private:
 	std::vector<Edge> m_edges; // (edges, offMeshEdges) * nTiles
 	std::vector<Poly> m_polys; // (polys, offMeshConnections) * nTiles
 	std::vector<OMC> m_OMCs;
+	std::vector<Vert> m_tmpVerts; // used for navmesh pruning and adding OMCs
+	std::vector<Edge> m_tmpEdges; // used for navmesh pruning and adding OMCs
 	std::vector<int3> m_vertOffsets; // idx offset of (poly verts, detail verts, omc verts) per tile
 	void ExtractObjects(const dtNavMesh* navmesh);
 

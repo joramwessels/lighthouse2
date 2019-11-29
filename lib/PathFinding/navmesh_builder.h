@@ -40,8 +40,12 @@ public:
 	NavMeshStatus Deserialize() { return Deserialize(m_dir, m_config.m_id.c_str()); };
 	void Cleanup();
 
+	// Editing
+	void SetPolyFlags(dtPolyRef ref, unsigned short flags);
+	void SetPolyArea(dtPolyRef ref, unsigned char area);
 	void AddOffMeshConnection(float3 v0, float3 v1, float radius, bool unidirectional);
-	void ApplyChanges() { if (m_pmesh && m_dmesh) CreateDetourData(); };
+	void ApplyChanges() { if (m_pmesh && m_dmesh) CreateDetourData(); DiscardChanges(); };
+	void DiscardChanges();
 
 	void SetConfig(NavMeshConfig config) { m_config = config; };
 	void SetID(const char* id) { m_config.m_id = id; };

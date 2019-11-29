@@ -105,6 +105,8 @@ void NavMeshShader::DrawGL() const
 	if (m_agentSelect) DrawAgentHighlightGL();
 	if (m_agentSelect) DrawAgentImpulse();
 
+	DrawTmpOMCs();
+
 	if (!m_excludedPolygons.empty()) DrawPolys(m_excludedPolygons, m_verts, m_excludedColor, m_renderer->GetCamera());
 	if (m_path && !m_path->empty()) PlotPath();
 	if (m_pathStart || m_pathEnd) DrawPathMarkers();
@@ -196,6 +198,17 @@ void NavMeshShader::DrawPathMarkers() const
 	DrawShapeOnScreen(screen, color, GL_LINES, m_beaconWidth);
 }
 
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::DrawTmpOMCs                                                 |
+//  |  Draws the OMCs added during runtime before changes are applied.      LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::DrawTmpOMCs() const
+{
+	if (m_tmpVert.pos) DrawVerts({ m_tmpVert }, m_highLightColor, m_vertWidthGL, m_renderer->GetCamera());
+	if (!m_tmpVerts.empty()) DrawVerts(m_tmpVerts, m_highLightColor, m_vertWidthGL, m_renderer->GetCamera());
+	if (!m_tmpEdges.empty()) DrawEdges(m_tmpEdges, m_tmpVerts, m_highLightColor, m_edgeWidthGL, m_renderer->GetCamera());
+}
+
 
 
 
@@ -225,7 +238,6 @@ void NavMeshShader::AddNavMeshToScene()
 	AddPolysToScene();
 	AddVertsToScene();
 	AddEdgesToScene();
-	AddOMCsToScene();
 	printf("NavMesh assets added in %.3fms\n", timer.elapsed());
 }
 
@@ -238,7 +250,7 @@ void NavMeshShader::RemoveNavMeshFromScene()
 	RemovePolysFromScene();
 	RemoveVertsFromScene();
 	RemoveEdgesFromScene();
-	RemoveOMCsFromScene();
+	RemoveTmpOMCs();
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -321,47 +333,6 @@ void NavMeshShader::RemoveEdgesFromScene()
 	m_renderer->SynchronizeSceneData();
 }
 
-//  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::AddOMCsToScene                                              |
-//  |  Adds all off-mesh connections to the scene.                          LH2'19|
-//  +-----------------------------------------------------------------------------+
-void NavMeshShader::AddOMCsToScene()
-{
-	for (std::vector<OMC>::iterator i = m_OMCs.begin(); i != m_OMCs.end(); i++)
-	{
-		// Add the edge
-		float3 v1 = *(float3*)i->omc->pos, v2 = *(float3*)(i->omc->pos + 3);
-		float3 v1v2 = v2 - v1; float len = length(v1v2); v1v2 /= len;
-		mat4 sca = mat4::Scale(make_float3(m_edgeWidth, len, m_edgeWidth));
-		mat4 rot = mat4::Rotate(cross({ 0, 1, 0 }, v1v2), -acosf(v1v2.y));
-		mat4 tra = mat4::Translate((v1 + v2) / 2);
-		i->edgeInstID = m_renderer->AddInstance(m_edgeMeshID, tra * rot * sca);
-
-		// Add the two verts
-		i->v1InstID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(v1) * mat4::Scale(i->omc->rad));
-		i->v2InstID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(v2) * mat4::Scale(i->omc->rad));
-	}
-	m_renderer->SynchronizeSceneData();
-}
-
-//  +-----------------------------------------------------------------------------+
-//  |  NavMeshShader::RemoveOMCsFromScene                                         |
-//  |  Removes all off-mesh connection instances from the scene.            LH2'19|
-//  +-----------------------------------------------------------------------------+
-void NavMeshShader::RemoveOMCsFromScene()
-{
-	for (std::vector<OMC>::iterator i = m_OMCs.begin(); i != m_OMCs.end(); i++)
-	{
-		if (i->v1InstID >= 0) m_renderer->RemoveNode(i->v1InstID);
-		if (i->v2InstID >= 0) m_renderer->RemoveNode(i->v2InstID);
-		if (i->edgeInstID >= 0) m_renderer->RemoveNode(i->edgeInstID);
-		i->v1InstID = -1;
-		i->v2InstID = -1;
-		i->edgeInstID = -1;
-	}
-	m_renderer->SynchronizeSceneData();
-}
-
 
 
 
@@ -439,7 +410,7 @@ void NavMeshShader::RemoveAllAgents()
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::SetExcludedPolygons(const NavMeshNavigator* navmesh, short flags)
 {
-	if (!flags) return m_excludedPolygons.clear();
+	m_excludedPolygons.clear();
 	for (int i = 0; i < navmesh->GetDetourMesh()->getMaxTiles(); i++)
 	{
 		const dtMeshTile* tile = navmesh->GetDetourMesh()->getTile(i);
@@ -447,7 +418,7 @@ void NavMeshShader::SetExcludedPolygons(const NavMeshNavigator* navmesh, short f
 		for (int j = 0; j < tile->header->polyCount; j++)
 		{
 			const dtPoly* poly = &tile->polys[j];
-			if (poly->flags & flags || !(poly->flags)) m_excludedPolygons.push_back(poly);
+			if (poly->flags & flags || !poly->flags) m_excludedPolygons.push_back(poly);
 		}
 	}
 }
@@ -551,6 +522,9 @@ void NavMeshShader::SetTmpVert(float3 pos, float width)
 {
 	RemoveTmpVert();
 	m_tmpVert.pos = new float3(pos); // Vert struct needs a pointer
+
+	return; // NOTE: see AddTmpOMC about asset based approach
+
 	m_tmpVert.instID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(pos) * mat4::Scale(width));
 }
 
@@ -560,6 +534,11 @@ void NavMeshShader::SetTmpVert(float3 pos, float width)
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::RemoveTmpVert()
 {
+	delete m_tmpVert.pos;
+	m_tmpVert.pos = 0;
+
+	return; // NOTE: see AddTmpOMC about asset based approach
+
 	if (m_tmpVert.instID >= 0)
 	{
 		m_renderer->RemoveNode(m_tmpVert.instID);
@@ -576,6 +555,13 @@ void NavMeshShader::RemoveTmpVert()
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::AddTmpOMC(float3 v0, float3 v1, float width)
 {
+	// Add to GL
+	m_tmpEdges.push_back({ (int)m_tmpVerts.size(), (int)m_tmpVerts.size() + 1 });
+	m_tmpVerts.push_back({ new float3(v0), (int)m_tmpVerts.size() });
+	m_tmpVerts.push_back({ new float3(v1), (int)m_tmpVerts.size() });
+
+	return; // NOTE: The asset based approach below caused unexpected crashes
+
 	m_OMCs.push_back({ 0 });
 	OMC* newOMC = m_OMCs._Mylast();
 
@@ -589,6 +575,30 @@ void NavMeshShader::AddTmpOMC(float3 v0, float3 v1, float width)
 	// Add the two verts
 	newOMC->v1InstID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(v0) * mat4::Scale(width));
 	newOMC->v2InstID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(v1) * mat4::Scale(width));
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshShader::RemoveTmpOMCs                                               |
+//  |  Removes all temporary off-mesh connections from the scene.           LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshShader::RemoveTmpOMCs()
+{
+	for (Vert v : m_tmpVerts) delete v.pos; // locally owned
+	m_tmpVerts.clear();
+	m_tmpEdges.clear();
+
+	return; // NOTE: The asset based approach below caused unexpected crashes
+
+	for (std::vector<OMC>::iterator i = m_OMCs.begin(); i != m_OMCs.end(); i++)
+	{
+		if (i->v1InstID > -1) m_renderer->RemoveNode(i->v1InstID);
+		if (i->v2InstID > -1) m_renderer->RemoveNode(i->v2InstID);
+		if (i->edgeInstID > -1) m_renderer->RemoveNode(i->edgeInstID);
+		i->v1InstID = -1;
+		i->v2InstID = -1;
+		i->edgeInstID = -1;
+	}
+	m_renderer->SynchronizeSceneData();
 }
 
 
@@ -898,7 +908,7 @@ void NavMeshShader::Clean()
 	RemoveNavMeshFromGL();
 	RemoveAllAgents();
 	RemoveTmpVert();
-	RemoveOMCsFromScene();
+	RemoveTmpOMCs();
 
 	Deselect();
 	m_verts.clear();
