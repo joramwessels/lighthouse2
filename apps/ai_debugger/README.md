@@ -42,7 +42,7 @@ Navmeshes can be built, saved, loaded, and cleared with the buttons underneath t
 
 #### Editing
 
-To edit a navmesh, first generate one using the build menu and activate `EDIT` mode using the uppermost button on the edit menu. To select a polygon, edge, or vertex, hold SHIFT and left click the object. The edit menu now displays the details of the object. At this point, only the polygon flags and area type can be edited. Press "Apply Changes" to make the changes to the selected item permanent. Switching GUI modes, or deselecting the object will automatically discard any pending changes.
+To edit a navmesh, first generate one using the build menu and activate `EDIT` mode using the uppermost button on the edit menu. To select a polygon, edge, or vertex, hold SHIFT and left click the object. The edit menu now displays the details of the object. At this point, only the polygon flags and area type can be edited. Switching GUI modes, or deselecting the object will automatically apply any pending changes.
 
 To add an off-mesh connection, hold CTRL and left click to set the starting point, then right click to set the end. Once both points have been set, a temporary OMC is added to the builder. You can hit 'Apply Changes' to make the changes take effect, or 'Discard Changes' to undo them. Switching GUI modes will automatically discard any pending changes.
 
@@ -72,8 +72,6 @@ AntTweakBar provides the green menus on screen. The menu variables mostly refere
         * Make NavMeshShader verts reference the pos of this local copy
         * apply changes in AntTweakBar 'Apply Changes' callback
         * discard changes in AntTweakBar 'Discard Changes' callback
-* off-mesh connections
-    * make OMCs visible and editable in the edit menu (radius, directionality, flags, area type)
 
 #### Debugging
 * add agent maxSpeed/maxAcceleration editing

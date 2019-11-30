@@ -411,6 +411,7 @@ void NavMeshShader::RemoveAllAgents()
 void NavMeshShader::SetExcludedPolygons(const NavMeshNavigator* navmesh, short flags)
 {
 	m_excludedPolygons.clear();
+	if (!navmesh) return;
 	for (int i = 0; i < navmesh->GetDetourMesh()->getMaxTiles(); i++)
 	{
 		const dtMeshTile* tile = navmesh->GetDetourMesh()->getTile(i);
@@ -518,14 +519,10 @@ Agent* NavMeshShader::SelectAgent(int instanceID)
 //  |  NavMeshShader::SetTmpVert                                                  |
 //  |  Adds a temporary vertex to the scene.                                LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::SetTmpVert(float3 pos, float width)
+void NavMeshShader::SetTmpVert(float3 pos)
 {
 	RemoveTmpVert();
 	m_tmpVert.pos = new float3(pos); // Vert struct needs a pointer
-
-	return; // NOTE: see AddTmpOMC about asset based approach
-
-	m_tmpVert.instID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(pos) * mat4::Scale(width));
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -534,47 +531,19 @@ void NavMeshShader::SetTmpVert(float3 pos, float width)
 //  +-----------------------------------------------------------------------------+
 void NavMeshShader::RemoveTmpVert()
 {
-	delete m_tmpVert.pos;
+	delete m_tmpVert.pos; // locally owned
 	m_tmpVert.pos = 0;
-
-	return; // NOTE: see AddTmpOMC about asset based approach
-
-	if (m_tmpVert.instID >= 0)
-	{
-		m_renderer->RemoveNode(m_tmpVert.instID);
-		m_renderer->SynchronizeSceneData();
-		m_tmpVert.instID = -1;
-		delete m_tmpVert.pos; // locally owned
-		m_tmpVert.pos = 0;
-	}
 }
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshShader::AddTmpOMC                                                   |
 //  |  Adds a temporary off-mesh connection during runtime.                 LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshShader::AddTmpOMC(float3 v0, float3 v1, float width)
+void NavMeshShader::AddTmpOMC(float3 v0, float3 v1)
 {
-	// Add to GL
 	m_tmpEdges.push_back({ (int)m_tmpVerts.size(), (int)m_tmpVerts.size() + 1 });
 	m_tmpVerts.push_back({ new float3(v0), (int)m_tmpVerts.size() });
 	m_tmpVerts.push_back({ new float3(v1), (int)m_tmpVerts.size() });
-
-	return; // NOTE: The asset based approach below caused unexpected crashes
-
-	m_OMCs.push_back({ 0 });
-	OMC* newOMC = m_OMCs._Mylast();
-
-	// Add the edge
-	float3 v1v2 = v1 - v0; float len = length(v1v2); v1v2 /= len;
-	mat4 sca = mat4::Scale(make_float3(m_edgeWidth, len, m_edgeWidth));
-	mat4 rot = mat4::Rotate(cross({ 0, 1, 0 }, v1v2), -acosf(v1v2.y));
-	mat4 tra = mat4::Translate((v0 + v1) / 2);
-	newOMC->edgeInstID = m_renderer->AddInstance(m_edgeMeshID, tra * rot * sca);
-
-	// Add the two verts
-	newOMC->v1InstID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(v0) * mat4::Scale(width));
-	newOMC->v2InstID = m_renderer->AddInstance(m_vertMeshID, mat4::Translate(v1) * mat4::Scale(width));
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -586,19 +555,6 @@ void NavMeshShader::RemoveTmpOMCs()
 	for (Vert v : m_tmpVerts) delete v.pos; // locally owned
 	m_tmpVerts.clear();
 	m_tmpEdges.clear();
-
-	return; // NOTE: The asset based approach below caused unexpected crashes
-
-	for (std::vector<OMC>::iterator i = m_OMCs.begin(); i != m_OMCs.end(); i++)
-	{
-		if (i->v1InstID > -1) m_renderer->RemoveNode(i->v1InstID);
-		if (i->v2InstID > -1) m_renderer->RemoveNode(i->v2InstID);
-		if (i->edgeInstID > -1) m_renderer->RemoveNode(i->edgeInstID);
-		i->v1InstID = -1;
-		i->v2InstID = -1;
-		i->edgeInstID = -1;
-	}
-	m_renderer->SynchronizeSceneData();
 }
 
 
@@ -710,7 +666,7 @@ void NavMeshShader::ExtractObjects(const dtNavMesh* mesh)
 			if (poly->getType() == DT_POLYTYPE_OFFMESH_CONNECTION) continue;
 
 			// Adding poly and collecting triangle IDs
-			m_polys.push_back(Poly{ poly, (int)ref });
+			m_polys.push_back(Poly{ poly, ref });
 			for (int c = 0; c < tile->detailMeshes[b].triCount; c++)
 				m_polys.back().triIDs.push_back(triCount++); // NOTE: depends on .obj file writing of faces
 
@@ -738,7 +694,7 @@ void NavMeshShader::ExtractObjects(const dtNavMesh* mesh)
 			m_verts.back().polys.push_back(omcPoly.ref);
 			m_verts.push_back({ (float3*)(omc->pos+3), v2 });
 			m_verts.back().polys.push_back(omcPoly.ref);
-			m_edges.push_back({ v1, v2, (int)m_edges.size(), -1 });
+			m_edges.push_back({ v1, v2, (int)m_edges.size(), -1, omcPoly.ref });
 			m_polys.push_back(omcPoly);
 		}
 

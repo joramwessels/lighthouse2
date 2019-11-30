@@ -163,14 +163,13 @@ The vertices and edges are created individually and store the instanceIDs in the
 ## Backlog
 
 #### NavMeshBuilder
-* BUG: OMCs are part of dtNavMesh but can't be traversed by agent ❗
-* BUG: flags/areas are gone after refresh navigator ❗
-* give builder closure that automatically annotates polygons based on parameters (`CreateDetourData`)
+* permanent flags/area saving in `GetPolyMeshIndexFromPolyRef` ❗
 * navmesh pruning
     * apply vert changes to `m_pmesh` (or `m_dmesh` for detail verts)
-    * save/load `m_pmesh` and `m_dmesh` to allow editing of loaded projects
+    * save/load `m_pmesh`, `m_dmesh`, and OMCs to allow editing of loaded projects
 
 #### NavMeshNavigator / Agent
+* BUG: when on OMC, path update identifies poly beneath as current poly
 * BUG: when close to unreachable goal above the agent, path update plans vertical path
     * Project movement impulse on navmesh floor to prevent flying?
         * Or is that up to the physics?
@@ -179,14 +178,10 @@ The vertices and edges are created individually and store the instanceIDs in the
 
 
 #### NavMeshShader
-* make meshes transparent
 * show OMC directionality somehow
+* scale OMC vertices with their radius
+* make meshes transparent
+    * or at least OMC vertices
 * remove old navmesh mesh from render core on `RemovePolysFromScene` to save memory
 * OpenGL highlights cost 10-20 fps
 * BUG: OpenGL shading fails when the camera is too close (when a vertex is behind the camera) (`Camera::WorldToScreenPos` issue)
-* BUG: random crashes when adding tmp OMCs using assets (solved by using GL shading)
-    * no sensible call stack
-    * execution stops after `TwDraw()` in `DrawGUI`, or SynchScene
-    * two verts + edge are shaded
-    * before applying changes
-    * adding instances in `NavMeshShader::AddTmpOMC` seems to trigger it

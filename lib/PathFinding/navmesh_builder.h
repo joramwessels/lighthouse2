@@ -44,8 +44,13 @@ public:
 	void SetPolyFlags(dtPolyRef ref, unsigned short flags);
 	void SetPolyArea(dtPolyRef ref, unsigned char area);
 	void AddOffMeshConnection(float3 v0, float3 v1, float radius, bool unidirectional);
-	void ApplyChanges() { if (m_pmesh && m_dmesh) CreateDetourData(); DiscardChanges(); };
-	void DiscardChanges();
+	float GetOmcRadius(dtPolyRef ref);
+	void SetOmcRadius(dtPolyRef ref, float radius);
+	bool GetOmcDirected(dtPolyRef ref);
+	void SetOmcDirected(dtPolyRef ref, bool unidirectional);
+	float3 GetOmcVertex(dtPolyRef ref, int vertexID);
+	void SetOmcVertex(dtPolyRef ref, int vertexID, float3 value);
+	void ApplyChanges() { if (m_pmesh && m_dmesh) CreateDetourData(); };
 
 	void SetConfig(NavMeshConfig config) { m_config = config; };
 	void SetID(const char* id) { m_config.m_id = id; };
@@ -80,7 +85,7 @@ protected:
 	dtNavMesh* m_navMesh;			// The final navmesh as used by Detour
 	NavMeshStatus m_status;
 
-	// Runtime additions
+	// Off-mesh connections
 	std::vector<float3> m_offMeshVerts; // (v0, v1) * nConnections
 	std::vector<float> m_offMeshRadii;
 	std::vector<unsigned short> m_offMeshFlags;

@@ -359,7 +359,6 @@ int NavMeshBuilder::CreateDetourData()
 	{
 		m_pmesh->flags[i] = 0x1;
 		m_pmesh->areas[i] = 0;
-		// TODO: insert call to callback that automatically sets flags depending on area type?
 	}
 
 	dtNavMeshCreateParams params;
@@ -490,6 +489,33 @@ void NavMeshBuilder::Cleanup()
 }
 
 //  +-----------------------------------------------------------------------------+
+//  |  GetOmcIndexFromPolyRef                                                     |
+//  |  Finds the index of the off-mesh connection, given its dtPolyRef.           |
+//  |  Returns -1 when the ref doesn't belong to an OMC.                    LH2'19|
+//  +-----------------------------------------------------------------------------+
+int GetOmcIndexFromPolyRef(const dtPolyRef ref, const dtNavMesh* navMesh, const std::vector<uint>& userDefinedIDs)
+{
+	const dtOffMeshConnection* omc = navMesh->getOffMeshConnectionByRef(ref);
+	if (omc) for (int i = 0; i < (int)userDefinedIDs.size(); i++)
+		if (userDefinedIDs[i] == omc->userId)
+			return i;
+	return -1; // No OMC found
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  GetOmcIndexFromPolyRef (TODO)                                              |
+//  |  Finds the index of the polygon in the dtPolyMesh, given its dtPolyRef.     |
+//  |  Returns -1 when none can be found.				                    LH2'19|
+//  +-----------------------------------------------------------------------------+
+int GetPolyMeshIndexFromPolyRef(const dtPolyRef ref, const dtNavMesh* navMesh)
+{
+	//
+	// TODO: convert dtPolyRef back to dtPolyMesh index
+	//
+	return 0;
+}
+
+//  +-----------------------------------------------------------------------------+
 //  |  NavMeshBuilder::SetPolyFlags                                               |
 //  |  Sets the flags of the specified polygon for both the current dtNavMesh,    |
 //  |  as well as the dtPolyMesh. This way, new dtNavMesh instances will also     |
@@ -497,8 +523,20 @@ void NavMeshBuilder::Cleanup()
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::SetPolyFlags(dtPolyRef ref, unsigned short flags)
 {
+	// direct/temporary saving to current dtNavMesh
 	m_navMesh->setPolyFlags(ref, flags);
-	m_pmesh->flags[ref] = flags; // DEBUG: does this work with multiple tiles?
+
+	// permanent saving (takes effect after ApplyChanges)
+	int omcIdx = GetOmcIndexFromPolyRef(ref, m_navMesh, m_offMeshUserIDs);
+	if (omcIdx > -1) // check if the ref is an off-mesh connection
+	{
+		m_offMeshFlags[omcIdx] = flags;
+	}
+	else
+	{
+		int pmeshIdx = GetPolyMeshIndexFromPolyRef(ref, m_navMesh);
+		if (pmeshIdx > -1) m_pmesh->flags[pmeshIdx] = flags;
+	}
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -509,14 +547,27 @@ void NavMeshBuilder::SetPolyFlags(dtPolyRef ref, unsigned short flags)
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::SetPolyArea(dtPolyRef ref, unsigned char area)
 {
+	// direct/temporary saving to current dtNavMesh
 	m_navMesh->setPolyArea(ref, area);
-	m_pmesh->areas[ref] = area; // DEBUG: does this work with multiple tiles?
+
+	// permanent saving (takes effect after ApplyChanges)
+	int omcIdx = GetOmcIndexFromPolyRef(ref, m_navMesh, m_offMeshUserIDs);
+	if (omcIdx > -1) // check if the ref is an off-mesh connection
+	{
+		m_offMeshAreas[omcIdx] = area;
+	}
+	else
+	{
+		int pmeshIdx = GetPolyMeshIndexFromPolyRef(ref, m_navMesh);
+		if (pmeshIdx > -1) m_pmesh->areas[pmeshIdx] = area;
+	}
 }
 
 //  +-----------------------------------------------------------------------------+
 //  |  NavMeshBuilder::AddOffMeshConnection                                       |
 //  |  Adds an off-mesh connection edge to the navmesh. If the connection is      |
-//  |  unidirectional (e.g. ziplines, jump downs) v0 leads to v1.           LH2'19|
+//  |  unidirectional (e.g. ziplines, jump downs) v0 leads to v1. Requires call   |
+//  |  to ApplyChanges before being effective.								LH2'19|
 //  +-----------------------------------------------------------------------------+
 void NavMeshBuilder::AddOffMeshConnection(float3 v0, float3 v1, float radius, bool unidirectional)
 {
@@ -524,24 +575,75 @@ void NavMeshBuilder::AddOffMeshConnection(float3 v0, float3 v1, float radius, bo
 	m_offMeshVerts.push_back(v1);
 	m_offMeshRadii.push_back(radius);
 	m_offMeshAreas.push_back(0);
-	m_offMeshFlags.push_back(0);
+	m_offMeshFlags.push_back(1);
 	m_offMeshUserIDs.push_back((unsigned int)m_offMeshFlags.size());
 	m_offMeshDirection.push_back((unidirectional ? 0 : DT_OFFMESH_CON_BIDIR));
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  NavMeshBuilder::DiscardChanges                                             |
-//  |  Discards the pending changes that haven't yet been applied. This works     |
-//  |  for navmesh pruning and OMCs, but not for flags/areas.               LH2'19|
+//  |  NavMeshBuilder::GetOmcRadius                                               |
+//  |  Returns the end point radius of the off-mesh connection.				LH2'19|
 //  +-----------------------------------------------------------------------------+
-void NavMeshBuilder::DiscardChanges()
+float NavMeshBuilder::GetOmcRadius(dtPolyRef ref)
 {
-	m_offMeshVerts.clear();
-	m_offMeshRadii.clear();
-	m_offMeshAreas.clear();
-	m_offMeshFlags.clear();
-	m_offMeshUserIDs.clear();
-	m_offMeshDirection.clear();
+	int omcIdx = GetOmcIndexFromPolyRef(ref, m_navMesh, m_offMeshUserIDs);
+	if (omcIdx > -1) return m_offMeshRadii[omcIdx];
+	else return 0;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshBuilder::SetOmcRadius                                               |
+//  |  Sets the end point radius of the off-mesh connection. Requires call to     |
+//  |  ApplyChanges before being effective.									LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshBuilder::SetOmcRadius(dtPolyRef ref, float radius)
+{
+	int omcIdx = GetOmcIndexFromPolyRef(ref, m_navMesh, m_offMeshUserIDs);
+	if (omcIdx > -1) m_offMeshRadii[omcIdx] = radius;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshBuilder::GetOmcDirected                                             |
+//  |  Returns the directedness of the off-mesh connection.					LH2'19|
+//  +-----------------------------------------------------------------------------+
+bool NavMeshBuilder::GetOmcDirected(dtPolyRef ref)
+{
+	int omcIdx = GetOmcIndexFromPolyRef(ref, m_navMesh, m_offMeshUserIDs);
+	if (omcIdx > -1) return !(m_offMeshDirection[omcIdx] == DT_OFFMESH_CON_BIDIR);
+	else return 0;
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshBuilder::SetOmcRadius                                               |
+//  |  Sets the directedness of the off-mesh connection. Requires call to	      |
+//  |  ApplyChanges before being effective.									LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshBuilder::SetOmcDirected(dtPolyRef ref, bool unidirectional)
+{
+	int omcIdx = GetOmcIndexFromPolyRef(ref, m_navMesh, m_offMeshUserIDs);
+	if (omcIdx > -1) m_offMeshDirection[omcIdx] = (unidirectional ? 0 : DT_OFFMESH_CON_BIDIR);
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshBuilder::GetOmcVertex                                               |
+//  |  Returns the vertex position of the off-mesh connection.				LH2'19|
+//  +-----------------------------------------------------------------------------+
+float3 NavMeshBuilder::GetOmcVertex(dtPolyRef ref, int vertexID)
+{
+	int omcIdx = GetOmcIndexFromPolyRef(ref, m_navMesh, m_offMeshUserIDs);
+	if (omcIdx > -1) return m_offMeshVerts[omcIdx * 2 + vertexID];
+	else return float3{ 0, 0, 0 };
+}
+
+//  +-----------------------------------------------------------------------------+
+//  |  NavMeshBuilder::GetOmcVertex                                               |
+//  |  Sets the vertex position of the off-mesh connection. Requires call to	  |
+//  |  ApplyChanges before being effective.									LH2'19|
+//  +-----------------------------------------------------------------------------+
+void NavMeshBuilder::SetOmcVertex(dtPolyRef ref, int vertexID, float3 value)
+{
+	int omcIdx = GetOmcIndexFromPolyRef(ref, m_navMesh, m_offMeshUserIDs);
+	if (omcIdx > -1) m_offMeshVerts[omcIdx * 2 + vertexID] = value;
 }
 
 } // namespace lighthouse2

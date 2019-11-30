@@ -99,7 +99,7 @@ public:
 	// Internal Representation
 	void UpdateMesh(NavMeshNavigator* navmesh);
 	void Clean();
-	struct Poly { union { const dtPoly* poly = 0; const dtOffMeshConnection* omc; }; int ref = -1; std::vector<int> triIDs; };
+	struct Poly { union { const dtPoly* poly = 0; const dtOffMeshConnection* omc; }; dtPolyRef ref = 0; std::vector<int> triIDs; };
 	struct Vert { float3* pos = 0; int idx = -1, instID = -1; std::vector<dtPolyRef> polys; };
 	struct Edge { int v1 = -1, v2 = -1, idx = -1, instID = -1; dtPolyRef poly1 = 0, poly2 = 0; };
 	struct OMC { const dtOffMeshConnection* omc = 0; int v1InstID = -1, v2InstID = -1, edgeInstID = -1; };
@@ -121,9 +121,9 @@ public:
 	bool isEdge(int meshID) const { return meshID == m_edgeMeshID; };
 
 	// Editing
-	void SetTmpVert(float3 pos, float vertWidth=.5f);
+	void SetTmpVert(float3 pos);
 	void RemoveTmpVert();
-	void AddTmpOMC(float3 v0, float3 v1, float vertWidth);
+	void AddTmpOMC(float3 v0, float3 v1);
 	void RemoveTmpOMCs();
 
 private:

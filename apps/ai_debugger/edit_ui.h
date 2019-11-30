@@ -39,7 +39,7 @@ public:
 	{
 		m_v0 = pos;
 		m_vertSet |= V0SET;
-		if (m_vertSet == V0SET) m_shader->SetTmpVert(pos, m_defaultVertWidth);
+		if (m_vertSet == V0SET) m_shader->SetTmpVert(pos);
 		if (m_vertSet == BOTHSET) AddToScene();
 	}
 
@@ -51,7 +51,7 @@ public:
 	{
 		m_v1 = pos;
 		m_vertSet |= V1SET;
-		if (m_vertSet == V1SET) m_shader->SetTmpVert(pos, m_defaultVertWidth);
+		if (m_vertSet == V1SET) m_shader->SetTmpVert(pos);
 		if (m_vertSet == BOTHSET) AddToScene();
 	}
 
@@ -64,7 +64,18 @@ public:
 		m_vertSet = NONESET;
 		m_shader->RemoveTmpVert();
 		m_shader->RemoveTmpOMCs();
-		m_builder->DiscardChanges();
+		m_omcs.clear();
+	}
+
+	//  +-----------------------------------------------------------------------------+
+	//  |  OffMeshConnectionTool::ApplyChanges                                        |
+	//  |  Pushes the temporary off-mesh connections to the builder.            LH2'19|
+	//  +-----------------------------------------------------------------------------+
+	void ApplyChanges()
+	{
+		for (OMC omc : m_omcs)
+			m_builder->AddOffMeshConnection(omc.v0, omc.v1, m_defaultVertWidth, m_defaultDirectionality);
+		m_omcs.clear();
 	}
 
 protected:
@@ -77,17 +88,20 @@ protected:
 	const float m_defaultVertWidth = .5f;
 	const bool m_defaultDirectionality = true;
 
+	struct OMC { float3 v0, v1; float vertWidth; bool directed; };
+	std::vector<OMC> m_omcs; // the temporary, not-yet-applied off-mesh connections
+
 	//  +-----------------------------------------------------------------------------+
 	//  |  OffMeshConnectionTool::AddToScene                                          |
-	//  |  Adds a new off-mesh connection to the builder and shader.				  |
+	//  |  Adds a temporary off-mesh connection, and shades one using GL.			  |
 	//  |  Requires an 'Apply Changes' rebuild for it to take effect.           LH2'19|
 	//  +-----------------------------------------------------------------------------+
 	void AddToScene()
 	{
-		m_builder->AddOffMeshConnection(m_v0, m_v1, m_defaultVertWidth, m_defaultDirectionality);
+		m_omcs.push_back({ m_v0, m_v1, m_defaultVertWidth, m_defaultDirectionality });
 		m_vertSet = NONESET;
 		m_shader->RemoveTmpVert();
-		m_shader->AddTmpOMC(m_v0, m_v1, m_defaultVertWidth);
+		m_shader->AddTmpOMC(m_v0, m_v1);
 	}
 };
 
@@ -108,7 +122,7 @@ public:
 			*m_selectionType == SELECTION_EDGE ||
 			*m_selectionType == SELECTION_POLY)
 		{
-			//if (*m_selectionType == SELECTION_POLY) ApplyPolyChanges(); // NOTE: convenient, but non consistent with OMCs
+			ApplyPolyChanges(); // NOTE: convenient, but inconsistent with OMCs
 			m_shader->Deselect();
 			m_selectionID = -1;
 			m_selectedVert = 0;
@@ -116,6 +130,8 @@ public:
 			m_selectedPoly = 0;
 			TwDefine(" Editing/OffMesh visible=false ");
 			TwDefine(" Editing/Detail visible=false ");
+			TwDefine(" Editing/'Endpoint radius' visible=false ");
+			TwDefine(" Editing/Unidirectional visible=false ");
 			TwDefine(" Editing/'Poly area' visible=false ");
 			TwDefine(" Editing/Verts visible=false ");
 			TwDefine(" Editing/v1 visible=false ");
@@ -163,6 +179,21 @@ public:
 
 		m_isOffMesh = m_shader->isOffMeshVert(m_selectedEdge->v1);
 		TwDefine(" Editing/OffMesh visible=true ");
+		if (m_isOffMesh)
+		{
+			// Off-mesh connections
+			unsigned short flags = 0;
+			m_builder->GetMesh()->getPolyFlags(m_selectedEdge->poly1, &flags);
+			for (int i = 0; i < NavMeshFlagMapping::maxFlags; i++)
+				m_flags[i] = (flags & (0x1 << i));
+			m_builder->GetMesh()->getPolyArea(m_selectedEdge->poly1, (uchar*)&m_polygonArea);
+			TwDefine(" Editing/flags visible=true ");
+			TwDefine(" Editing/'Poly area' visible=true ");
+			m_omcRadius = m_builder->GetOmcRadius(m_selectedEdge->poly1);
+			m_omcDirected = m_builder->GetOmcDirected(m_selectedEdge->poly1);
+			TwDefine(" Editing/'Endpoint radius' visible=true ");
+			TwDefine(" Editing/Unidirectional visible=true ");
+		}
 		m_verts[0] = *m_shader->GetVertPos(m_selectedEdge->v1);
 		m_verts[1] = *m_shader->GetVertPos(m_selectedEdge->v2);
 		TwDefine(" Editing/Verts visible=true ");
@@ -183,9 +214,9 @@ public:
 		if (!m_selectedPoly) return;
 		m_selectionID = m_selectedPoly->ref;
 
-		m_polygonArea = m_selectedPoly->poly->getArea();
 		for (int i = 0; i < NavMeshFlagMapping::maxFlags; i++)
 			m_flags[i] = (m_selectedPoly->poly->flags & (0x1 << i));
+		m_polygonArea = m_selectedPoly->poly->getArea();
 		TwDefine(" Editing/flags visible=true ");
 		TwDefine(" Editing/'Poly area' visible=true ");
 		for (size_t i = 0; i < m_selectedPoly->poly->vertCount; i++)
@@ -207,12 +238,25 @@ public:
 	//  +-----------------------------------------------------------------------------+
 	void ApplyPolyChanges()
 	{
-		if (!m_selectedPoly) return;
+		if (!m_selectedPoly && !(m_selectedEdge && m_isOffMesh))
+			return; // only polygons or OMC edges have flags/areas
+
 		unsigned short polygonFlags = 0;
 		for (int i = 0; i < NavMeshFlagMapping::maxFlags; i++) if (m_flags[i])
 			polygonFlags |= (0x1 << i);
-		m_builder->SetPolyFlags(m_selectedPoly->ref, polygonFlags);
-		m_builder->SetPolyArea(m_selectedPoly->ref, m_polygonArea);
+
+		if (m_selectedPoly) // normal poly
+		{
+			m_builder->SetPolyFlags(m_selectedPoly->ref, polygonFlags);
+			m_builder->SetPolyArea(m_selectedPoly->ref, m_polygonArea);
+		}
+		else if (m_selectedEdge) // OMC
+		{
+			m_builder->SetPolyFlags(m_selectedEdge->poly1, polygonFlags);
+			m_builder->SetPolyArea(m_selectedEdge->poly1, m_polygonArea);
+			m_builder->SetOmcRadius(m_selectedEdge->poly1, m_omcRadius);
+			m_builder->SetOmcDirected(m_selectedEdge->poly1, m_omcDirected);
+		}
 	}
 
 	//  +-----------------------------------------------------------------------------+
@@ -233,6 +277,8 @@ public:
 	const bool* GetIsDetail() const { return &m_isDetail; };
 	uint* GetPolyArea() { return &m_polygonArea; };
 	bool* GetPolyFlag(int idx) { return &m_flags[idx]; };
+	float* GetOmcRadius() { return &m_omcRadius; };
+	bool* GetOmcDirected() { return &m_omcDirected; };
 
 protected:
 	NavMeshShader* m_shader;
@@ -245,6 +291,8 @@ protected:
 	bool m_isOffMesh = false, m_isDetail = false;
 	uint m_polygonArea = 0;
 	bool m_flags[NavMeshFlagMapping::maxFlags];
+	float m_omcRadius = 0;
+	bool m_omcDirected = false;
 
 	NavMeshShader::Vert* m_selectedVert = 0;
 	NavMeshShader::Edge* m_selectedEdge = 0;

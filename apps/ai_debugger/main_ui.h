@@ -203,7 +203,7 @@ static void RemoveDebugAssets()
 //  +-----------------------------------------------------------------------------+
 static void RemoveEditAssets()
 {
-	navMeshShader->Deselect();
+	s_navmeshTool->Deselect();
 	s_omcTool->Clear();
 }
 
@@ -513,8 +513,9 @@ void TW_CALL ApplyEditChanges(void *data)
 {
 	if (s_guiMode != GUI_MODE_EDIT) return;
 	s_navmeshTool->ApplyPolyChanges();
-	//navMeshBuilder->ApplyChanges();
-	//RefreshNavigator();
+	s_omcTool->ApplyChanges();
+	navMeshBuilder->ApplyChanges();
+	RefreshNavigator();
 	*camMoved = true;
 }
 
@@ -570,7 +571,6 @@ void TW_CALL SwitchGUIMode(void *data)
 	else if (s_guiMode == GUI_MODE_EDIT)
 	{
 		RemoveEditAssets();
-		if (s_editChanges) RefreshNavigator();
 	}
 	else if (s_guiMode == GUI_MODE_DEBUG)
 	{
@@ -783,7 +783,7 @@ void RefreshEditBar()
 	};
 	TwType objectSelectionTypeType = TwDefineEnum("SelectionType", objectSelectionType, 5);
 	std::vector<TwEnumVal> polyAreaList;
-	for (int i = 0; i < config->m_areas.labels.size(); i++)
+	for (uchar i = 0; i < config->m_areas.labels.size(); i++)
 		polyAreaList.push_back({ i, config->m_areas.labels[i].c_str() });
 	TwType polygonAreaType = TwDefineEnum("polygonAreaType", polyAreaList.data(), (uint)polyAreaList.size());
 
@@ -793,10 +793,12 @@ void RefreshEditBar()
 	// create selection block
 	TwAddVarRO(editBar, "Selection Type", objectSelectionTypeType, &selectionType, "");
 	TwAddVarRO(editBar, "ID", TW_TYPE_INT32, s_navmeshTool->GetSelectionID(), "");
-	TwAddVarRO(editBar, "OffMesh", TW_TYPE_BOOL8, s_navmeshTool->GetIsOffMesh(), " visible=false ");
 	TwAddVarRO(editBar, "Detail", TW_TYPE_BOOL8, s_navmeshTool->GetIsDetail(), " visible=false ");
+	TwAddVarRO(editBar, "OffMesh", TW_TYPE_BOOL8, s_navmeshTool->GetIsOffMesh(), " visible=false ");
 
 	TwAddSeparator(editBar, "editseparator1", "");
+	TwAddVarRW(editBar, "Endpoint radius", TW_TYPE_FLOAT, s_navmeshTool->GetOmcRadius(), " visible=false min=0.001");
+	TwAddVarRW(editBar, "Unidirectional", TW_TYPE_BOOL8, s_navmeshTool->GetOmcDirected(), " visible=false ");
 	TwAddVarRW(editBar, "Poly area", polygonAreaType, s_navmeshTool->GetPolyArea(), " visible=false ");
 
 	// create flags block
