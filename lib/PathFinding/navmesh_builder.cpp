@@ -19,7 +19,8 @@
 #include "RecastDump.h"			  // duLogBuildTimes
 #include "DetourNavMeshBuilder.h" // dtNavMeshCreateParams, dtCreateNavMeshData
 
-#include "buildcontext.h"	   // BuildContext
+#include "navmesh_io.h"		 // Serialize/Deserialize
+#include "buildcontext.h"	 // BuildContext
 #include "navmesh_builder.h"
 
 #define RECAST_ERROR(X, ...) return NavMeshError(&m_status, X, "ERROR NavMeshBuilder: ", __VA_ARGS__)
@@ -428,14 +429,25 @@ int NavMeshBuilder::Serialize(const char* dir, const char* ID)
 {
 	if (m_status.Failed()) return NavMeshStatus::INPUT;
 
+	std::string filename = std::string(dir) + ID;
+	Timer timer;
+	RECAST_LOG("Saving NavMesh build to '%s'... ", filename.c_str());
+
 	// Saving config file
-	std::string configfile = std::string(dir) + ID + PF_NAVMESH_CONFIG_FILE_EXTENTION;
-	m_config.Save(configfile.c_str());
+	m_status = SerializeConfigurations(filename + PF_NAVMESH_CONFIG_FILE_EXTENTION, m_config);
+
+	// Saving intermediate results (pmesh, dmesh, OMCs)
+	m_status = SerializeOffMeshConnections(filename + PF_NAVMESH_OMC_FILE_EXTENTION,
+		m_offMeshVerts, m_offMeshRadii, m_offMeshFlags,
+		m_offMeshAreas, m_offMeshUserIDs, m_offMeshDirection);
+	m_status = SerializePolyMesh(filename + PF_NAVMESH_PMESH_FILE_EXTENTION, m_pmesh);
+	m_status = SerializeDetailMesh(filename + PF_NAVMESH_DMESH_FILE_EXTENTION, m_dmesh);
 
 	// Saving dtNavMesh
 	m_status = SerializeNavMesh(dir, ID, m_navMesh);
 	if (m_status.Failed()) return m_status;
 
+	RECAST_LOG("%.3fms\n", timer.elapsed());
 	return NavMeshStatus::SUCCESS;
 }
 
@@ -448,14 +460,25 @@ int NavMeshBuilder::Deserialize(const char* dir, const char* ID)
 	if (m_status.Failed()) return NavMeshStatus::INPUT;
 	Cleanup();
 
+	std::string filename = std::string(dir) + ID;
+	Timer timer;
+	RECAST_LOG("Loading NavMesh build from '%s'... ", filename.c_str());
+
 	// Loading config file
-	std::string configfile = std::string(dir) + ID + PF_NAVMESH_CONFIG_FILE_EXTENTION;
-	m_config.Load(configfile.c_str());
+	m_status = DeserializeConfigurations(filename + PF_NAVMESH_CONFIG_FILE_EXTENTION, m_config);
+
+	// Loading intermediate results (pmesh, dmesh, OMCs)
+	m_status = DeserializeOffMeshConnections(filename + PF_NAVMESH_OMC_FILE_EXTENTION,
+		m_offMeshVerts, m_offMeshRadii, m_offMeshFlags,
+		m_offMeshAreas, m_offMeshUserIDs, m_offMeshDirection);
+	m_status = DeserializePolyMesh(filename + PF_NAVMESH_PMESH_FILE_EXTENTION, m_pmesh);
+	m_status = DeserializeDetailMesh(filename + PF_NAVMESH_DMESH_FILE_EXTENTION, m_dmesh);
 
 	// Loading dtNavMesh
 	m_status = DeserializeNavMesh(dir, ID, m_navMesh);
 	if (m_status.Failed()) return m_status;
 
+	RECAST_LOG("%.3fms\n", timer.elapsed());
 	return NavMeshStatus::SUCCESS;
 }
 
@@ -512,7 +535,7 @@ int GetPolyMeshIndexFromPolyRef(const dtPolyRef ref, const dtNavMesh* navMesh)
 	//
 	// TODO: convert dtPolyRef back to dtPolyMesh index
 	//
-	return 0;
+	return ref;
 }
 
 //  +-----------------------------------------------------------------------------+

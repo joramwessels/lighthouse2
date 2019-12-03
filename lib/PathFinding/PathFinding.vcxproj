@@ -173,6 +173,7 @@
     <ClInclude Include="..\tinyxml2\tinyxml2.h" />
     <ClInclude Include="navmesh_agents.h" />
     <ClInclude Include="buildcontext.h" />
+    <ClInclude Include="navmesh_io.h" />
     <ClInclude Include="navmesh_shader.h" />
     <ClInclude Include="navmesh_common.h" />
     <ClCompile Include="navmesh_config.cpp" />

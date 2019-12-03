@@ -203,5 +203,6 @@
     <ClInclude Include="navmesh_shader.h" />
     <ClInclude Include="physics_placeholder.h" />
     <ClInclude Include="navmesh_agents.h" />
+    <ClInclude Include="navmesh_io.h" />
   </ItemGroup>
 </Project>

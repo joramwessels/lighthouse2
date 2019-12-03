@@ -59,25 +59,6 @@ public:
 	}
 	~NavMeshNavigator() { Clean(); };
 
-	//  +-----------------------------------------------------------------------------+
-	//  |  NavMeshNavigator::Load                                                     |
-	//  |  Loads a navmesh from storage and initializes the query.              LH2'19|
-	//  +-----------------------------------------------------------------------------+
-	NavMeshStatus Load(const char* dir, const char* ID)
-	{
-		if (m_navmesh) Clean();
-		std::string configfile = std::string(dir) + ID + PF_NAVMESH_CONFIG_FILE_EXTENTION;
-		NavMeshConfig config;
-		NavMeshStatus status = config.Load(configfile.c_str());
-		if (status.Failed()) return status;
-		m_flags = config.m_flags;
-		m_areas = config.m_areas;
-		status = DeserializeNavMesh(dir, ID, m_navmesh);
-		if (status.Failed()) return status;
-		m_owner = true;
-		status = CreateNavMeshQuery();
-		return status;
-	}
 
 	void SetFlagAndAreaMappings(NavMeshFlagMapping flags, NavMeshAreaMapping areas) { m_flags = flags; m_areas = areas; };
 
@@ -88,6 +69,8 @@ public:
 	NavMeshStatus FindPathConstSize(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount=64, const dtQueryFilter* filter=&s_filter) const;
 	NavMeshStatus FindPathConstSize_Legacy(float3 start, float3 end, PathNode* path, int& count, bool& reachable, int maxCount = 64, const dtQueryFilter* filter=&s_filter) const;
 	NavMeshStatus FindPath(float3 start, float3 end, std::vector<PathNode>& path, bool& reachable, int maxCount=64) const;
+
+	NavMeshStatus Load(const char* dir, const char* ID);
 	void Clean();
 
 	dtQueryFilter GetFilter(std::vector<std::string> includes, std::vector<std::string> excludes) const;
