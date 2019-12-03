@@ -526,16 +526,14 @@ int GetOmcIndexFromPolyRef(const dtPolyRef ref, const dtNavMesh* navMesh, const 
 }
 
 //  +-----------------------------------------------------------------------------+
-//  |  GetOmcIndexFromPolyRef (TODO)                                              |
+//  |  GetOmcIndexFromPolyRef                                                     |
 //  |  Finds the index of the polygon in the dtPolyMesh, given its dtPolyRef.     |
 //  |  Returns -1 when none can be found.				                    LH2'19|
 //  +-----------------------------------------------------------------------------+
 int GetPolyMeshIndexFromPolyRef(const dtPolyRef ref, const dtNavMesh* navMesh)
 {
-	//
-	// TODO: convert dtPolyRef back to dtPolyMesh index
-	//
-	return ref;
+	// NOTE: This might not work for multi-tile navmeshes
+	return navMesh->decodePolyIdPoly(ref);
 }
 
 //  +-----------------------------------------------------------------------------+
@@ -555,7 +553,7 @@ void NavMeshBuilder::SetPolyFlags(dtPolyRef ref, unsigned short flags)
 	{
 		m_offMeshFlags[omcIdx] = flags;
 	}
-	else
+	else // normal polygon
 	{
 		int pmeshIdx = GetPolyMeshIndexFromPolyRef(ref, m_navMesh);
 		if (pmeshIdx > -1) m_pmesh->flags[pmeshIdx] = flags;
@@ -579,7 +577,7 @@ void NavMeshBuilder::SetPolyArea(dtPolyRef ref, unsigned char area)
 	{
 		m_offMeshAreas[omcIdx] = area;
 	}
-	else
+	else // normal polygon
 	{
 		int pmeshIdx = GetPolyMeshIndexFromPolyRef(ref, m_navMesh);
 		if (pmeshIdx > -1) m_pmesh->areas[pmeshIdx] = area;
@@ -632,7 +630,7 @@ void NavMeshBuilder::SetOmcRadius(dtPolyRef ref, float radius)
 bool NavMeshBuilder::GetOmcDirected(dtPolyRef ref)
 {
 	int omcIdx = GetOmcIndexFromPolyRef(ref, m_navMesh, m_offMeshUserIDs);
-	if (omcIdx > -1) return !(m_offMeshDirection[omcIdx] == DT_OFFMESH_CON_BIDIR);
+	if (omcIdx > -1) return !(m_offMeshDirection[omcIdx] & DT_OFFMESH_CON_BIDIR);
 	else return 0;
 }
 

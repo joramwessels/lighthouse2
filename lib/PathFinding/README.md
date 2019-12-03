@@ -163,30 +163,19 @@ The vertices and edges are created individually and store the instanceIDs in the
 ## Backlog
 
 #### NavMeshBuilder
-* permanent flags/area saving in `GetPolyMeshIndexFromPolyRef` ❗
-    * How does `dtCreateNavMeshData` go from poly index to `dtPolyRef`
-    * reverse that
 * navmesh pruning
     * add `ChangeVert` function that changes verts in `m_pmesh` and `m_dmesh`
 
 #### NavMeshNavigator / Agent
-* BUG: when on OMC, path update identifies poly beneath as current poly
-    * add a `m_onOMC` flag to Agent indicating when it's on an OMC
-    * in `UpdateNavigation` add `if (m_onOMC) tmpPos = <OMC_destination>`
-* BUG: when close to unreachable goal above the agent, path update plans vertical path
-    * Project the movement impulse on navmesh floor plane to prevent flying
-    * Core of the issue might be identifying what dtPoly the agent is on
+* BUG: when close to unreachable goal above the agent, agent goes vertically
+    * It's up to the physics engine to constrain agent movement
 * Don't call 'arrive' behavior on every path corner?
 * Add behavior (flee/follow)
 
 
 #### NavMeshShader
-* show OMC directionality somehow
-* scale OMC vertices with their radius
 * make meshes transparent
-    * or at least OMC vertices
+    * or at least OMC vertices and polygons
 * remove old navmesh mesh from render core on `RemovePolysFromScene` to save memory
 * OpenGL highlights cost 10-20 fps
 * BUG: OpenGL shading fails when the camera is too close (when a vertex is behind the camera) (`Camera::WorldToScreenPos` issue)
-* BUG: edge rotations are sometimes a little off
-    * GL drawing looks fine, so it's probably a core issue

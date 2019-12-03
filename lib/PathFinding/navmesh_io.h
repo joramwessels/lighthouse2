@@ -344,9 +344,13 @@ static NavMeshStatus SerializeDetailMesh(std::string filename, const rcPolyMeshD
 	tinyxml2::XMLNode* root = doc.NewElement(PF_DMESH_FILE_ROOT_NAME);
 	doc.InsertFirstChild(root);
 
-	SerializeEndChild(root, "meshes", std::vector<uint>(dmesh->meshes, dmesh->meshes + dmesh->nmeshes * 4), doc);
-	SerializeEndChild(root, "verts", std::vector<float>(dmesh->verts, dmesh->verts + dmesh->nverts * 3), doc);
-	SerializeEndChild(root, "tris", std::vector<uchar>(dmesh->tris, dmesh->tris + dmesh->ntris * 4), doc);
+	// converting to uint4/float3/uchar4 to improve readability of save files
+	std::vector<uint4> meshes((uint4*)dmesh->meshes, (uint4*)dmesh->meshes + dmesh->nmeshes);
+	std::vector<float3> verts((float3*)dmesh->verts, (float3*)dmesh->verts + dmesh->nverts);
+	std::vector<uchar4> tris((uchar4*)dmesh->tris, (uchar4*)dmesh->tris + dmesh->ntris);
+	SerializeEndChild(root, "meshes", meshes, doc);
+	SerializeEndChild(root, "verts", verts, doc);
+	SerializeEndChild(root, "tris", tris, doc);
 	SerializeEndChild(root, "nmeshes", dmesh->nmeshes, doc);
 	SerializeEndChild(root, "nverts", dmesh->nverts, doc);
 	SerializeEndChild(root, "ntris", dmesh->ntris, doc);
@@ -372,18 +376,20 @@ static NavMeshStatus DeserializeDetailMesh(std::string filename, rcPolyMeshDetai
 		NAVMESH_IO_ERROR("tinyXML2 errored while loading DMesh file '%s'\n", filename.c_str());
 	if (!dmesh) dmesh = new rcPolyMeshDetail();
 
-	std::vector<uint> meshes;
-	std::vector<float> verts;
-	std::vector<uchar> tris;
-	DeserializeFirstChild<uint>(root, "meshes", meshes);
-	DeserializeFirstChild<float>(root, "verts", verts);
-	DeserializeFirstChild<uchar>(root, "tris", tris);
-	dmesh->meshes = new uint[meshes.size()];
-	dmesh->verts = new float[verts.size()];
-	dmesh->tris = new uchar[tris.size()];
-	memcpy(dmesh->meshes, meshes.data(), meshes.size() * sizeof(uint));
-	memcpy(dmesh->verts, verts.data(), verts.size() * sizeof(float));
-	memcpy(dmesh->tris, tris.data(), tris.size() * sizeof(uchar));
+	std::vector<uint4> meshes;
+	std::vector<float3> verts;
+	std::vector<uchar4> tris;
+	DeserializeFirstChild<uint4>(root, "meshes", meshes);
+	DeserializeFirstChild<float3>(root, "verts", verts);
+	DeserializeFirstChild<uchar4>(root, "tris", tris);
+	dmesh->meshes = new uint[meshes.size() * 4];
+	dmesh->verts = new float[verts.size() * 3];
+	dmesh->tris = new uchar[tris.size() * 4];
+
+	// Converting back from uint4/float3/uchar4 to uint4/float/uchar
+	memcpy(dmesh->meshes, meshes.data(), meshes.size() * sizeof(uint4));
+	memcpy(dmesh->verts, verts.data(), verts.size() * sizeof(float3));
+	memcpy(dmesh->tris, tris.data(), tris.size() * sizeof(uchar4));
 	DeserializeFirstChild<int>(root, "nmeshes", dmesh->nmeshes);
 	DeserializeFirstChild<int>(root, "nverts", dmesh->nverts);
 	DeserializeFirstChild<int>(root, "ntris", dmesh->ntris);

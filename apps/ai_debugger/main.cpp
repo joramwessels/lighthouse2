@@ -52,7 +52,7 @@ void PrepareScene()
 	// The Pica scene
 	renderer->AddScene( "scene.gltf", "data\\pica\\", mat4::Translate( 0, -10.2f, 0 ) );
 
-	//// The Recast test scene
+	// The Recast test scene
 	//int meshID = renderer->AddMesh("nav_test.obj", "data\\", 1.0f);
 	//renderer->GetMesh(meshID)->name = "Input Mesh";
 	//int instID = renderer->AddInstance(meshID, mat4::Identity());

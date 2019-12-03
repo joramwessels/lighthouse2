@@ -49,8 +49,8 @@ NavMeshStatus NavMeshNavigator::FindPathConstSize(float3 start, float3 end, Path
 	// When start & end are on the same poly
 	if (startRef == endRef)
 	{
-		path[0] = PathNode{ start, GetPoly(startRef) };
-		path[1] = PathNode{ end, GetPoly(endRef) };
+		path[0] = PathNode{ start, startRef };
+		path[1] = PathNode{ end, endRef };
 		count = 2;
 		reachable = true;
 		return NavMeshStatus::SUCCESS;
@@ -85,7 +85,7 @@ NavMeshStatus NavMeshNavigator::FindPathConstSize(float3 start, float3 end, Path
 	// Converting to PathNodes
 	for (int i = 0; i < count; i++)
 	{
-		path[i] = PathNode{ straightPath[i], GetPoly(spPolys[i]) };
+		path[i] = PathNode{ straightPath[i], spPolys[i] };
 	}
 
 	free(polyPath);
@@ -122,14 +122,14 @@ NavMeshStatus NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 en
 	maxCount--;
 	status = FindClosestPointOnPoly(startRef, start, firstPos);
 	if (status.Failed()) return status;
-	path[0] = PathNode{ firstPos, GetPoly(startRef) };
+	path[0] = PathNode{ firstPos, startRef };
 
 	// When start & end are on the same poly
 	if (startRef == endRef)
 	{
 		status = FindClosestPointOnPoly(endRef, end, endPos);
 		if (status.Failed()) return status;
-		path[1] = PathNode{ endPos, GetPoly(endRef) };
+		path[1] = PathNode{ endPos, endRef };
 		count = 2;
 		reachable = true;
 		return NavMeshStatus::SUCCESS;
@@ -151,7 +151,7 @@ NavMeshStatus NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 en
 	{
 		status = FindClosestPointOnPoly(polyPath[i], iterPos, iterPos);
 		if (status.Failed()) { free(polyPath); return status; }
-		path[i + 1] = PathNode{ iterPos, GetPoly(polyPath[i]) };
+		path[i + 1] = PathNode{ iterPos, polyPath[i] };
 	}
 
 	// Finding the closest valid point to the target
@@ -160,7 +160,7 @@ NavMeshStatus NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 en
 	{
 		status = FindClosestPointOnPoly(endRef, end, endPos);
 		if (status.Failed()) { free(polyPath); return status; }
-		path[count + 1] = PathNode{ endPos, GetPoly(endRef) };
+		path[count + 1] = PathNode{ endPos, endRef };
 		count++;
 		reachable = true;
 	}
@@ -168,7 +168,7 @@ NavMeshStatus NavMeshNavigator::FindPathConstSize_Legacy(float3 start, float3 en
 	{
 		status = FindClosestPointOnPoly(polyPath[count - 1], end, endPos);
 		if (status.Failed()) { free(polyPath); return status; }
-		path[count + 1] = PathNode{ endPos, GetPoly(polyPath[count - 1]) };
+		path[count + 1] = PathNode{ endPos, polyPath[count - 1] };
 		count++;
 		reachable = false;
 	}

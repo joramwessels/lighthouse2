@@ -1,10 +1,10 @@
 <camera>
-    <position x="-39.059662" y="21.611399" z="-9.0605507"/>
-    <direction x="0.8041811" y="-0.41755345" z="0.42301509"/>
+    <position x="-14.005049" y="9.1888695" z="13.894322"/>
+    <direction x="0.74454278" y="-0.59940118" z="-0.29389516"/>
     <FOV>40</FOV>
     <brightness>0</brightness>
     <contrast>0</contrast>
     <aperture>9.9999997e-05</aperture>
-    <focalDistance>28.204762</focalDistance>
+    <focalDistance>28.031643</focalDistance>
     <clampValue>10</clampValue>
 </camera>

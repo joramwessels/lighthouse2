@@ -62,7 +62,7 @@ public:
 
 	void SetFlagAndAreaMappings(NavMeshFlagMapping flags, NavMeshAreaMapping areas) { m_flags = flags; m_areas = areas; };
 
-	struct PathNode { float3 pos; const dtPoly* poly; }; // dtPoly* is nullptr if not on a poly
+	struct PathNode { float3 pos; dtPolyRef poly; };
 
 	NavMeshStatus FindNearestPoly(float3 pos, dtPolyRef& polyID, float3& polyPos) const;
 	NavMeshStatus FindClosestPointOnPoly(dtPolyRef polyID, float3 pos, float3& nearestPoint, bool* posOverPoly=0) const;
@@ -74,8 +74,9 @@ public:
 	void Clean();
 
 	dtQueryFilter GetFilter(std::vector<std::string> includes, std::vector<std::string> excludes) const;
+	const dtOffMeshConnection* GetOMC(dtPolyRef ref) const { return m_navmesh->getOffMeshConnectionByRef(ref); };
+	const dtPoly* GetPoly(dtPolyRef ref) const;
 	inline const dtNavMesh* GetDetourMesh() const { return m_navmesh; };
-	inline const dtPoly* GetPoly(dtPolyRef ref) const;
 	inline const char* GetID() const { return m_ID.c_str(); };
 
 	void SetPolyFlags(dtPolyRef poly, unsigned short flags) { m_navmesh->setPolyFlags(poly, flags); };
