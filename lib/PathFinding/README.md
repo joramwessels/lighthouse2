@@ -1,5 +1,7 @@
 # Pathfinding
 
+![image](https://user-images.githubusercontent.com/12709867/186922941-32553784-afc7-4891-932c-dbd3ed8e4b07.png)
+
 The pathfinding module is a wrapper for *Recast* and *Detour*, which respectively provide the navmesh generation and path planning. Since these libraries are git submodules, please don't forget to `git submodule init` and `git submodule update` after pulling.
 
 **Navigation Meshes**  
